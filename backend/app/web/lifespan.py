@@ -9,11 +9,13 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING, Any, cast
+from typing import Any, cast
 
 import anyio
 import httpx
+from fastapi import FastAPI
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.sdk.resources import (
@@ -29,16 +31,13 @@ from prometheus_fastapi_instrumentator import PrometheusFastApiInstrumentator
 
 from app.app_context.app_context import AppContext, LifeSpanService
 from app.app_logging import get_logger
+from app.common.runs.manager import RunManager
 from app.common.stats.metric import custom_metric
+from app.common.stream_bridge.memory import MemoryStreamBridge
 from app.core.user.service.user_service import get_user_service_by_engine
 from app.db.dbengine.core import DatabaseEngine
 from app.settings import get_settings, settings
 from app.util.asyncio_util.adapter import run_in_pool
-
-if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator
-
-    from fastapi import FastAPI
 
 logger = get_logger()
 
@@ -111,6 +110,23 @@ async def setup_app_context(app: FastAPI) -> None:
         logger.info("Pre-warming database connection pool")
         await engine.prewarm_db_connection()
 
+    # Checkpointer
+    if cfg.checkpointer_backend == "sqlite":
+        from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver  # type: ignore
+
+        checkpointer = AsyncSqliteSaver.from_conn_string(
+            cfg.checkpointer_connection_string
+        )
+    else:
+        from langgraph.checkpoint.memory import InMemorySaver
+
+        checkpointer = InMemorySaver()
+
+    # StreamBridge
+    stream_bridge = MemoryStreamBridge(queue_maxsize=cfg.stream_bridge_queue_maxsize)
+    # RunManager
+    run_manager = RunManager()
+
     # Create shared HTTP client
     http_aclient = httpx.AsyncClient()
 
@@ -127,6 +143,9 @@ async def setup_app_context(app: FastAPI) -> None:
         main_db=engine,
         http_aclient=http_aclient,
         lifespan_service=lifespan_service,
+        checkpointer=checkpointer,
+        stream_bridge=stream_bridge,
+        run_manager=run_manager,
     )
     set_app_context(app=app, app_context=app_context)
 
@@ -209,9 +228,9 @@ def setup_prometheus(app: FastAPI) -> None:  # pragma: no cover
     Args:
         app: FastAPI application.
     """
-    PrometheusFastApiInstrumentator(should_group_status_codes=False).instrument(app).expose(
-        app, should_gzip=True, name="prometheus_metrics"
-    )
+    PrometheusFastApiInstrumentator(should_group_status_codes=False).instrument(
+        app
+    ).expose(app, should_gzip=True, name="prometheus_metrics")
 
 
 async def _gauge_event_loop(interval: float = 1.0) -> None:
