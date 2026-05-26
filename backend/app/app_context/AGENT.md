@@ -45,8 +45,8 @@ from contextlib import asynccontextmanager
 
 from httpx import AsyncClient
 
-from {{cookiecutter.package_name}}.app_context.app_context import AppContext
-from {{cookiecutter.package_name}}.db.dbengine.core import DatabaseEngine
+from app.app_context.app_context import AppContext
+from app.db.dbengine.core import DatabaseEngine
 
 async def lifespan_setup() -> AppContext:
     engine = DatabaseEngine(url=settings.database_url)
@@ -69,7 +69,7 @@ async def lifespan(app: FastAPI):
 
 ```python
 # web/api/deps.py
-from {{cookiecutter.package_name}}.app_context.app_context import AppContext
+from app.app_context.app_context import AppContext
 
 def get_db_engine(app_context: AppContext = Depends(get_app_context)) -> DatabaseEngine:
     return app_context.main_db

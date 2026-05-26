@@ -6,7 +6,7 @@ using uvloop and httptools for high performance.
 
 from __future__ import annotations
 
-from typing import Any, ClassVar
+from typing import Any
 
 from gunicorn.app.base import BaseApplication
 from gunicorn.util import import_app
@@ -17,24 +17,14 @@ from app.app_logging import patch_gunicorn_logger, patch_uvicorn_logger
 try:
     import uvloop
 except ImportError:
-    uvloop = None  # type: ignore[assignment, misc]
+    uvloop = None  # type: ignore[assignment]
 
 
 class UvicornWorker(BaseUvicornWorker):
     """Uvicorn worker configuration for gunicorn.
 
     Uses uvloop as the event loop and httptools as the HTTP parser.
-    Configuration is set class-wide since gunicorn doesn't support
-    passing these through command line.
     """
-
-    CONFIG_KWARGS: ClassVar[dict[str, Any]] = {
-        "loop": "uvloop" if uvloop is not None else "asyncio",
-        "http": "httptools",
-        "lifespan": "on",
-        "factory": True,
-        "proxy_headers": False,
-    }
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
@@ -88,10 +78,10 @@ class GunicornApplication(BaseApplication):
             if key in self.cfg.settings and value is not None:
                 self.cfg.set(key.lower(), value)
 
-    def load(self) -> str:
+    def load(self) -> str:  # type: ignore[override]
         """Load and return the application factory.
 
         Returns:
             Python path string to the app factory.
         """
-        return import_app(self.app)
+        return import_app(self.app)  # type: ignore[return-value]

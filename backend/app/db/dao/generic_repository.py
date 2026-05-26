@@ -6,6 +6,7 @@ from uuid import UUID
 
 from sqlalchemy import bindparam, text
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.sql.elements import TextClause
 
 from app.common.exception import ResourceNotFoundError
 from app.db.dbengine.core import DatabaseEngine
@@ -39,7 +40,7 @@ class GenericRepository:
         instance: TableModelT,
         *,
         exclude_columns_from_update: list[str] | None = None,
-    ):
+    ) -> TextClause:
         instance.validate_in_columns(exclude_columns_from_update or [])
 
         all_columns: tuple[str, ...] = instance.insert_sql_column_list()
@@ -89,7 +90,7 @@ class GenericRepository:
             ]
             | None
         ) = None,
-    ):
+    ) -> TextClause:
         """Build a standard insert statement with optional ON CONFLICT DO NOTHING.
 
         Args:
@@ -521,7 +522,7 @@ class GenericRepository:
         exclude_deleted_or_archived: bool | None = False,
         column_value_to_query: dict[str, Any],
         column_to_update: dict[str, Any] | TableBoundedModel[TableModelT],
-    ):
+    ) -> TextClause:
         if isinstance(column_to_update, TableBoundedModel):
             if not issubclass(table_model, column_to_update.table_model()):
                 raise ValueError(
@@ -552,7 +553,7 @@ class GenericRepository:
         )
 
         columns_update_param: dict[str, Any] = {}
-        json_params: list = []
+        json_params: list[Any] = []
         model_json_column_names = table_model.get_json_columns()
         for col_name, update_value in column_to_update.items():
             columns_update_param[col_name] = update_value

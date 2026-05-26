@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from uuid import uuid4
 
 import pytest
 
@@ -17,7 +18,7 @@ def bridge() -> MemoryStreamBridge:
 
 async def test_publish_and_subscribe(bridge: MemoryStreamBridge) -> None:
     """Basic pub/sub flow."""
-    run_id = "run-1"
+    run_id = uuid4()
 
     async def producer() -> None:
         await bridge.publish(run_id, "messages", {"text": "hello"})
@@ -38,7 +39,7 @@ async def test_publish_and_subscribe(bridge: MemoryStreamBridge) -> None:
 
 async def test_heartbeat(bridge: MemoryStreamBridge) -> None:
     """Heartbeat fires when no events arrive within interval."""
-    run_id = "run-hb"
+    run_id = uuid4()
 
     events = []
     async for evt in bridge.subscribe(run_id, heartbeat_interval=0.1):
@@ -51,7 +52,7 @@ async def test_heartbeat(bridge: MemoryStreamBridge) -> None:
 
 async def test_reconnection(bridge: MemoryStreamBridge) -> None:
     """Reconnect via Last-Event-ID replays missed events."""
-    run_id = "run-reconnect"
+    run_id = uuid4()
 
     await bridge.publish(run_id, "messages", {"idx": 0})
     await bridge.publish(run_id, "messages", {"idx": 1})
@@ -68,9 +69,7 @@ async def test_reconnection(bridge: MemoryStreamBridge) -> None:
     reconnect_id = first_events[0].id  # first event id
 
     replayed = []
-    async for evt in bridge.subscribe(
-        run_id, last_event_id=reconnect_id, heartbeat_interval=1.0
-    ):
+    async for evt in bridge.subscribe(run_id, last_event_id=reconnect_id, heartbeat_interval=1.0):
         replayed.append(evt)
 
     # Should get events after reconnect_id + END
@@ -81,7 +80,7 @@ async def test_reconnection(bridge: MemoryStreamBridge) -> None:
 
 async def test_ring_eviction(bridge: MemoryStreamBridge) -> None:
     """Buffer evicts oldest events when exceeding maxsize."""
-    run_id = "run-ring"
+    run_id = uuid4()
 
     for i in range(12):
         await bridge.publish(run_id, "messages", {"idx": i})
@@ -99,7 +98,7 @@ async def test_ring_eviction(bridge: MemoryStreamBridge) -> None:
 
 async def test_publish_end(bridge: MemoryStreamBridge) -> None:
     """publish_end signals stream termination."""
-    run_id = "run-end"
+    run_id = uuid4()
 
     await bridge.publish_end(run_id)
 
@@ -112,7 +111,7 @@ async def test_publish_end(bridge: MemoryStreamBridge) -> None:
 
 async def test_cleanup(bridge: MemoryStreamBridge) -> None:
     """cleanup removes stream state after delay."""
-    run_id = "run-cleanup"
+    run_id = uuid4()
 
     await bridge.publish(run_id, "messages", {"data": 1})
     assert run_id in bridge._streams

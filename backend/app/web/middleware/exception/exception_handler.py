@@ -36,7 +36,7 @@ async def application_error_handler(request: Request, exc: ApplicationError) -> 
     """
     level = Level.ERROR if exc.http_code() >= HTTPStatus.INTERNAL_SERVER_ERROR else Level.WARNING
     error_response = exc.to_json_response()
-    logger.opt(exception=exc).log(
+    logger.opt(depth=1).opt(exception=exc).log(  # type: ignore[no-untyped-call]
         level,
         "application error",
         http_path=request.url.path,
@@ -63,7 +63,7 @@ async def request_validation_error_handler(
         JSONResponse with validation error details.
     """
     error_response = await request_validation_exception_handler(request=request, exc=exc)
-    logger.opt(exception=exc).warning(
+    logger.opt(depth=1).opt(exception=exc).warning(  # type: ignore[no-untyped-call]
         "request validation error",
         http_path=request.url.path,
         http_method=request.method,
@@ -91,7 +91,7 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException) 
         content={"detail": exc.detail},
         headers=exc.headers,
     )
-    logger.opt(exception=exc).log(
+    logger.opt(depth=1).opt(exception=exc).log(  # type: ignore[no-untyped-call]
         level,
         "http exception",
         http_path=request.url.path,
@@ -116,7 +116,7 @@ async def integrity_error_handler(request: Request, exc: IntegrityError) -> JSON
     Returns:
         JSONResponse with appropriate error payload.
     """
-    logger.opt(exception=exc).warning(
+    logger.opt(depth=1).opt(exception=exc).warning(  # type: ignore[no-untyped-call]
         "database integrity error",
         http_path=request.url.path,
         http_method=request.method,

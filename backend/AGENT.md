@@ -1,8 +1,8 @@
-# {{cookiecutter.project_slug}} 项目架构规范
+# quant-agent 项目架构规范
 
 ## 概述
 
-{{cookiecutter.project_slug}} 是一个基于 FastAPI + SQLAlchemy 的分层架构后端项目，遵循领域驱动设计（DDD）原则。
+quant-agent 是一个基于 FastAPI + SQLAlchemy 的分层架构后端项目，遵循领域驱动设计（DDD）原则。
 
 ## 分层架构
 
@@ -56,12 +56,12 @@
 
 | 层级 | 目录 | 职责 | AGENT.md |
 |------|------|------|----------|
-| **web** | `web/` | API 层，处理 HTTP 请求/响应、中间件 | `{{cookiecutter.package_name}}/web/AGENT.md` |
-| **app_context** | `app_context/` | 应用生命周期管理和依赖容器 | `{{cookiecutter.package_name}}/app_context/AGENT.md` |
-| **core** | `core/{domain}/` | 业务领域层，核心业务逻辑和服务 | `{{cookiecutter.package_name}}/core/AGENT.md` |
-| **db** | `db/` | 数据访问层，包含 DAO、Models、Migrations | `{{cookiecutter.package_name}}/db/AGENT.md` |
-| **common** | `common/` | 通用组件，异常、错误码、统计、类型 | `{{cookiecutter.package_name}}/common/AGENT.md` |
-| **util** | `util/` | 工具函数，时间、枚举、类型定义 | `{{cookiecutter.package_name}}/util/AGENT.md` |
+| **web** | `web/` | API 层，处理 HTTP 请求/响应、中间件 | `quant-agent/web/AGENT.md` |
+| **app_context** | `app_context/` | 应用生命周期管理和依赖容器 | `quant-agent/app_context/AGENT.md` |
+| **core** | `core/{domain}/` | 业务领域层，核心业务逻辑和服务 | `quant-agent/core/AGENT.md` |
+| **db** | `db/` | 数据访问层，包含 DAO、Models、Migrations | `quant-agent/db/AGENT.md` |
+| **common** | `common/` | 通用组件，异常、错误码、统计、类型 | `quant-agent/common/AGENT.md` |
+| **util** | `util/` | 工具函数，时间、枚举、类型定义 | `quant-agent/util/AGENT.md` |
 
 ## 核心域（core）
 
@@ -88,7 +88,7 @@ PostgreSQL Database
 ## 目录结构
 
 ```
-{{cookiecutter.package_name}}/
+quant-agent/
 ├── app_context/                 # 应用上下文容器
 │   └── app_context.py
 ├── common/                      # 通用层
@@ -134,14 +134,14 @@ PostgreSQL Database
 
 ```python
 # web/api/user/views.py
-from {{cookiecutter.package_name}}.core.user.service.user_service import UserService
+from quant_agent.core.user.service.user_service import UserService
 
 @router.get("/{user_id}", response_model=UserDTO)
 async def get_user(user_id: UUID, service: UserService = Depends()):
     return await service.get_user(user_id)
 
 # core/user/service/user_service.py
-from {{cookiecutter.package_name}}.db.dao.user_repository import UserRepository
+from quant_agent.db.dao.user_repository import UserRepository
 
 class UserService:
     def __init__(self, user_repository: UserRepository = Depends()):

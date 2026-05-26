@@ -13,26 +13,20 @@ class AgentMiddleware(ABC):
     All hooks return None (no-op) by default.
     """
 
-    async def before_model(
-        self, state: dict[str, Any], config: dict
-    ) -> dict[str, Any] | None:
+    async def before_model(self, state: dict[str, Any], config: dict[str, Any]) -> dict[str, Any] | None:
         """Before LLM call. Return modified state or None."""
         return None
 
-    async def after_model(
-        self, state: dict[str, Any], config: dict
-    ) -> dict[str, Any] | None:
+    async def after_model(self, state: dict[str, Any], config: dict[str, Any]) -> dict[str, Any] | None:
         """After LLM call. Return modified state or None."""
         return None
 
-    async def before_tool(
-        self, tool_name: str, tool_input: dict, config: dict
-    ) -> dict | None:
+    async def before_tool(self, tool_name: str, tool_input: dict[str, Any], config: dict[str, Any]) -> dict[str, Any] | None:
         """Before tool call. Return modified tool_input or None."""
         return None
 
     async def after_tool(
-        self, tool_name: str, tool_input: dict, result: Any, config: dict
+        self, tool_name: str, tool_input: dict[str, Any], result: Any, config: dict[str, Any]
     ) -> Any | None:
         """After tool call. Return modified result or None."""
         return None

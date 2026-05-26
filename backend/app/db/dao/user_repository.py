@@ -6,18 +6,14 @@ and business-oriented create/update/delete methods.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from uuid import UUID
 
 from sqlalchemy import text
 
 from app.common.exception import ConflictResourceError, ResourceNotFoundError
 from app.db.dao.generic_repository import GenericRepository
+from app.db.dbengine.core import DatabaseEngine
 from app.db.models.user import User
-
-if TYPE_CHECKING:
-    from uuid import UUID
-
-    from app.db.dbengine.core import DatabaseEngine
 
 
 class UserRepository(GenericRepository):
@@ -110,7 +106,7 @@ class UserRepository(GenericRepository):
             raise ResourceNotFoundError(f"User {user.id} not found")
         return result
 
-    async def delete(self, user_id: str, *, soft: bool = True) -> None:
+    async def delete(self, user_id: UUID, *, soft: bool = True) -> None:
         """Delete a user.
 
         Args:

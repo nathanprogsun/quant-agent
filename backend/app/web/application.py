@@ -43,7 +43,7 @@ def create_app() -> FastAPI:
     app.add_middleware(AuthMiddleware)
 
     # Register exception handlers
-    app.add_exception_handler(IntegrityError, integrity_error_handler)
+    app.add_exception_handler(IntegrityError, integrity_error_handler)  # type: ignore[arg-type]
 
     # Include routers
     app.include_router(auth_router)

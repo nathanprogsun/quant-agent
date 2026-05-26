@@ -41,7 +41,7 @@ class MetricsMiddleware(BaseHTTPMiddleware):
                 tags.append(path_tag)
 
             if status_code >= HTTPStatus.BAD_REQUEST:
-                logger.warning(
+                logger.warning(  # type: ignore[no-untyped-call]
                     "API request failed: {} {} {}",
                     request.method,
                     path_tag,
@@ -51,7 +51,7 @@ class MetricsMiddleware(BaseHTTPMiddleware):
             self.metrics.timing("api_timing", process_time, tags=tags)
             self.metrics.increment("api_status", tags=tags)
         except Exception:
-            logger.exception("Exception while emitting metrics")
+            logger.exception("Exception while emitting metrics")  # type: ignore[no-untyped-call]
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         start_time = time.perf_counter()

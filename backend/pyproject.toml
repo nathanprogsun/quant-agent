@@ -62,19 +62,14 @@ where = ["."]
 include = ["app*"]
 
 [tool.mypy]
+python_version = "3.11"
+strict = true
 ignore_missing_imports = true
 exclude = [
     "app/web/lifespan.py",
 ]
 disable_error_code = [
-    "valid-type",
     "union-attr",
-    "assignment",
-    "arg-type",
-    "return-value",
-    "misc",
-    "override",
-    "call-arg",
 ]
 
 [tool.pytest.ini_options]
@@ -84,3 +79,11 @@ markers = [
     "unit: Unit tests (fast, mocked dependencies)",
     "integration: Integration tests (service flows, HTTP endpoints)",
 ]
+
+[dependency-groups]
+dev = [
+    "black>=26.5.1",
+]
+
+[project.scripts]
+touch_latest_alembic_revision = "app.db.migrations.hook:touch_latest_revision"

@@ -1,6 +1,6 @@
 """Common lifespan utilities for FastAPI dependency injection."""
 
-from typing import Annotated
+from typing import Annotated, cast
 
 from fastapi import Depends
 from httpx import AsyncClient
@@ -24,7 +24,7 @@ def get_db_engine(request: Request) -> DatabaseEngine:
     app_context = getattr(request.app.state, "app_context", None)
     if app_context is None:
         raise RuntimeError("App context not initialized. Call setup_app_context() first.")
-    return app_context.main_db
+    return cast(DatabaseEngine, app_context.main_db)
 
 
 def get_http_aclient(request: Request) -> AsyncClient:
@@ -42,7 +42,7 @@ def get_http_aclient(request: Request) -> AsyncClient:
     app_context = getattr(request.app.state, "app_context", None)
     if app_context is None:
         raise RuntimeError("App context not initialized. Call setup_app_context() first.")
-    return app_context.http_aclient
+    return cast(AsyncClient, app_context.http_aclient)
 
 
 # Type aliases for dependency injection

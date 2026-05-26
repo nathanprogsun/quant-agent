@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import dataclasses
+from typing import Any
 
 from httpx import AsyncClient
 from langgraph.checkpoint.base import BaseCheckpointSaver
 
 from app.common.runs.manager import RunManager
 from app.common.stream_bridge.base import StreamBridge
+from app.core.auth.service.auth_service import AuthService
+from app.core.chat.service.thread_service import ThreadService
 from app.core.user.service.user_service import UserService
 from app.db.dbengine.core import DatabaseEngine
 
@@ -24,7 +27,9 @@ class LifeSpanService:
     Add new services here as frozen fields.
     """
 
-    user_service: UserService | None = dataclasses.field(default=None)
+    auth_service: AuthService | None = None
+    user_service: UserService | None = None
+    thread_service: ThreadService | None = None
 
 
 @dataclasses.dataclass(frozen=True)
@@ -41,7 +46,7 @@ class AppContext:
     main_db: DatabaseEngine
     http_aclient: AsyncClient
     lifespan_service: LifeSpanService
-    checkpointer: BaseCheckpointSaver | None = None
+    checkpointer: BaseCheckpointSaver[Any] | None = None
     stream_bridge: StreamBridge | None = None
     run_manager: RunManager | None = None
 
@@ -50,7 +55,7 @@ class AppContext:
         await self.main_db.close()
         await self.http_aclient.aclose()
         if self.stream_bridge:
-              await self.stream_bridge.close()
+            await self.stream_bridge.close()
         # InMemorySaver 没有 close() 方法, 但其他实现可能有资源需要清理
         if self.checkpointer and hasattr(self.checkpointer, "close"):
             await self.checkpointer.close()

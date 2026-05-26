@@ -1,6 +1,6 @@
 """Auth middleware for cookie-based authentication."""
 
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING
 
 from fastapi import Request, Response
@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 class AuthMiddleware(BaseHTTPMiddleware):
     """Middleware to inject current_user into request state."""
 
-    async def dispatch(self, request: Request, call_next: Callable) -> Response:
+    async def dispatch(self, request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
         # Skip auth for public endpoints
         public_paths = {
             "/api/v1/auth/login",
@@ -25,7 +25,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
         }
 
         if request.url.path in public_paths or request.url.path.startswith("/docs"):
-            return await call_next(request)
+            response: Response = await call_next(request)
+            return response
 
         # Get services from app state (set during startup)
         token = request.cookies.get("access_token")

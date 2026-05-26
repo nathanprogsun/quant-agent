@@ -1,6 +1,6 @@
 """User service."""
 
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from passlib.context import CryptContext
 
@@ -22,7 +22,7 @@ class UserService:
     ):
         self.user_repository = user_repository
 
-    async def get_by_id(self, user_id: str) -> UserDTO | None:
+    async def get_by_id(self, user_id: UUID) -> UserDTO | None:
         """Get user by ID."""
         result = await self.user_repository.find_by_primary_key(
             table_model=User,
@@ -35,7 +35,7 @@ class UserService:
         result = await self.user_repository.find_by_email(email=email)
         return UserDTO.model_validate(result) if result else None
 
-    async def get_user_model_by_id(self, user_id: str) -> User | None:
+    async def get_user_model_by_id(self, user_id: UUID) -> User | None:
         """Get raw User model by ID (includes hashed_password)."""
         return await self.user_repository.find_by_primary_key(User, id=user_id)
 
@@ -47,7 +47,7 @@ class UserService:
         """Create a new user."""
         # Hash password would be done here in production
         user = User(
-            id=str(uuid4()),
+            id=uuid4(),
             email=data.email,
             username=data.username,
             full_name=data.full_name,
@@ -59,7 +59,7 @@ class UserService:
         result = await self.user_repository.create(user)
         return UserDTO.model_validate(result)
 
-    async def update(self, user_id: str, data: UserUpdateDTO) -> UserDTO | None:
+    async def update(self, user_id: UUID, data: UserUpdateDTO) -> UserDTO | None:
         """Update a user."""
         user = await self.user_repository.find_by_primary_key(User, id=user_id)
         if not user:
@@ -80,7 +80,7 @@ class UserService:
         result = await self.user_repository.update(user)
         return UserDTO.model_validate(result)
 
-    async def delete(self, user_id: str) -> bool:
+    async def delete(self, user_id: UUID) -> bool:
         """Delete a user."""
         user = await self.user_repository.find_by_primary_key(User, id=user_id)
         if not user:
@@ -100,7 +100,7 @@ class UserService:
     ) -> UserDTO:
         """Create a new user with pre-hashed password."""
         user = User(
-            id=str(uuid4()),
+            id=uuid4(),
             email=email,
             hashed_password=hashed_password,
             full_name=full_name,
@@ -109,7 +109,7 @@ class UserService:
         created = await self.user_repository.insert(user)
         return UserDTO.model_validate(created)
 
-    async def update_password(self, user_id: str, new_hashed_password: str) -> bool:
+    async def update_password(self, user_id: UUID, new_hashed_password: str) -> bool:
         """Update user password."""
         user = await self.user_repository.find_by_primary_key(User, id=user_id)
         if not user:

@@ -7,6 +7,7 @@ import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from typing import Any
+from uuid import UUID
 
 from app.common.stream_bridge.base import (
     END_SENTINEL,
@@ -41,11 +42,11 @@ class MemoryStreamBridge(StreamBridge):
     """
 
     def __init__(self, *, queue_maxsize: int = 256) -> None:
-        self._streams: dict[str, _RunStream] = {}
-        self._counters: dict[str, int] = {}
+        self._streams: dict[UUID, _RunStream] = {}
+        self._counters: dict[UUID, int] = {}
         self._maxsize = queue_maxsize
 
-    def _next_id(self, run_id: str) -> str:
+    def _next_id(self, run_id: UUID) -> str:
         ts = int(time.time() * 1000)
         seq = self._counters.get(run_id, 0) + 1
         self._counters[run_id] = seq
@@ -66,7 +67,7 @@ class MemoryStreamBridge(StreamBridge):
                 return i + 1
         return 0
 
-    async def publish(self, run_id: str, event: str, data: Any) -> None:
+    async def publish(self, run_id: UUID, event: str, data: Any) -> None:
         if run_id not in self._streams:
             self._streams[run_id] = _RunStream(start_offset=0)
 
@@ -82,7 +83,7 @@ class MemoryStreamBridge(StreamBridge):
                 stream.start_offset += overflow
             stream.condition.notify_all()
 
-    async def publish_end(self, run_id: str) -> None:
+    async def publish_end(self, run_id: UUID) -> None:
         stream = self._streams.get(run_id)
         if not stream:
             stream = _RunStream(start_offset=0)
@@ -93,7 +94,7 @@ class MemoryStreamBridge(StreamBridge):
 
     async def subscribe(
         self,
-        run_id: str,
+        run_id: UUID,
         *,
         last_event_id: str | None = None,
         heartbeat_interval: float = 15.0,
@@ -123,7 +124,7 @@ class MemoryStreamBridge(StreamBridge):
                 except TimeoutError:
                     yield HEARTBEAT_SENTINEL
 
-    async def cleanup(self, run_id: str, *, delay: float = 0) -> None:
+    async def cleanup(self, run_id: UUID, *, delay: float = 0) -> None:
         if delay > 0:
             await asyncio.sleep(delay)
         self._streams.pop(run_id, None)
