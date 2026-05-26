@@ -183,6 +183,23 @@ class Settings(BaseSettings):
     default_main_thread_pool_size: int = 40
 
 
+    # ==================== LLM ====================
+    llm_api_base: str = "https://api.deepseek.com"
+    llm_api_key: str = ""
+    default_model: str = "deepseek-v4-flash"
+
+    # ==================== Checkpointer ====================
+    checkpointer_backend: Literal["memory", "sqlite", "postgres"] = "sqlite"
+    checkpointer_connection_string: str = "checkpoints.db"
+
+    # ==================== StreamBridge ====================
+    stream_bridge_queue_maxsize: int = 256
+
+    # ==================== RunManager ====================
+    run_manager_max_runs: int = 1000
+    run_manager_ttl_seconds: int = 3600
+
+
 # Global settings instance
 _settings: Settings | None = None
 

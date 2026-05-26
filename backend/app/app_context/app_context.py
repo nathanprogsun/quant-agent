@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import dataclasses
-from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from httpx import AsyncClient
+from httpx import AsyncClient
+from langgraph.checkpoint.base import BaseCheckpointSaver
 
-    from app.core.user.service.user_service import UserService
-    from app.db.dbengine.core import DatabaseEngine
+from app.common.runs.manager import RunManager
+from app.common.stream_bridge.base import StreamBridge
+from app.core.user.service.user_service import UserService
+from app.db.dbengine.core import DatabaseEngine
 
 
 @dataclasses.dataclass(frozen=True)
@@ -40,8 +41,16 @@ class AppContext:
     main_db: DatabaseEngine
     http_aclient: AsyncClient
     lifespan_service: LifeSpanService
+    checkpointer: BaseCheckpointSaver | None = None
+    stream_bridge: StreamBridge | None = None
+    run_manager: RunManager | None = None
 
     async def close(self) -> None:
         """Close all resources held by the app context."""
         await self.main_db.close()
         await self.http_aclient.aclose()
+        if self.stream_bridge:
+              await self.stream_bridge.close()
+        # InMemorySaver 没有 close() 方法, 但其他实现可能有资源需要清理
+        if self.checkpointer and hasattr(self.checkpointer, "close"):
+            await self.checkpointer.close()
