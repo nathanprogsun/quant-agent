@@ -10,7 +10,7 @@ def zoned_utc_now() -> datetime:
 
 
 def zoned_utc_from_timestamp(timestamp: int) -> datetime:
-    return datetime.fromtimestamp(timestamp=timestamp, tz=pytz.UTC)
+    return datetime.fromtimestamp(timestamp, tz=pytz.UTC)
 
 
 def convert_utc_to_local(utc_datetime: datetime, local_timezone: str) -> datetime:

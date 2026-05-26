@@ -7,45 +7,15 @@ from app.core.auth.types import (
     LoginRequest,
     RegisterRequest,
 )
-from app.core.user.service.user_service import UserService
 from app.core.user.types import UserDTO
-from app.web.lifespan_service import user_service_from_lifespan
+from app.web.api.deps import get_current_user
+from app.web.lifespan_service import auth_service_from_lifespan
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
 
 def is_https(request: Request) -> bool:
     return request.url.scheme == "https"
-
-
-async def get_auth_service(
-    user_service: UserService = Depends(user_service_from_lifespan),
-) -> AuthService:
-    return AuthService(user_service=user_service)
-
-
-async def get_current_user(
-    request: Request,
-    auth_service: AuthService = Depends(get_auth_service),
-    user_service: UserService = Depends(user_service_from_lifespan),
-) -> UserDTO:
-    """Get current authenticated user from cookie token."""
-    token = request.cookies.get("access_token")
-    if not token:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
-
-    payload = auth_service.decode_token(token)
-    if payload is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-
-    user_id = payload.get("sub")
-    if user_id is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-
-    user = await user_service.get_by_id(user_id)
-    if user is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    return user
 
 
 def validate_csrf(request: Request, csrf_token: str) -> bool:
@@ -55,7 +25,7 @@ def validate_csrf(request: Request, csrf_token: str) -> bool:
 
 
 @router.get("/me")
-async def get_me(current_user: UserDTO = Depends(get_current_user)):
+async def get_me(current_user: UserDTO = Depends(get_current_user)) -> dict[str, str | None]:
     """Returns current user's JWT claims."""
     return {
         "sub": str(current_user.id),
@@ -69,8 +39,8 @@ async def register(
     request: Request,
     response: Response,
     req: RegisterRequest,
-    auth_service: AuthService = Depends(get_auth_service),
-):
+    auth_service: AuthService = Depends(auth_service_from_lifespan),
+) -> AuthResponse:
     user = await auth_service.register_user(req.email, req.password, req.full_name)
 
     access_token = auth_service.create_access_token(data={"sub": str(user.id), "email": user.email})
@@ -85,7 +55,11 @@ async def register(
 
     csrf_token = auth_service.create_csrf_token()
     response.set_cookie(
-        key="csrf_token", value=csrf_token, httponly=False, secure=is_https(request), samesite="lax"
+        key="csrf_token",
+        value=csrf_token,
+        httponly=False,
+        secure=is_https(request),
+        samesite="lax",
     )
 
     return AuthResponse(message="Registration successful", user_id=str(user.id))
@@ -96,8 +70,8 @@ async def login(
     request: Request,
     response: Response,
     req: LoginRequest,
-    auth_service: AuthService = Depends(get_auth_service),
-):
+    auth_service: AuthService = Depends(auth_service_from_lifespan),
+) -> AuthResponse:
     user = await auth_service.authenticate_user(req.email, req.password)
     if not user:
         raise HTTPException(
@@ -117,14 +91,18 @@ async def login(
 
     csrf_token = auth_service.create_csrf_token()
     response.set_cookie(
-        key="csrf_token", value=csrf_token, httponly=False, secure=is_https(request), samesite="lax"
+        key="csrf_token",
+        value=csrf_token,
+        httponly=False,
+        secure=is_https(request),
+        samesite="lax",
     )
 
     return AuthResponse(message="Login successful", user_id=str(user.id))
 
 
 @router.get("/signout", response_model=AuthResponse)
-async def signout(request: Request, response: Response):
+async def signout(request: Request, response: Response) -> AuthResponse:
     """Signs out user, clears session."""
     response.delete_cookie(key="access_token", secure=is_https(request), samesite="lax")
     response.delete_cookie(key="csrf_token", secure=is_https(request), samesite="lax")
@@ -136,16 +114,16 @@ async def change_password(
     request: Request,
     response: Response,
     req: ChangePasswordRequest,
-    auth_service: AuthService = Depends(get_auth_service),
+    auth_service: AuthService = Depends(auth_service_from_lifespan),
     current_user: UserDTO = Depends(get_current_user),
-):
+) -> AuthResponse:
     """Change password for authenticated user."""
     # Validate CSRF
     if not validate_csrf(request, req.csrf_token):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid CSRF token")
 
     success = await auth_service.change_password(
-        str(current_user.id), req.old_password, req.new_password
+        current_user.id, req.old_password, req.new_password
     )
     if not success:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid old password")
@@ -170,8 +148,8 @@ async def change_password(
 async def refresh_token(
     request: Request,
     response: Response,
-    auth_service: AuthService = Depends(get_auth_service),
-):
+    auth_service: AuthService = Depends(auth_service_from_lifespan),
+) -> dict[str, str]:
     """Refresh access token."""
     token = request.cookies.get("access_token")
     if not token:

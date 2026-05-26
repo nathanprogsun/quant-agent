@@ -15,13 +15,16 @@ from app.db.models.user import User
 TEST_USER_EMAIL = "test@example.com"
 TEST_USER_PASSWORD = "securepassword123"
 TEST_USER_FULL_NAME = "Test User"
-TEST_USER_ID = str(uuid4())
+TEST_USER_ID = uuid4()
 
 
 class TestUserServiceGet:
     @pytest.mark.asyncio
     async def test_get_by_id_found(
-        self, user_service: UserService, mock_user_repository: MagicMock, sample_user_model: MagicMock
+        self,
+        user_service: UserService,
+        mock_user_repository: MagicMock,
+        sample_user_model: MagicMock,
     ) -> None:
         mock_user_repository.find_by_primary_key = AsyncMock(return_value=sample_user_model)
         result = await user_service.get_by_id(TEST_USER_ID)
@@ -30,14 +33,19 @@ class TestUserServiceGet:
         mock_user_repository.find_by_primary_key.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_get_by_id_not_found(self, user_service: UserService, mock_user_repository: MagicMock) -> None:
+    async def test_get_by_id_not_found(
+        self, user_service: UserService, mock_user_repository: MagicMock
+    ) -> None:
         mock_user_repository.find_by_primary_key = AsyncMock(return_value=None)
         result = await user_service.get_by_id(TEST_USER_ID)
         assert result is None
 
     @pytest.mark.asyncio
     async def test_get_by_email_found(
-        self, user_service: UserService, mock_user_repository: MagicMock, sample_user_model: MagicMock
+        self,
+        user_service: UserService,
+        mock_user_repository: MagicMock,
+        sample_user_model: MagicMock,
     ) -> None:
         mock_user_repository.find_by_email = AsyncMock(return_value=sample_user_model)
         result = await user_service.get_by_email(TEST_USER_EMAIL)
@@ -54,7 +62,10 @@ class TestUserServiceGet:
 
     @pytest.mark.asyncio
     async def test_get_user_model_by_id(
-        self, user_service: UserService, mock_user_repository: MagicMock, sample_user_model: MagicMock
+        self,
+        user_service: UserService,
+        mock_user_repository: MagicMock,
+        sample_user_model: MagicMock,
     ) -> None:
         mock_user_repository.find_by_primary_key = AsyncMock(return_value=sample_user_model)
         result = await user_service.get_user_model_by_id(TEST_USER_ID)
@@ -63,7 +74,10 @@ class TestUserServiceGet:
 
     @pytest.mark.asyncio
     async def test_get_user_model_by_email(
-        self, user_service: UserService, mock_user_repository: MagicMock, sample_user_model: MagicMock
+        self,
+        user_service: UserService,
+        mock_user_repository: MagicMock,
+        sample_user_model: MagicMock,
     ) -> None:
         mock_user_repository.find_by_email = AsyncMock(return_value=sample_user_model)
         result = await user_service.get_user_model_by_email(TEST_USER_EMAIL)
@@ -127,7 +141,10 @@ class TestUserServiceCreate:
 class TestUserServiceUpdate:
     @pytest.mark.asyncio
     async def test_update_user_success(
-        self, user_service: UserService, mock_user_repository: MagicMock, sample_user_model: MagicMock
+        self,
+        user_service: UserService,
+        mock_user_repository: MagicMock,
+        sample_user_model: MagicMock,
     ) -> None:
         mock_user_repository.find_by_primary_key = AsyncMock(return_value=sample_user_model)
         updated_user = UserDTO(
@@ -158,7 +175,10 @@ class TestUserServiceUpdate:
 
     @pytest.mark.asyncio
     async def test_update_user_partial(
-        self, user_service: UserService, mock_user_repository: MagicMock, sample_user_model: MagicMock
+        self,
+        user_service: UserService,
+        mock_user_repository: MagicMock,
+        sample_user_model: MagicMock,
     ) -> None:
         mock_user_repository.find_by_primary_key = AsyncMock(return_value=sample_user_model)
         updated_user = UserDTO(
@@ -180,7 +200,10 @@ class TestUserServiceUpdate:
 
     @pytest.mark.asyncio
     async def test_update_password_success(
-        self, user_service: UserService, mock_user_repository: MagicMock, sample_user_model: MagicMock
+        self,
+        user_service: UserService,
+        mock_user_repository: MagicMock,
+        sample_user_model: MagicMock,
     ) -> None:
         mock_user_repository.find_by_primary_key = AsyncMock(return_value=sample_user_model)
         mock_user_repository.update = AsyncMock(return_value=sample_user_model)
@@ -200,7 +223,10 @@ class TestUserServiceUpdate:
 class TestUserServiceDelete:
     @pytest.mark.asyncio
     async def test_delete_user_success(
-        self, user_service: UserService, mock_user_repository: MagicMock, sample_user_model: MagicMock
+        self,
+        user_service: UserService,
+        mock_user_repository: MagicMock,
+        sample_user_model: MagicMock,
     ) -> None:
         mock_user_repository.find_by_primary_key = AsyncMock(return_value=sample_user_model)
         mock_user_repository.delete = AsyncMock()
@@ -239,7 +265,7 @@ class TestUserServiceList:
         users = [
             sample_user_model,
             User(
-                id=str(uuid4()),
+                id=uuid4(),
                 email="user2@example.com",
                 username="user2",
                 full_name="User Two",

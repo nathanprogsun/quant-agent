@@ -13,7 +13,7 @@ from app.core.user.service.user_service import UserService
 TEST_USER_EMAIL = "test@example.com"
 TEST_USER_PASSWORD = "securepassword123"
 TEST_USER_FULL_NAME = "Test User"
-TEST_USER_ID = str(uuid4())
+TEST_USER_ID = uuid4()
 
 
 @pytest.fixture

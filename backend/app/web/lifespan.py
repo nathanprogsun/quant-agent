@@ -15,6 +15,7 @@ from typing import Any, cast
 
 import anyio
 import httpx
+import prometheus_fastapi_instrumentator
 from fastapi import FastAPI
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
@@ -27,13 +28,14 @@ from opentelemetry.sdk.resources import (
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.trace import set_tracer_provider
-from prometheus_fastapi_instrumentator import PrometheusFastApiInstrumentator
 
 from app.app_context.app_context import AppContext, LifeSpanService
 from app.app_logging import get_logger
 from app.common.runs.manager import RunManager
 from app.common.stats.metric import custom_metric
 from app.common.stream_bridge.memory import MemoryStreamBridge
+from app.core.auth.service.auth_service import get_auth_service_by_engine
+from app.core.chat.service.thread_service import get_thread_service_by_engine
 from app.core.user.service.user_service import get_user_service_by_engine
 from app.db.dbengine.core import DatabaseEngine
 from app.settings import get_settings, settings
@@ -107,16 +109,14 @@ async def setup_app_context(app: FastAPI) -> None:
 
     # Pre-warm connection pool if configured
     if cfg.db_conn_prewarm:
-        logger.info("Pre-warming database connection pool")
+        logger.info("Pre-warming database connection pool")  # type: ignore[no-untyped-call]
         await engine.prewarm_db_connection()
 
     # Checkpointer
     if cfg.checkpointer_backend == "sqlite":
-        from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver  # type: ignore
+        from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
-        checkpointer = AsyncSqliteSaver.from_conn_string(
-            cfg.checkpointer_connection_string
-        )
+        checkpointer = AsyncSqliteSaver.from_conn_string(cfg.checkpointer_connection_string)
     else:
         from langgraph.checkpoint.memory import InMemorySaver
 
@@ -130,12 +130,11 @@ async def setup_app_context(app: FastAPI) -> None:
     # Create shared HTTP client
     http_aclient = httpx.AsyncClient()
 
-    # Create UserRepository and UserService
-    user_service = get_user_service_by_engine(db_engine=engine)
-
     # Create lifespan service with all services
     lifespan_service = LifeSpanService(
-        user_service=user_service,
+        auth_service=get_auth_service_by_engine(db_engine=engine),
+        user_service=get_user_service_by_engine(db_engine=engine),
+        thread_service=get_thread_service_by_engine(db_engine=engine),
     )
 
     # Create and store app context
@@ -149,7 +148,7 @@ async def setup_app_context(app: FastAPI) -> None:
     )
     set_app_context(app=app, app_context=app_context)
 
-    logger.info("Application context initialized")
+    logger.info("Application context initialized")  # type: ignore[no-untyped-call]
 
 
 async def close_app_context(app: FastAPI) -> None:
@@ -163,7 +162,7 @@ async def close_app_context(app: FastAPI) -> None:
     app_context = get_app_context(app=app)
     if app_context:
         await app_context.close()
-        logger.info("Application context closed")
+        logger.info("Application context closed")  # type: ignore[no-untyped-call]
 
 
 def setup_opentelemetry(app: FastAPI) -> None:  # pragma: no cover
@@ -176,7 +175,7 @@ def setup_opentelemetry(app: FastAPI) -> None:  # pragma: no cover
         return
 
     tracer_provider = TracerProvider(
-        Resource(
+        resource=Resource(
             attributes={
                 SERVICE_NAME: settings.app_name,
                 TELEMETRY_SDK_LANGUAGE: "python",
@@ -228,9 +227,9 @@ def setup_prometheus(app: FastAPI) -> None:  # pragma: no cover
     Args:
         app: FastAPI application.
     """
-    PrometheusFastApiInstrumentator(should_group_status_codes=False).instrument(
-        app
-    ).expose(app, should_gzip=True, name="prometheus_metrics")
+    prometheus_fastapi_instrumentator.PrometheusFastApiInstrumentator(should_group_status_codes=False).instrument(app).expose(  # type: ignore[attr-defined]
+        app, should_gzip=True, name="prometheus_metrics"
+    )
 
 
 async def _gauge_event_loop(interval: float = 1.0) -> None:
@@ -268,7 +267,7 @@ async def _gauge_anyio_threadpool(
 
     while True:
         start_time = time.perf_counter()
-        await run_in_pool(time.sleep, ONE_MILLI_SECOND_FLOAT, __anyio_limiter=limiter)  # type: ignore
+        await run_in_pool(time.sleep, ONE_MILLI_SECOND_FLOAT, __anyio_limiter=limiter)
         actual_time = time.perf_counter()
         delay = max(actual_time - start_time - ONE_MILLI_SECOND_FLOAT, 0)
 
@@ -310,11 +309,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, Any]:
         #     _gauge_event_loop(), name="_task_gauge_event_loop"
         # )
 
-        logger.info("Application lifespan started")
+        logger.info("Application lifespan started")  # type: ignore[no-untyped-call]
 
         yield
     except Exception:
-        logger.exception("Failed to setup application lifespan")
+        logger.exception("Failed to setup application lifespan")  # type: ignore[no-untyped-call]
         raise
     finally:
         # Cleanup
@@ -327,4 +326,4 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, Any]:
         if task_gauge_anyio_system:
             task_gauge_anyio_system.cancel()
 
-        logger.info("Application lifespan ended")
+        logger.info("Application lifespan ended")  # type: ignore[no-untyped-call]

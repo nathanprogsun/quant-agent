@@ -182,7 +182,6 @@ class Settings(BaseSettings):
     # ==================== Thread Pools ====================
     default_main_thread_pool_size: int = 40
 
-
     # ==================== LLM ====================
     llm_api_base: str = "https://api.deepseek.com"
     llm_api_key: str = ""

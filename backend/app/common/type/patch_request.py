@@ -5,9 +5,12 @@ from typing import (
     Annotated,
     Any,
     ClassVar,
+    Final,
     Generic,
+    TypedDict,
     TypeVar,
     Unpack,
+    cast,
     final,
 )
 
@@ -40,6 +43,10 @@ from pydantic_core.core_schema import SerializationInfo
 T = TypeVar("T")
 
 
+class _UnsetKwargs(TypedDict):
+    """TypedDict for __init_subclass__ kwargs to satisfy mypy strict mode."""
+
+
 @final
 class _Unset(BaseModel):
     model_config = ConfigDict(
@@ -47,12 +54,12 @@ class _Unset(BaseModel):
         extra="forbid",
     )
 
-    def __init_subclass__(cls, **kwargs: Unpack[dict]) -> None:
+    def __init_subclass__(cls, **kwargs: Unpack[_UnsetKwargs]) -> None:
         super().__init_subclass__(**kwargs)
         raise TypeError("You cannot subclass _Unset")
 
 
-UNSET: final = _Unset()
+UNSET: Final = _Unset()
 
 
 def ensure_is_patch_request_subclass(v: Any, info: Any) -> Any:
@@ -90,8 +97,8 @@ def is_unset(val: Any) -> TypeIs[_Unset]:
     return isinstance(val, _Unset)
 
 
-def is_unset_type(val: Any) -> TypeIs[type[_Unset]]:
-    return val == _Unset
+def is_unset_type(val: Any) -> bool:
+    return val is _Unset
 
 
 def new_or_unset_if_same(*, old: T, new: T | _Unset) -> T | _Unset:
@@ -127,7 +134,7 @@ class AbstractUnsetAwareModel(BaseModel, Generic[AbstractUnsetAwareT]):
             if callable(field_info.default_factory) and (
                 field_info.default is not PydanticUndefined
             ):
-                default_factory_value = field_info.default_factory()
+                default_factory_value = cast(Callable[[], Any], field_info.default_factory)()
                 if default_factory_value != field_info.default:
                     raise TypeError(
                         f"there is default-factory defined for {field_name}, the factory "

@@ -1,3 +1,5 @@
+from typing import Any
+
 from pydantic import BaseModel, EmailStr
 
 
@@ -25,3 +27,7 @@ class AuthResponse(BaseModel):
 
 class CSRFResponse(BaseModel):
     csrf_token: str
+
+
+# Type alias for JWT payload dict used in the codebase
+JWTPayloadDict = dict[str, Any]

@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from app.common.runs.schemas import DisconnectMode, RunStatus
 
@@ -34,25 +34,21 @@ class RunRecord:
     cancellation signaling. Known exemption from Immutability principle.
     """
 
-    run_id: str
-    thread_id: str
-    user_id: str
+    run_id: UUID
+    thread_id: UUID
+    user_id: UUID
     status: RunStatus = RunStatus.PENDING
     model_name: str | None = None
     assistant_id: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
     on_disconnect: DisconnectMode = DisconnectMode.CANCEL
     multitask_strategy: str = "reject"
-    task: asyncio.Task | None = None
+    task: asyncio.Task[None] | None = None
     abort_event: asyncio.Event = field(default_factory=asyncio.Event)
     abort_action: str = "interrupt"
     error: str | None = None
-    created_at: str = field(
-        default_factory=lambda: datetime.now(UTC).isoformat()
-    )
-    updated_at: str = field(
-        default_factory=lambda: datetime.now(UTC).isoformat()
-    )
+    created_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
+    updated_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
 
 
 class ConflictError(Exception):
@@ -73,10 +69,10 @@ class RunStore:
     async def save(self, record: RunRecord) -> None:
         pass
 
-    async def load(self, run_id: str) -> RunRecord | None:
+    async def load(self, run_id: UUID) -> RunRecord | None:
         return None
 
-    async def list_by_thread(self, thread_id: str) -> list[RunRecord]:
+    async def list_by_thread(self, thread_id: UUID) -> list[RunRecord]:
         return []
 
 
@@ -93,7 +89,7 @@ class RunManager:
     RUN_TTL_SECONDS: int = 3600
 
     def __init__(self, store: RunStore | None = None) -> None:
-        self._runs: dict[str, RunRecord] = {}
+        self._runs: dict[UUID, RunRecord] = {}
         self._lock = asyncio.Lock()
         self._store = store or RunStore()
 
@@ -119,8 +115,8 @@ class RunManager:
 
     async def create(
         self,
-        thread_id: str,
-        user_id: str,
+        thread_id: UUID,
+        user_id: UUID,
         *,
         model_name: str | None = None,
         assistant_id: str | None = None,
@@ -130,7 +126,7 @@ class RunManager:
     ) -> RunRecord:
         async with self._lock:
             await self._evict_expired()
-            run_id = str(uuid4())
+            run_id = uuid4()
             record = RunRecord(
                 run_id=run_id,
                 thread_id=thread_id,
@@ -145,11 +141,11 @@ class RunManager:
             await self._store.save(record)
             return record
 
-    async def get(self, run_id: str) -> RunRecord | None:
+    async def get(self, run_id: UUID) -> RunRecord | None:
         async with self._lock:
             return self._runs.get(run_id)
 
-    async def list_by_thread(self, thread_id: str) -> list[RunRecord]:
+    async def list_by_thread(self, thread_id: UUID) -> list[RunRecord]:
         async with self._lock:
             return sorted(
                 [r for r in self._runs.values() if r.thread_id == thread_id],
@@ -157,9 +153,7 @@ class RunManager:
                 reverse=True,
             )
 
-    async def set_status(
-        self, run_id: str, status: RunStatus, *, error: str | None = None
-    ) -> None:
+    async def set_status(self, run_id: UUID, status: RunStatus, *, error: str | None = None) -> None:
         record_to_save = None
         async with self._lock:
             record = self._runs.get(run_id)
@@ -172,7 +166,7 @@ class RunManager:
         if record_to_save:
             await self._store.save(record_to_save)
 
-    async def cancel(self, run_id: str, *, action: str = "interrupt") -> bool:
+    async def cancel(self, run_id: UUID, *, action: str = "interrupt") -> bool:
         """Cancel a run — idempotent, all mutations inside lock."""
         async with self._lock:
             record = self._runs.get(run_id)
@@ -189,18 +183,17 @@ class RunManager:
             await self._store.save(record)
         return True
 
-    async def has_inflight(self, thread_id: str) -> bool:
+    async def has_inflight(self, thread_id: UUID) -> bool:
         async with self._lock:
             return any(
-                r.thread_id == thread_id
-                and r.status in (RunStatus.PENDING, RunStatus.RUNNING)
+                r.thread_id == thread_id and r.status in (RunStatus.PENDING, RunStatus.RUNNING)
                 for r in self._runs.values()
             )
 
     async def create_or_reject(
         self,
-        thread_id: str,
-        user_id: str,
+        thread_id: UUID,
+        user_id: UUID,
         **kwargs: Any,
     ) -> RunRecord:
         """Atomic check + create — prevents concurrent requests from
@@ -215,15 +208,12 @@ class RunManager:
             inflight = [
                 r
                 for r in self._runs.values()
-                if r.thread_id == thread_id
-                and r.status in (RunStatus.PENDING, RunStatus.RUNNING)
+                if r.thread_id == thread_id and r.status in (RunStatus.PENDING, RunStatus.RUNNING)
             ]
 
             if inflight:
                 if strategy == "reject":
-                    raise ConflictError(
-                        f"Thread {thread_id} has {len(inflight)} inflight run(s)"
-                    )
+                    raise ConflictError(f"Thread {thread_id} has {len(inflight)} inflight run(s)")
                 if strategy in ("interrupt", "rollback"):
                     for r in inflight:
                         r.abort_event.set()
@@ -234,12 +224,10 @@ class RunManager:
 
             return self._create_internal(thread_id, user_id, **kwargs)
 
-    def _create_internal(
-        self, thread_id: str, user_id: str, **kwargs: Any
-    ) -> RunRecord:
+    def _create_internal(self, thread_id: UUID, user_id: UUID, **kwargs: Any) -> RunRecord:
         """Create RunRecord inside lock (caller must hold lock)."""
         record = RunRecord(
-            run_id=str(uuid4()),
+            run_id=uuid4(),
             thread_id=thread_id,
             user_id=user_id,
             multitask_strategy=kwargs.get("multitask_strategy", "reject"),
@@ -249,7 +237,7 @@ class RunManager:
         self._runs[record.run_id] = record
         return record
 
-    async def update_model_name(self, run_id: str, model_name: str) -> None:
+    async def update_model_name(self, run_id: UUID, model_name: str) -> None:
         """Record the actual model name used by the agent."""
         async with self._lock:
             record = self._runs.get(run_id)
@@ -257,7 +245,7 @@ class RunManager:
                 record.model_name = model_name
                 await self._store.save(record)
 
-    async def update_run_completion(self, run_id: str, **kwargs: Any) -> None:
+    async def update_run_completion(self, run_id: UUID, **kwargs: Any) -> None:
         """Persist completion data: token usage, etc."""
         async with self._lock:
             record = self._runs.get(run_id)
@@ -265,7 +253,7 @@ class RunManager:
                 record.metadata.update(kwargs)
                 await self._store.save(record)
 
-    async def cleanup(self, run_id: str, *, delay: float = 300) -> None:
+    async def cleanup(self, run_id: UUID, *, delay: float = 300) -> None:
         if delay > 0:
             await asyncio.sleep(delay)
         async with self._lock:

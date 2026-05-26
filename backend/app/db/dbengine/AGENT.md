@@ -55,7 +55,7 @@ db/dbengine/
 ### 创建和使用 DatabaseEngine
 
 ```python
-from {{cookiecutter.package_name}}.db.dbengine.core import DatabaseEngine
+from quant_agent.db.dbengine.core import DatabaseEngine
 
 engine = DatabaseEngine(
     url=settings.database_url,

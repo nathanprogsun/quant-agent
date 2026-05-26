@@ -6,6 +6,7 @@ from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Any
+from uuid import UUID
 
 
 @dataclass(frozen=True)
@@ -44,17 +45,17 @@ class StreamBridge(ABC):
     """
 
     @abstractmethod
-    async def publish(self, run_id: str, event: str, data: Any) -> None:
+    async def publish(self, run_id: UUID, event: str, data: Any) -> None:
         """Publish an event for a run."""
 
     @abstractmethod
-    async def publish_end(self, run_id: str) -> None:
+    async def publish_end(self, run_id: UUID) -> None:
         """Signal that a run has finished."""
 
     @abstractmethod
     def subscribe(
         self,
-        run_id: str,
+        run_id: UUID,
         *,
         last_event_id: str | None = None,
         heartbeat_interval: float = 15.0,
@@ -62,7 +63,7 @@ class StreamBridge(ABC):
         """Subscribe to a run's event stream with reconnection support."""
 
     @abstractmethod
-    async def cleanup(self, run_id: str, *, delay: float = 0) -> None:
+    async def cleanup(self, run_id: UUID, *, delay: float = 0) -> None:
         """Delayed cleanup of run resources."""
 
     async def close(self) -> None:

@@ -19,6 +19,24 @@ def merge_artifacts(existing: list[str], new: list[str]) -> list[str]:
     return merged
 
 
+class TodoItem(TypedDict, total=False):
+    """TypedDict for individual todo items in plan mode."""
+
+    id: str
+    content: str
+    status: str
+    priority: str
+
+
+class UploadedFile(TypedDict, total=False):
+    """TypedDict for uploaded file metadata."""
+
+    id: str
+    filename: str
+    path: str
+    mime_type: str | None
+
+
 class ThreadState(TypedDict, total=False):
     """LangGraph state schema.
 
@@ -30,7 +48,7 @@ class ThreadState(TypedDict, total=False):
     messages: Annotated[list[BaseMessage], add_messages]  # P0
     title: str | None  # P0
     artifacts: Annotated[list[str], merge_artifacts]  # P3
-    todos: list[dict] | None  # P4: Plan mode
-    uploaded_files: list[dict] | None  # P3
+    todos: list[dict[str, Any]] | None  # P4: Plan mode
+    uploaded_files: list[dict[str, Any]] | None  # P3
     code: str | None  # P0 (quant): strategy code
     session_status: str | None  # P0 (quant): session state machine

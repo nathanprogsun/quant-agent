@@ -2,22 +2,21 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, ParamSpec, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
 
 import anyio
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-P = ParamSpec("P")
 R = TypeVar("R")
 
 
 async def run_in_pool(
-    func: Callable[P, R],
-    *args: P.args,
+    func: Callable[..., R],
+    *args: Any,
     __anyio_limiter: anyio.CapacityLimiter | None = None,
-    **kwargs: P.kwargs,
+    **kwargs: Any,
 ) -> R:
     """Run a blocking function in the thread pool.
 

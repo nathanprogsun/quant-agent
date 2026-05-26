@@ -8,6 +8,7 @@ field, so it inherits from TableModel directly.
 """
 
 from datetime import datetime
+from uuid import UUID
 
 from app.db.models.core.base import Column, TableModel
 
@@ -19,7 +20,7 @@ class User(TableModel):
     schema_name = ""  # Empty for SQLite compatibility
     ordered_primary_keys = ("id",)
 
-    id: Column[str]
+    id: Column[UUID]
     email: Column[str]
     username: Column[str | None] = None
     full_name: Column[str | None] = None

@@ -164,14 +164,14 @@ class ExternalServiceError(ApplicationError):
 
         # With our sentry loguru config, this should be sent to Sentry as well
         if self._original_http_code < HTTPStatus.INTERNAL_SERVER_ERROR:
-            logger.warning(
+            logger.warning(  # type: ignore[no-untyped-call]
                 "External service bad request",
                 **additional_error_details.model_dump(mode="python")
                 if additional_error_details
                 else {},
             )
         else:
-            logger.error(
+            logger.error(  # type: ignore[no-untyped-call]
                 "External service error",
                 **additional_error_details.model_dump(mode="python")
                 if additional_error_details

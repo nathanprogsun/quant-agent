@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Annotated, Any, ClassVar, TypeVar
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 from pydantic.fields import FieldInfo
 from sqlalchemy import Row
 from sqlalchemy.orm import DeclarativeBase
@@ -29,7 +29,7 @@ class Base(DeclarativeBase):
     """SQLAlchemy declarative base."""
 
 
-def from_row(adapter, row: Row[Any]):
+def from_row(adapter: TypeAdapter[Any], row: Row[Any]) -> Any:
     """Convert a row object to an arbitrary object that can be deserialized via pydantic TypeAdapter."""
     return adapter.validate_python(row._asdict())
 
@@ -254,12 +254,12 @@ class TableBoundedModel(
 ):
     """Model bounded to a database table."""
 
-    __table_model__: type[AbstractUnsetAwareT] = TableModel
+    __table_model__: type[TableModel] = TableModel
 
     column_parity: ClassVar[ColumnParity | None] = None
 
     @classmethod
-    def table_model(cls) -> type[AbstractUnsetAwareT]:
+    def table_model(cls) -> type[TableModel]:
         return cls.__table_model__
 
     def __init_subclass__(cls, **kwargs: Any) -> None:

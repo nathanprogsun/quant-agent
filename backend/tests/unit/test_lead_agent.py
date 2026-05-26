@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
@@ -69,18 +69,14 @@ class RecordingMiddleware(AgentMiddleware):
     """Middleware that records hook invocations."""
 
     def __init__(self) -> None:
-        self.before_model_calls: list[dict] = []
-        self.after_model_calls: list[dict] = []
+        self.before_model_calls: list[dict[str, Any]] = []
+        self.after_model_calls: list[dict[str, Any]] = []
 
-    async def before_model(
-        self, state: dict[str, Any], config: dict
-    ) -> dict[str, Any] | None:
+    async def before_model(self, state: dict[str, Any], config: dict[str, Any]) -> dict[str, Any] | None:
         self.before_model_calls.append(state)
         return None
 
-    async def after_model(
-        self, state: dict[str, Any], config: dict
-    ) -> dict[str, Any] | None:
+    async def after_model(self, state: dict[str, Any], config: dict[str, Any]) -> dict[str, Any] | None:
         self.after_model_calls.append(state)
         return None
 

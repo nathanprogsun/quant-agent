@@ -14,7 +14,7 @@ from app.core.user.types import UserDTO
 TEST_USER_EMAIL = "test@example.com"
 TEST_USER_PASSWORD = "securepassword123"
 TEST_USER_FULL_NAME = "Test User"
-TEST_USER_ID = str(uuid4())
+TEST_USER_ID = uuid4()
 
 
 class TestAuthServicePassword:
@@ -66,12 +66,16 @@ class TestAuthServiceToken:
             assert payload["sub"] == TEST_USER_ID
             assert payload["email"] == TEST_USER_EMAIL
 
-    def test_decode_token_invalid(self, auth_service: AuthService, mock_settings: MagicMock) -> None:
+    def test_decode_token_invalid(
+        self, auth_service: AuthService, mock_settings: MagicMock
+    ) -> None:
         with patch("app.core.auth.service.auth_service.get_settings", return_value=mock_settings):
             payload = auth_service.decode_token("invalid.token.here")
             assert payload is None
 
-    def test_decode_token_tampered(self, auth_service: AuthService, mock_settings: MagicMock) -> None:
+    def test_decode_token_tampered(
+        self, auth_service: AuthService, mock_settings: MagicMock
+    ) -> None:
         with patch("app.core.auth.service.auth_service.get_settings", return_value=mock_settings):
             token = auth_service.create_access_token(data={"sub": TEST_USER_ID})
             tampered_token = token[:-5] + "xxxxx"

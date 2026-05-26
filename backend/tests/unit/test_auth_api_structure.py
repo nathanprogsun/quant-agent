@@ -8,6 +8,7 @@ import pytest
 class TestAuthAPIStructure:
     def test_auth_router_exists(self) -> None:
         from app.web.api.auth.views import router
+
         assert router is not None
         assert router.prefix == "/api/v1/auth"
 
@@ -17,7 +18,7 @@ class TestAuthAPIStructure:
         routes: set[str] = set()
         for route in router.routes:
             if hasattr(route, "path"):
-                routes.add(route.path)  # type: ignore[attr-defined]
+                routes.add(route.path)
 
         expected_routes = {
             "/api/v1/auth/register",
@@ -49,10 +50,10 @@ class TestAuthAPIStructure:
         assert valid.full_name == "Test User"
 
         with pytest.raises(ValueError):
-            RegisterRequest(email="test@example.com", password="password")
+            RegisterRequest(email="test@example.com", password="password")  # type: ignore[call-arg]
 
         with pytest.raises(ValueError):
-            RegisterRequest(email="test@example.com", full_name="Test User")
+            RegisterRequest(email="test@example.com", full_name="Test User")  # type: ignore[call-arg]
 
     def test_change_password_request_model(self) -> None:
         from app.core.auth.types import ChangePasswordRequest

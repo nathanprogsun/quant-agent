@@ -1,6 +1,7 @@
 """User types."""
 
 from datetime import datetime
+from uuid import UUID
 
 from pydantic import BaseModel, EmailStr
 
@@ -8,7 +9,7 @@ from pydantic import BaseModel, EmailStr
 class UserDTO(BaseModel):
     """User data transfer object."""
 
-    id: str
+    id: UUID
     email: str
     username: str | None = None
     full_name: str | None = None

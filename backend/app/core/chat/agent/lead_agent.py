@@ -38,7 +38,7 @@ def make_lead_agent(config: RunnableConfig) -> Any:
 
     model = ChatOpenAI(
         model=model_name,
-        api_key=settings.llm_api_key,
+        api_key=settings.llm_api_key,  # type: ignore[arg-type]
         base_url=settings.llm_api_base,
         streaming=True,
     )
@@ -77,12 +77,12 @@ def _make_agent_node(
     Extracted as a standalone function for testability.
     """
 
-    async def agent_node(state: ThreadState) -> dict:
+    async def agent_node(state: ThreadState) -> dict[str, Any]:
         messages = list(state.get("messages", []))
 
         # Inject system prompt if not present
         if not messages or not isinstance(messages[0], SystemMessage):
-            messages = [SystemMessage(content=system_prompt)] + messages
+            messages = [SystemMessage(content=system_prompt), *messages]
 
         # before_model hooks
         for mw in middlewares:

@@ -21,7 +21,7 @@ import orjson
 from loguru import logger as _logger
 from loguru._logger import Logger
 from loguru._recattrs import RecordException
-from opentelemetry.sdk.trace import RandomIdGenerator
+from opentelemetry.sdk.trace.id_generator import RandomIdGenerator
 from opentelemetry.trace import INVALID_SPAN, INVALID_SPAN_CONTEXT, get_current_span
 from pydantic import BaseModel
 
@@ -97,7 +97,7 @@ class InterceptHandler(logging.Handler):
 
         frame, depth = logging.currentframe(), 2
         while frame.f_code.co_filename == logging.__file__:
-            frame = frame.f_back
+            frame = frame.f_back  # type: ignore[assignment]
             depth += 1
 
         self._logger.opt(depth=depth).opt(exception=record.exc_info).log(
@@ -208,11 +208,11 @@ def configure_loguru(level: str = "INFO") -> Logger:
     _logger.add(
         sys.stdout,
         level=level,
-        format=record_formatter,
+        format=record_formatter,  # type: ignore[arg-type]
         enqueue=True,
         catch=True,
     )
-    return _logger.patch(record_dict_enricher)
+    return _logger.patch(record_dict_enricher)  # type: ignore[return-value,arg-type]
 
 
 app_logger = configure_loguru()
@@ -254,7 +254,7 @@ def get_logger(name: str | None = None) -> Logger:
     Returns:
         Logger instance.
     """
-    return app_logger.bind(name=name) if name else app_logger
+    return app_logger.bind(name=name)  # type: ignore[no-untyped-call,no-any-return]
 
 
 class Level(StrEnum):
