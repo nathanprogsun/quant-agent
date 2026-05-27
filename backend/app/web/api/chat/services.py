@@ -60,7 +60,7 @@ def normalize_input(raw_input: dict[str, Any]) -> dict[str, Any]:
     - Validates role whitelist
 
     Raises:
-        HTTPException(400) on invalid input.
+        HTTPException(400) on invalid input (sanitized message).
     """
     messages = raw_input.get("messages", [])
     if not messages:
@@ -74,28 +74,36 @@ def normalize_input(raw_input: dict[str, Any]) -> dict[str, Any]:
             # Validate role
             role = msg.get("role", "")
             if role and role not in ALLOWED_ROLES:
+                logger.warning("Invalid role '%s' at message index %d", role, i)
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Invalid role '{role}' at message index {i}",
+                    detail="请求参数无效",
                 )
             # Validate length
             content = msg.get("content", "")
             if isinstance(content, str) and len(content) > MAX_MESSAGE_LENGTH:
+                logger.warning(
+                    "Message at index %d exceeds %d chars", i, MAX_MESSAGE_LENGTH
+                )
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Message at index {i} exceeds {MAX_MESSAGE_LENGTH} chars",
+                    detail="请求参数无效",
                 )
             try:
                 converted.extend(convert_to_messages([msg]))
             except Exception as e:
+                logger.warning("Invalid message at index %d: %s", i, e)
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Invalid message at index {i}: {e}",
+                    detail="请求参数无效",
                 )
         else:
+            logger.warning(
+                "Unsupported message type at index %d: %s", i, type(msg)
+            )
             raise HTTPException(
                 status_code=400,
-                detail=f"Unsupported message type at index {i}: {type(msg)}",
+                detail="请求参数无效",
             )
     return {"messages": converted}
 

@@ -98,8 +98,10 @@ def user_service(mock_user_repository: MagicMock) -> UserService:
 
 @pytest.fixture
 def mock_settings() -> MagicMock:
+    from pydantic import SecretStr
+
     mock = MagicMock()
-    mock.jwt_secret_key = "test-secret-key-for-testing"
+    mock.jwt_secret_key = SecretStr("test-secret-key-for-testing")
     mock.jwt_algorithm = "HS256"
     mock.jwt_expire_minutes = 60 * 24 * 7
     return mock

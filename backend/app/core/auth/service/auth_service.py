@@ -48,7 +48,7 @@ class AuthService:
         )
         to_encode.update({"exp": expire})
         return jwt.encode(
-            to_encode, settings.jwt_secret_key, algorithm=settings.jwt_algorithm
+            to_encode, settings.jwt_secret_key.get_secret_value(), algorithm=settings.jwt_algorithm
         )
 
     def create_csrf_token(self) -> str:
@@ -73,7 +73,7 @@ class AuthService:
         settings = get_settings()
         try:
             payload = jwt.decode(
-                token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm]
+                token, settings.jwt_secret_key.get_secret_value(), algorithms=[settings.jwt_algorithm]
             )
             # Convert sub back to UUID if it's a valid UUID string
             if "sub" in payload:
