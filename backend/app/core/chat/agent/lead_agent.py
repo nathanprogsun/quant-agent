@@ -34,11 +34,11 @@ def make_lead_agent(config: RunnableConfig) -> Any:
     configurable = config.get("configurable", {})
 
     # Model resolution: requested → config → global default
-    model_name = configurable.get("model_name", settings.default_model)
+    model_name = configurable.get("model_name", settings.llm_model)
 
     model = ChatOpenAI(
         model=model_name,
-        api_key=settings.llm_api_key,  # type: ignore[arg-type]
+        api_key=settings.llm_api_key.get_secret_value(),
         base_url=settings.llm_api_base,
         streaming=True,
     )

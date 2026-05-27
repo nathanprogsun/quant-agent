@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import Field, model_validator
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -107,7 +107,7 @@ class Settings(BaseSettings):
     # oauth_auth0_audience: str | None = None
 
     # ==================== JWT / Auth ====================
-    jwt_secret_key: str = "changeme-in-production"
+    jwt_secret_key: SecretStr = SecretStr("changeme-in-production")
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 60 * 24 * 7  # 1 week
     jwt_issuer: str = "http://localhost"
@@ -116,17 +116,17 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def validate_settings(self) -> Settings:
         if self.environment == "production":
-            if self.jwt_secret_key == "changeme-in-production":
+            if self.jwt_secret_key.get_secret_value() == "changeme-in-production":
                 raise ValueError(
                     "JWT_SECRET_KEY must be set in production. "
                     "Set the JWT_SECRET_KEY environment variable with a secure random value."
                 )
-            if self.session_secret_key == "changeme-in-production":
+            if self.session_secret_key.get_secret_value() == "changeme-in-production":
                 raise ValueError(
                     "SESSION_SECRET_KEY must be set in production. "
                     "Set the SESSION_SECRET_KEY environment variable with a secure random value."
                 )
-        elif self.jwt_secret_key == "changeme-in-production":
+        elif self.jwt_secret_key.get_secret_value() == "changeme-in-production":
             import warnings
 
             warnings.warn(
@@ -137,8 +137,8 @@ class Settings(BaseSettings):
         return self
 
     # ==================== Session ====================
-    session_secret_key: str = Field(
-        default="changeme-in-production",
+    session_secret_key: SecretStr = Field(
+        default=SecretStr("changeme-in-production"),
         description="Secret key for session encryption",
     )
 
@@ -183,9 +183,9 @@ class Settings(BaseSettings):
     default_main_thread_pool_size: int = 40
 
     # ==================== LLM ====================
+    llm_api_key: SecretStr = SecretStr("")
     llm_api_base: str = "https://api.deepseek.com"
-    llm_api_key: str = ""
-    default_model: str = "deepseek-v4-flash"
+    llm_model: str = "deepseek-v4-flash"
 
     # ==================== Checkpointer ====================
     checkpointer_backend: Literal["memory", "sqlite", "postgres"] = "sqlite"

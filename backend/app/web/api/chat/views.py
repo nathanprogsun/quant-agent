@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
+from app.common.runs.manager import MultitaskStrategy
+from app.common.runs.schemas import DisconnectMode
 from app.core.chat.agent.lead_agent import make_lead_agent
 from app.core.chat.service.thread_service import ThreadService
 from app.db.models.user import User
@@ -18,17 +20,36 @@ from app.web.lifespan_service import thread_service_from_lifespan
 
 router = APIRouter(prefix="/api/v1/chat", tags=["chat"])
 
+MAX_MESSAGES = 50
+MAX_MESSAGE_LENGTH = 32768  # 32KB
+
 
 # ── Request models ───────────────────────────────────────────
 
 
+class MessageInput(BaseModel):
+    role: Literal["user", "assistant", "system"]
+    content: str = Field(..., max_length=MAX_MESSAGE_LENGTH)
+
+
 class RunCreateRequest(BaseModel):
-    input: dict[str, Any] = {"messages": []}
-    config: dict[str, Any] = {}
-    context: dict[str, Any] = {}
-    stream_mode: list[str] = ["values"]
-    on_disconnect: str = "cancel"
-    multitask_strategy: str = "reject"
+    input: dict[str, Any] = Field(
+        default_factory=lambda: {"messages": []},
+        description="包含 messages 数组的输入",
+    )
+    config: dict[str, Any] = Field(default_factory=dict)
+    context: dict[str, Any] = Field(default_factory=dict)
+    stream_mode: list[str] = Field(default_factory=lambda: ["values"])
+    on_disconnect: DisconnectMode = DisconnectMode.CANCEL
+    multitask_strategy: MultitaskStrategy = MultitaskStrategy.REJECT
+
+    @field_validator("input")
+    @classmethod
+    def validate_input_messages(cls, v: dict[str, Any]) -> dict[str, Any]:
+        messages = v.get("messages", [])
+        if len(messages) > MAX_MESSAGES:
+            raise ValueError(f"messages 数组长度不能超过 {MAX_MESSAGES}")
+        return v
 
 
 # ── Routes ───────────────────────────────────────────────────
