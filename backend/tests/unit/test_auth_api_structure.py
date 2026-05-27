@@ -27,6 +27,8 @@ class TestAuthAPIStructure:
             "/api/v1/auth/change-password",
             "/api/v1/auth/refresh",
             "/api/v1/auth/me",
+            "/api/v1/auth/initialize",
+            "/api/v1/auth/setup-status",
         }
         for expected_path in expected_routes:
             assert expected_path in routes, f"Missing route: {expected_path}"

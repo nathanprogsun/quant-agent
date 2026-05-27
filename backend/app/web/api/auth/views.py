@@ -8,7 +8,7 @@ from app.core.auth.types import (
     RegisterRequest,
 )
 from app.core.user.types import UserDTO
-from app.web.api.deps import get_current_user
+from app.web.api.deps import get_current_user, get_current_user_from_cookie
 from app.web.lifespan_service import auth_service_from_lifespan
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
@@ -25,16 +25,16 @@ def validate_csrf(request: Request, csrf_token: str) -> bool:
 
 
 @router.get("/me")
-async def get_me(current_user: UserDTO = Depends(get_current_user)) -> dict[str, str | None]:
-    """Returns current user's JWT claims."""
-    return {
-        "sub": str(current_user.id),
-        "email": current_user.email,
-        "full_name": current_user.full_name,
-    }
+async def get_me(
+    current_user: UserDTO = Depends(get_current_user_from_cookie),
+) -> UserDTO:
+    """Returns current authenticated user."""
+    return current_user
 
 
-@router.post("/register", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/register", response_model=AuthResponse, status_code=status.HTTP_201_CREATED
+)
 async def register(
     request: Request,
     response: Response,
@@ -43,7 +43,9 @@ async def register(
 ) -> AuthResponse:
     user = await auth_service.register_user(req.email, req.password, req.full_name)
 
-    access_token = auth_service.create_access_token(data={"sub": str(user.id), "email": user.email})
+    access_token = auth_service.create_access_token(
+        data={"sub": str(user.id), "email": user.email}
+    )
     response.set_cookie(
         key="access_token",
         value=access_token,
@@ -79,7 +81,9 @@ async def login(
             detail="Incorrect email or password",
         )
 
-    access_token = auth_service.create_access_token(data={"sub": str(user.id), "email": user.email})
+    access_token = auth_service.create_access_token(
+        data={"sub": str(user.id), "email": user.email}
+    )
     response.set_cookie(
         key="access_token",
         value=access_token,
@@ -120,13 +124,17 @@ async def change_password(
     """Change password for authenticated user."""
     # Validate CSRF
     if not validate_csrf(request, req.csrf_token):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid CSRF token")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Invalid CSRF token"
+        )
 
     success = await auth_service.change_password(
         current_user.id, req.old_password, req.new_password
     )
     if not success:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid old password")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid old password"
+        )
 
     # Refresh token after password change
     access_token = auth_service.create_access_token(
@@ -141,7 +149,9 @@ async def change_password(
         max_age=86400 * 7,
     )
 
-    return AuthResponse(message="Password changed successfully", user_id=str(current_user.id))
+    return AuthResponse(
+        message="Password changed successfully", user_id=str(current_user.id)
+    )
 
 
 @router.post("/refresh")
@@ -153,11 +163,15 @@ async def refresh_token(
     """Refresh access token."""
     token = request.cookies.get("access_token")
     if not token:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated"
+        )
 
     payload = auth_service.decode_token(token)
     if payload is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
+        )
 
     user_id = payload.get("sub")
     email = payload.get("email")
@@ -173,3 +187,48 @@ async def refresh_token(
     )
 
     return {"access_token": new_token, "token_type": "bearer"}
+
+
+@router.post(
+    "/initialize", response_model=AuthResponse, status_code=status.HTTP_201_CREATED
+)
+async def initialize(
+    request: Request,
+    response: Response,
+    req: RegisterRequest,
+    auth_service: AuthService = Depends(auth_service_from_lifespan),
+) -> AuthResponse:
+    """Initialize the system by creating the first admin user."""
+    user = await auth_service.initialize_system(req.email, req.password, req.full_name)
+
+    access_token = auth_service.create_access_token(
+        data={"sub": str(user.id), "email": user.email}
+    )
+    response.set_cookie(
+        key="access_token",
+        value=access_token,
+        httponly=True,
+        secure=is_https(request),
+        samesite="lax",
+        max_age=86400 * 7,
+    )
+
+    csrf_token = auth_service.create_csrf_token()
+    response.set_cookie(
+        key="csrf_token",
+        value=csrf_token,
+        httponly=False,
+        secure=is_https(request),
+        samesite="lax",
+    )
+
+    return AuthResponse(message="System initialized", user_id=str(user.id))
+
+
+@router.get("/setup-status")
+async def setup_status(
+    auth_service: AuthService = Depends(auth_service_from_lifespan),
+) -> dict[str, bool]:
+    """Check if the system needs initial setup (no users exist)."""
+    count = await auth_service.user_service.count_users()
+    return {"needs_setup": count == 0}

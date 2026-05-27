@@ -118,6 +118,26 @@ class UserService:
         await self.user_repository.update(user)
         return True
 
+    async def count_users(self) -> int:
+        """Count total users in the system."""
+        return await self.user_repository.count_all()
+
+    async def create_admin_user(
+        self, email: str, hashed_password: str, full_name: str
+    ) -> UserDTO:
+        """Create the first admin user (is_superuser=True)."""
+        user = User(
+            id=uuid4(),
+            email=email,
+            full_name=full_name,
+            hashed_password=hashed_password,
+            is_active=True,
+            is_superuser=True,
+            created_at=zoned_utc_now(),
+        )
+        created = await self.user_repository.insert(user)
+        return UserDTO.model_validate(created)
+
 
 def get_user_service_by_engine(db_engine: DatabaseEngine) -> UserService:
     """Factory function to create UserService with dependencies."""
