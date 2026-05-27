@@ -16,10 +16,6 @@ export function ThreadTitle({ threadId, title }: ThreadTitleProps) {
   const updateThread = useUpdateThread();
 
   useEffect(() => {
-    setEditValue(title ?? "");
-  }, [title]);
-
-  useEffect(() => {
     if (isEditing && inputRef.current) {
       inputRef.current.focus();
       inputRef.current.select();

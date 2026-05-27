@@ -1,0 +1,40 @@
+name: Lint Check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+jobs:
+  lint-backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v7
+      - run: uv sync --all-extras
+        working-directory: backend
+      - run: uv run ruff check .
+        working-directory: backend
+
+  lint-frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable
+      - run: corepack prepare pnpm@9 --activate
+      - run: pnpm install --frozen-lockfile
+        working-directory: frontend
+      - run: pnpm lint
+        working-directory: frontend
