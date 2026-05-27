@@ -10,7 +10,7 @@
  */
 
 import { spawn } from 'child_process';
-import { writeFileSync, appendFileSync, existsSync, readFileSync } from 'fs';
+import { writeFileSync, appendFileSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
