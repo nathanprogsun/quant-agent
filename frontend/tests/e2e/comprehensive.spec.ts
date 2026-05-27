@@ -18,7 +18,6 @@ import {
   mockAuthAPI,
   MOCK_THREAD_ID,
   MOCK_THREAD_ID_2,
-  MOCK_USER,
 } from "./utils/mock-api";
 
 // ══════════════════════════════════════════════════════════════════════════════

@@ -227,9 +227,6 @@ ${r.errors.length > 0 ? `- **Errors:**\n${r.errors.map((e) => `  - ${e}`).join('
     // 收集新的 bug
     const newBugs = this.extractBugs(results);
 
-    // 读取现有内容
-    const existing = readFileSync(BUG_REPORT_PATH, 'utf-8');
-
     // 追加新的 bug
     if (newBugs.length > 0) {
       const timestamp = new Date().toISOString();
