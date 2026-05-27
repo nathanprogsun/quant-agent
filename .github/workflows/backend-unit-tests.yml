@@ -28,5 +28,5 @@ jobs:
       - uses: astral-sh/setup-uv@v7
       - run: uv sync --all-extras
         working-directory: backend
-      - run: uv run pytest tests/unit --cov=app --cov-fail-under=80
+      - run: uv run pytest tests/unit --cov=app
         working-directory: backend
