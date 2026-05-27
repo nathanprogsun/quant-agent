@@ -1,0 +1,33 @@
+name: Frontend Unit Tests
+
+on:
+  push:
+    branches: [main]
+    paths: [frontend/**, .github/workflows/frontend-unit-tests.yml]
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths: [frontend/**, .github/workflows/frontend-unit-tests.yml]
+
+concurrency:
+  group: frontend-unit-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  frontend-unit-tests:
+    if: github.event.pull_request.draft != true
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable
+      - run: corepack prepare pnpm@9 --activate
+      - run: pnpm install --frozen-lockfile
+        working-directory: frontend
+      - run: pnpm test
+        working-directory: frontend
