@@ -43,7 +43,7 @@ class UserRepository(GenericRepository):
             User if found, None otherwise.
         """
         stmt = text("""
-            SELECT * FROM "user"
+            SELECT * FROM "users"
             WHERE email = :email
         """).bindparams(email=email)
         row = await self.engine.at_most_one(stmt)
@@ -59,7 +59,7 @@ class UserRepository(GenericRepository):
             User if found, None otherwise.
         """
         stmt = text("""
-            SELECT * FROM "user"
+            SELECT * FROM "users"
             WHERE id = :id
         """).bindparams(id=str(user_id))
         row = await self.engine.at_most_one(stmt)
@@ -116,13 +116,13 @@ class UserRepository(GenericRepository):
         """
         if soft:
             stmt = text("""
-                UPDATE "user"
+                UPDATE "users"
                 SET is_active = :is_active
                 WHERE id = :id
             """).bindparams(id=user_id, is_active=False)
             await self.engine.execute(stmt)
         else:
-            stmt = text('DELETE FROM "user" WHERE id = :id').bindparams(id=user_id)
+            stmt = text('DELETE FROM "users" WHERE id = :id').bindparams(id=user_id)
             await self.engine.execute(stmt)
 
     # ── Count methods ──────────────────────────────────────────────────────────
@@ -133,7 +133,7 @@ class UserRepository(GenericRepository):
         Returns:
             Total user count.
         """
-        stmt = text('SELECT COUNT(*) FROM "user"')
+        stmt = text('SELECT COUNT(*) FROM "users"')
         row = await self.engine.one(stmt)
         return row[0] if row else 0
 
@@ -143,6 +143,6 @@ class UserRepository(GenericRepository):
         Returns:
             Active user count.
         """
-        stmt = text('SELECT COUNT(*) FROM "user" WHERE is_active = true')
+        stmt = text('SELECT COUNT(*) FROM "users" WHERE is_active = true')
         row = await self.engine.one(stmt)
         return row[0] if row else 0

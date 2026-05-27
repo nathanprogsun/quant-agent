@@ -210,3 +210,45 @@ class TestAuthServiceChangePassword:
 
         assert result is False
         mock_user_service.update_password.assert_not_called()
+
+
+class TestAuthServiceInitializeSystem:
+    @pytest.mark.asyncio
+    async def test_initialize_system_success(
+        self,
+        auth_service: AuthService,
+        mock_user_service: AsyncMock,
+        sample_user_dto: UserDTO,
+    ) -> None:
+        mock_user_service.count_users = AsyncMock(return_value=0)
+        mock_user_service.create_admin_user = AsyncMock(return_value=sample_user_dto)
+
+        result = await auth_service.initialize_system(
+            TEST_USER_EMAIL, TEST_USER_PASSWORD, TEST_USER_FULL_NAME
+        )
+
+        assert result == sample_user_dto
+        mock_user_service.count_users.assert_called_once()
+        mock_user_service.create_admin_user.assert_called_once()
+        call_args = mock_user_service.create_admin_user.call_args
+        assert call_args[0][0] == TEST_USER_EMAIL
+        assert call_args[0][2] == TEST_USER_FULL_NAME
+        assert call_args[0][1] != TEST_USER_PASSWORD
+        assert call_args[0][1].startswith("$2b$")
+
+    @pytest.mark.asyncio
+    async def test_initialize_system_already_initialized(
+        self,
+        auth_service: AuthService,
+        mock_user_service: AsyncMock,
+    ) -> None:
+        from app.common.exception import ConflictResourceError
+
+        mock_user_service.count_users = AsyncMock(return_value=1)
+
+        with pytest.raises(ConflictResourceError, match="System already initialized"):
+            await auth_service.initialize_system(
+                TEST_USER_EMAIL, TEST_USER_PASSWORD, TEST_USER_FULL_NAME
+            )
+
+        mock_user_service.create_admin_user.assert_not_called()
