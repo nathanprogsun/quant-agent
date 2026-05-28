@@ -18,7 +18,7 @@ from app.web.api.chat.services import sse_consumer, start_run
 from app.web.api.deps import get_current_user
 from app.web.lifespan_service import thread_service_from_lifespan
 
-router = APIRouter(prefix="/api/v1/chat", tags=["chat"])
+router = APIRouter(prefix="/api/v1/threads", tags=["chat"])
 
 MAX_MESSAGES = 50
 MAX_MESSAGE_LENGTH = 32768  # 32KB
