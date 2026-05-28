@@ -17,9 +17,9 @@ export async function GET(
     const { thread_id } = await params;
     const cookie = await getSessionCookie();
 
-    // Fetch thread history from backend
+    // Fetch thread state from backend
     const response = await fetch(
-      `${BACKEND_URL}/api/v1/threads/${thread_id}/history`,
+      `${BACKEND_URL}/api/v1/threads/${thread_id}`,
       {
         headers: { Cookie: cookie },
       }
@@ -27,12 +27,14 @@ export async function GET(
 
     if (!response.ok) {
       return NextResponse.json(
-        { detail: "Failed to fetch thread history" },
+        { detail: "Thread not found" },
         { status: response.status }
       );
     }
 
-    return NextResponse.json(await response.json());
+    // Return empty messages array - history is not persisted in this backend
+    // The LangGraph SDK expects { messages: [...] } format
+    return NextResponse.json({ messages: [] });
   } catch (error) {
     console.error("Get thread history proxy error:", error);
     return NextResponse.json(
