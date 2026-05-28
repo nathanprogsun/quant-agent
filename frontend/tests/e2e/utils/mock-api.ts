@@ -306,21 +306,21 @@ export function mockThreadAPI(page: Page, options?: MockAPIOptions) {
   // ── Next.js API routes (/api/v1/threads/...) ──
   // These are called by the browser-side hooks (useThreads, etc.)
 
-  // GET /api/v1/threads — list (returns Thread[] with `id` field)
+  // GET /api/v1/threads — list (returns { threads: Thread[] })
   void page.route("**/api/v1/threads", (route) => {
     if (route.request().method() === "GET") {
       return route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify(
-          threads.map((t) => ({
+        body: JSON.stringify({
+          threads: threads.map((t) => ({
             id: t.thread_id,
             user_id: "user-1",
             title: t.title ?? "Untitled",
             created_at: "2025-01-01T00:00:00Z",
             updated_at: t.updated_at ?? "2025-01-01T00:00:00Z",
           })),
-        ),
+        }),
       });
     }
 
