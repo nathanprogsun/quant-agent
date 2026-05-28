@@ -14,6 +14,7 @@ from httpx import ASGITransport, AsyncClient
 from app.db.dbengine.core import DatabaseEngine
 from app.settings import get_settings
 from app.web.application import get_app
+from tests.integration.client import APITestClient
 
 # Get alembic config path
 ALEMBIC_INI = Path(__file__).parent.parent.parent / "app" / "db" / "migrations" / "alembic.ini"
@@ -78,3 +79,28 @@ async def api_client(setup_test_db: str) -> AsyncGenerator[AsyncClient, None]:
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
+
+
+@pytest.fixture
+async def authed_api_client(api_client: AsyncClient) -> APITestClient:
+    """Auto-login and return APITestClient with cookies set.
+
+    Registers a new user and returns client ready for authenticated requests.
+    Each call creates a new user with unique email.
+    """
+    client = APITestClient(api_client)
+    await client.post("/api/v1/auth/register", json={
+        "email": f"{uuid4()}@test.com",
+        "password": "TestPassword123!",
+        "full_name": "Test User",
+    })
+    return client
+
+
+@pytest.fixture
+async def noauthed_api_client(api_client: AsyncClient) -> APITestClient:
+    """APITestClient without authentication.
+
+    Use this to test unauthenticated access (expects 401).
+    """
+    return APITestClient(api_client)
