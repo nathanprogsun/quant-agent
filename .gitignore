@@ -42,3 +42,4 @@ test-results/
 
 # Superpowers skill artifacts
 docs/superpowers/
+.gstack/
