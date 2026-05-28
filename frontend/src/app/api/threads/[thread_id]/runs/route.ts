@@ -17,9 +17,8 @@ export async function GET(
     const { thread_id } = await params;
     const cookie = await getSessionCookie();
 
-    // Fetch thread history from backend
     const response = await fetch(
-      `${BACKEND_URL}/api/v1/threads/${thread_id}/history`,
+      `${BACKEND_URL}/api/v1/threads/${thread_id}/runs`,
       {
         headers: { Cookie: cookie },
       }
@@ -27,14 +26,15 @@ export async function GET(
 
     if (!response.ok) {
       return NextResponse.json(
-        { detail: "Failed to fetch thread history" },
+        { detail: "Failed to fetch runs" },
         { status: response.status }
       );
     }
 
-    return NextResponse.json(await response.json());
+    const data = await response.json();
+    return NextResponse.json(data);
   } catch (error) {
-    console.error("Get thread history proxy error:", error);
+    console.error("List runs proxy error:", error);
     return NextResponse.json(
       { detail: "Internal server error" },
       { status: 500 }

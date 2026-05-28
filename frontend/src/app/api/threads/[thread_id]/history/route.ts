@@ -17,7 +17,6 @@ export async function GET(
     const { thread_id } = await params;
     const cookie = await getSessionCookie();
 
-    // Fetch thread history from backend
     const response = await fetch(
       `${BACKEND_URL}/api/v1/threads/${thread_id}/history`,
       {

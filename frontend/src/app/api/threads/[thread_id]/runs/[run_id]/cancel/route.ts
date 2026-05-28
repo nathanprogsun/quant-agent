@@ -9,32 +9,33 @@ async function getSessionCookie() {
   return session?.value ? `access_token=${session.value}` : "";
 }
 
-export async function GET(
+export async function POST(
   _request: Request,
-  { params }: { params: Promise<{ thread_id: string }> }
+  { params }: { params: Promise<{ thread_id: string; run_id: string }> }
 ) {
   try {
-    const { thread_id } = await params;
+    const { thread_id, run_id } = await params;
     const cookie = await getSessionCookie();
 
-    // Fetch thread history from backend
     const response = await fetch(
-      `${BACKEND_URL}/api/v1/threads/${thread_id}/history`,
+      `${BACKEND_URL}/api/v1/threads/${thread_id}/runs/${run_id}/cancel`,
       {
+        method: "POST",
         headers: { Cookie: cookie },
       }
     );
 
     if (!response.ok) {
       return NextResponse.json(
-        { detail: "Failed to fetch thread history" },
+        { detail: "Failed to cancel run" },
         { status: response.status }
       );
     }
 
-    return NextResponse.json(await response.json());
+    const data = await response.json();
+    return NextResponse.json(data);
   } catch (error) {
-    console.error("Get thread history proxy error:", error);
+    console.error("Cancel run proxy error:", error);
     return NextResponse.json(
       { detail: "Internal server error" },
       { status: 500 }
