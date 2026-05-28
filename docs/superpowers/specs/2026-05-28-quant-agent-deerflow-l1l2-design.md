@@ -6,6 +6,116 @@
 
 ---
 
+## 零、deer-flow 项目背景
+
+### 0.1 deer-flow是什么
+
+**deer-flow** 是一个开源的 LangGraph-based Agent 框架，提供了完整的对话系统实现。
+
+- **GitHub**: https://github.com/MarketGraph/deer-flow
+- **本地路径**: `/Users/jung/pro/deer-flow`
+- **技术栈**: Python FastAPI + Next.js + LangGraph
+- **许可**: MIT
+
+> **重要约束**: quant-agent 后端必须遵循现有的 DDD 架构约束（见§1.3），不得引入新目录层级或违反现有代码组织方式。
+
+### 0.2 deer-flow 项目结构
+
+```
+deer-flow/
+├── backend/
+│   ├── app/
+│   │   ├── gateway/              # 网关层 (HTTP路由)
+│   │   │   ├── routers/         # API路由
+│   │   │   │   ├── threads.py
+│   │   │   │   ├── memory.py
+│   │   │   │   ├── skills.py
+│   │   │   │   └── ...
+│   │   │   ├── auth_middleware.py
+│   │   │   └── authz.py        # 权限系统
+│   │   │
+│   │   ├── channels/            # 多渠道集成 (Slack, Discord等)
+│   │   │   ├── slack.py
+│   │   │   ├── discord.py
+│   │   │   └── ...
+│   │   │
+│   │   └── gateway/app.py      # Gateway主入口
+│   │
+│   └── packages/
+│       └── harness/
+│           └── deerflow/        # 核心业务逻辑
+│               ├── agents/     # Agent相关
+│               │   ├── lead_agent/      # 主Agent工厂
+│               │   └── middlewares/    # 中间件链
+│               │       ├── base.py
+│               │       ├── memory_middleware.py
+│               │       ├── title_middleware.py
+│               │       ├── token_usage_middleware.py
+│               │       └── ...
+│               ├── memory/     # 记忆系统
+│               ├── skills/     # 技能系统
+│               ├── tools/      # 工具系统
+│               │   ├── builtin/
+│               │   └── mcp/
+│               └── runtime/    # 运行时基础设施
+│                   ├── stream_bridge/  # SSE事件桥
+│                   └── runs/   # Run生命周期
+│
+├── frontend/
+│   └── src/
+│       ├── app/                # Next.js App Router
+│       ├── components/
+│       │   ├── ai-elements/   # AI相关组件 (60+)
+│       │   │   ├── message.tsx
+│       │   │   ├── prompt-input.tsx
+│       │   │   ├── code-block.tsx
+│       │   │   ├── artifact.tsx
+│       │   │   ├── reasoning.tsx
+│       │   │   └── ...
+│       │   └── workspace/
+│       ├── core/
+│       │   ├── api/           # API客户端
+│       │   │   └── fetcher.ts
+│       │   ├── threads/       # Thread管理
+│       │   ├── messages/      # 消息处理
+│       │   ├── i18n/         # 国际化
+│       │   └── ...
+│       └── lib/
+```
+
+### 0.3 参考实现指导
+
+**核心原则**: 理解deer-flow的设计意图，在quant-agent现有架构内重新实现。
+
+**后端约束 (CRITICAL)**:
+- 必须遵循 quant-agent 现有 DDD 架构
+- 不得引入新目录层级
+- 不得违反现有的代码组织方式
+- 新模块必须放在现有 `core/chat/` 目录下
+
+| deer-flow模块 | quant-agent目标位置 | 处理方式 |
+|--------------|-------------------|---------|
+| `agents/middlewares/base.py` | `core/chat/middlewares/base.py` | 参考重写，保持接口兼容 |
+| `agents/middlewares/memory_middleware.py` | `core/chat/middlewares/memory_middleware.py` | 参考重写 |
+| `agents/middlewares/title_middleware.py` | `core/chat/middlewares/title_middleware.py` | 已有代码，启用即可 |
+| `memory/service.py` | `core/chat/memory/service.py` | 参考重写，遵循DDD |
+| `skills/registry.py` | `core/chat/skills/registry.py` | 参考重写，遵循DDD |
+| `tools/builtin/task_tool.py` | `core/chat/tools/builtin/task_tool.py` | 参考重写，遵循DDD |
+| `runtime/stream_bridge/memory.py` | `common/stream_bridge/memory.py` | quant-agent已有，可直接复用 |
+| `runtime/runs/manager.py` | `common/runs/manager.py` | quant-agent已有，可直接复用 |
+| `gateway/authz.py` | `web/middleware/authz.py` | 参考重写，放在web层 |
+| `frontend/components/ai-elements/` | `frontend/src/components/workspace/` | 直接复制并适配样式 |
+
+### 0.4 访问deer-flow代码
+
+AI agent需要访问deer-flow代码时，使用以下路径：
+- 后端: `/Users/jung/pro/deer-flow/backend/packages/harness/deerflow/`
+- 前端: `/Users/jung/pro/deer-flow/frontend/src/`
+
+**注意**: deer-flow代码仅供参考，必须在quant-agent现有架构约束内重新实现。
+
+---
+
 ## 一、背景与目标
 
 ### 1.1 现状
@@ -39,8 +149,8 @@ quant-agent 基于 deer-flow 的核心架构进行了精简实现，但在以下
 
 - **部署环境**: 本地开发，SQLite存储
 - **架构一致性**: 遵循quant-agent现有DDD架构，不引入新目录层级
-- **代码质量**: 无单元测试、无集成测试，专注功能实现
-- **策略**: 参考deer-flow设计重新实现，非直接移植代码
+- **代码质量**: E2E测试 + 单元测试 + 集成测试，确保功能可验证
+- **策略**: 参考deer-flow设计重新实现，详见§0.3参考实现指导
 
 ---
 
@@ -576,7 +686,124 @@ async def update_password(user_id: str, new_password: str) -> None:
 
 ---
 
-## 四、API端点汇总
+## 四、任务依赖图与Worktree策略
+
+### 4.1 任务依赖图
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                           任务依赖图                                     │
+│                                                                         │
+│  T1: 前端基础 (wt-frontend) - 无依赖，可独立启动                        │
+│   ├── CSRF保护                                                          │
+│   ├── API client增强                                                     │
+│   └── 组件复制 (Message, InputBox, CodeBlock, Artifact, Reasoning)       │
+│                                                                         │
+│  T2: 中间件链 (wt-middleware) - 无依赖，可独立启动                       │
+│   ├── 中间件基类 (base.py)                                              │
+│   ├── DynamicContextMiddleware                                          │
+│   ├── TitleMiddleware (已有代码，待启用)                                │
+│   ├── TokenUsageMiddleware (已有代码，待启用)                            │
+│   ├── SummarizationMiddleware (已有代码，待启用)                        │
+│   ├── ClarificationMiddleware                                           │
+│   ├── LoopDetectionMiddleware                                           │
+│   └── SubagentLimitMiddleware                                          │
+│                                                                         │
+│  T3: 记忆系统 (wt-memory) - 依赖T2中间件基类                            │
+│   ├── db/models/memory.py                                              │
+│   ├── memory/service.py                                                │
+│   ├── memory/api.py                                                    │
+│   └── MemoryMiddleware ───────────────────────────────────────────┐   │
+│       (依赖MemoryService必须在T3中先完成)                          │   │
+│                                                                   │   │
+│  T6: 企业安全 (wt-security) - 无依赖，可独立启动                      │   │
+│   ├── RBAC权限装饰器                                                 │   │
+│   ├── 登录速率限制                                                   │   │
+│   └── Token版本控制                                                  │   │
+│                                                                   │   │
+│  T5: 工具系统 (wt-tools) - 依赖T2中间件基类                          │   │
+│   ├── tools/builtin/task_tool.py                                     │   │
+│   ├── tools/builtin/bash_tool.py                                     │   │
+│   └── tools/mcp/client.py                                           │   │
+│                                                                   │   │
+│  T4: Skills系统 (wt-skills) - 依赖T3(记忆上下文)和T5(工具执行) ──▶┘   │
+│   ├── skills/registry.py                                              │
+│   ├── skills/executor.py                                              │
+│   ├── skills/storage.py                                               │
+│   └── skills/api.py                                                   │
+│                                                                         │
+│  T7: 端到端集成 (wt-integration) - 依赖T1-T6全部                       │
+│   └── 完整流程可运行验证                                               │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### 4.2 Worktree与并发分组
+
+| Worktree | 任务 | 依赖 | 启动顺序 | 测试方式 |
+|----------|------|------|---------|---------|
+| `wt-frontend` | T1: 前端增强 | 无 | 1 | E2E + 单元 |
+| `wt-middleware` | T2: 中间件链 | 无 | 1 | E2E + 单元 |
+| `wt-security` | T6: 企业安全 | 无 | 1 | E2E + 单元 |
+| `wt-memory` | T3: 记忆系统 | T2基类 | 2 | E2E + 单元 |
+| `wt-tools` | T5: 工具系统 | T2基类 | 2 | E2E + 单元 |
+| `wt-skills` | T4: Skills系统 | T3+T5 | 3 | E2E + 单元 |
+
+Note: T4的SkillExecutor依赖T5注册的tools(TaskTool, BashTool等)，需T5完成后才能完整执行
+
+### 4.3 依赖关系说明
+
+**关键: MemoryMiddleware 依赖 MemoryService**
+
+`MemoryMiddleware` 在 before_model 钩子中调用 `MemoryService.get_user_memory()`，因此：
+- **T3必须在T2之前完成MemoryService部分**
+- T2中的MemoryMiddleware需要等T3的MemoryService就绪后才能完整工作
+
+**启动顺序:**
+
+```
+第一批 (并行启动):
+├── wt-frontend    (T1: 前端)
+├── wt-middleware  (T2: 中间件 - 但MemoryMiddleware部分需等T3)
+└── wt-security    (T6: 企业安全)
+
+第二批 (等T2,T3完成后启动):
+└── wt-memory      (T3: 记忆系统 - MemoryService完成后T2的MemoryMiddleware才能工作)
+
+第三批 (等T3,T5完成后启动):
+├── wt-tools       (T5: 工具系统 - 依赖T2基类)
+└── wt-skills      (T4: Skills系统 - 依赖T3记忆上下文和T5工具)
+
+第四批 (等全部完成后):
+└── wt-integration (T7: E2E测试)
+```
+
+### 4.4 合并流程
+
+```
+每个worktree完成 → PR到main → 合并后本地:
+git checkout main && git pull origin main
+删除本地worktree分支
+```
+
+### 4.5 测试策略
+
+| 测试类型 | 适用范围 | 说明 |
+|---------|---------|------|
+| **E2E测试** | 所有功能模块 | Playwright端到端测试，验证真实功能 |
+| **单元测试** | 核心逻辑 | 如记忆提取、权限检查、速率限制逻辑 |
+| **集成测试** | API端点 | FastAPI TestClient 测试REST API |
+
+### 4.6 交付标准
+
+每个任务完成后必须满足:
+1. **代码完成**: 实现文档中定义的所有功能
+2. **测试通过**: E2E + 单元测试全部通过
+3. **可运行**: 启动后端/前端服务，功能正常可用
+4. **合并条件**: PR review通过，CI green，main分支最新
+
+---
+
+## 五、API端点汇总
 
 ### 4.1 现有端点 (保持不变)
 
@@ -618,17 +845,6 @@ DELETE /api/skills/{skill_name}         # 删除技能
 POST   /api/v1/auth/change-password     # 修改密码
 POST   /api/v1/auth/logout              # 登出
 ```
-
----
-
-## 五、实现顺序 (4周冲刺)
-
-| 周次 | 任务 | 交付物 |
-|------|------|--------|
-| **Week 1** | 前端基础增强 | CSRF保护、Markdown渲染、Token显示、组件复制 |
-| **Week 2** | 中间件链完成 | 11层中间件全部启用、Agent执行增强 |
-| **Week 3** | 记忆+Skills系统 | Memory API、SkillRegistry、Executor |
-| **Week 4** | 企业安全+Tools | RBAC权限、速率限制、MCP工具集成 |
 
 ---
 
