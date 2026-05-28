@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import React from "react";
 
 import { InputBox } from "@/components/workspace/InputBox";
@@ -16,11 +17,17 @@ export default function ChatPage({
   params: Promise<{ thread_id: string }>;
 }) {
   const { thread_id } = React.use(params);
+  const router = useRouter();
   const isNewThread = thread_id === NEW_THREAD_ID;
   const { data: thread } = useThread(isNewThread ? null : thread_id);
 
   const { messages, isLoading, sendMessage } = useThreadStream({
     threadId: isNewThread ? null : thread_id,
+    onThreadId: (newThreadId) => {
+      if (isNewThread) {
+        router.replace(`/workspace/chats/${newThreadId}`);
+      }
+    },
   });
 
   return (

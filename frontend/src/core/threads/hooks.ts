@@ -72,6 +72,7 @@ export function mergeMessages(
 export interface ThreadStreamOptions {
   threadId?: string | null;
   assistantId?: string;
+  onThreadId?: (threadId: string) => void;
   onCreated?: (meta: { thread_id: string; run_id: string }) => void;
   onFinish?: (state: { values: AgentThreadState }) => void;
 }
@@ -81,16 +82,17 @@ export interface ThreadStreamOptions {
 export function useThreadStream({
   threadId,
   assistantId = "lead_agent",
+  onThreadId,
   onCreated,
   onFinish,
 }: ThreadStreamOptions) {
   const [onStreamThreadId, setOnStreamThreadId] = useState(() => threadId);
   const [optimisticMessages, setOptimisticMessages] = useState<Message[]>([]);
-  const listeners = useRef({ onCreated, onFinish });
+  const listeners = useRef({ onCreated, onFinish, onThreadId });
 
   useEffect(() => {
-    listeners.current = { onCreated, onFinish };
-  }, [onCreated, onFinish]);
+    listeners.current = { onCreated, onFinish, onThreadId };
+  }, [onCreated, onFinish, onThreadId]);
 
   useEffect(() => {
     setOnStreamThreadId(threadId ?? undefined);
@@ -102,6 +104,10 @@ export function useThreadStream({
     threadId: onStreamThreadId,
     reconnectOnMount: true,
     fetchStateHistory: { limit: 1 },
+    onThreadId(newThreadId) {
+      setOnStreamThreadId(newThreadId);
+      listeners.current.onThreadId?.(newThreadId);
+    },
     onCreated(meta) {
       listeners.current.onCreated?.({
         thread_id: meta.thread_id,
