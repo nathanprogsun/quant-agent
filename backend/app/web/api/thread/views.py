@@ -101,9 +101,11 @@ async def create_thread(
         body = await request.json()
 
     # Use provided thread_id if given (for LangGraph SDK compatibility)
-    if body.get("thread_id"):
+    # SDK sends threadId (camelCase) but we also check thread_id (snake_case)
+    provided_id = body.get("thread_id") or body.get("threadId")
+    if provided_id:
         try:
-            thread_id = UUID(body["thread_id"])
+            thread_id = UUID(provided_id)
         except ValueError:
             pass  # Invalid UUID, use generated one
 
