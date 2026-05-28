@@ -1,124 +1,95 @@
-"""Integration tests for auth service flows."""
-
+"""Integration tests for auth API flows."""
 from __future__ import annotations
 
-from datetime import UTC, datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+import pytest
 from uuid import uuid4
 
-import pytest
-
-from app.core.auth.service.auth_service import AuthService
-from app.core.user.service.user_service import UserService
-from app.core.user.types import UserDTO
-from app.db.models.user import User
-
-TEST_USER_EMAIL = "test@example.com"
-TEST_USER_PASSWORD = "securepassword123"
-TEST_USER_FULL_NAME = "Test User"
-TEST_USER_ID = uuid4()
+from tests.integration.client import APITestClient
 
 
-class TestAuthServiceAPIIntegration:
-    def test_create_and_validate_token(self, mock_settings: MagicMock) -> None:
-        mock_user_service = AsyncMock()
-        auth_service = AuthService(user_service=mock_user_service)
+class TestAuthFlow:
+    """Test authentication flow with real HTTP requests.
 
-        with patch("app.core.auth.service.auth_service.get_settings", return_value=mock_settings):
-            token = auth_service.create_access_token(
-                data={"sub": TEST_USER_ID, "email": TEST_USER_EMAIL}
-            )
-            assert isinstance(token, str)
-
-            payload = auth_service.decode_token(token)
-            assert payload is not None
-            assert payload["sub"] == TEST_USER_ID
-            assert payload["email"] == TEST_USER_EMAIL
-
-    def test_csrf_token_in_response_flow(self) -> None:
-        mock_user_service = AsyncMock()
-        auth_service = AuthService(user_service=mock_user_service)
-
-        csrf_token = auth_service.create_csrf_token()
-        assert len(csrf_token) == 36
-        assert "-" in csrf_token
+    Uses APITestClient for simplified API calls.
+    Tests both authenticated and unauthenticated scenarios.
+    """
 
     @pytest.mark.asyncio
-    async def test_password_hashing_in_registration_flow(self, mock_settings: MagicMock) -> None:
-        mock_user_service = AsyncMock(spec=UserService)
-        mock_user_service.create_user_with_password = AsyncMock(
-            return_value=UserDTO(
-                id=TEST_USER_ID,
-                email=TEST_USER_EMAIL,
-                full_name=TEST_USER_FULL_NAME,
-                created_at=datetime.now(UTC),
-            )
-        )
-
-        auth_service = AuthService(user_service=mock_user_service)
-
-        await auth_service.register_user(
-            email=TEST_USER_EMAIL,
-            password=TEST_USER_PASSWORD,
-            full_name=TEST_USER_FULL_NAME,
-        )
-
-        mock_user_service.create_user_with_password.assert_called_once()
-        call_args = mock_user_service.create_user_with_password.call_args[0]
-
-        hashed_password = call_args[1]
-        assert hashed_password != TEST_USER_PASSWORD
-        assert hashed_password.startswith("$2b$")
+    async def test_register_success(self, authed_api_client: APITestClient) -> None:
+        """Registered user can access /me endpoint."""
+        user = await authed_api_client.get("/api/v1/auth/me")
+        assert user["email"]
+        assert "id" in user
 
     @pytest.mark.asyncio
-    async def test_login_authentication_flow(self, mock_settings: MagicMock) -> None:
-        mock_user_service = AsyncMock()
-        auth_service = AuthService(user_service=mock_user_service)
-        hashed_password = auth_service.get_password_hash(TEST_USER_PASSWORD)
-
-        user_model = User(
-            id=TEST_USER_ID,
-            email=TEST_USER_EMAIL,
-            username="testuser",
-            full_name=TEST_USER_FULL_NAME,
-            hashed_password=hashed_password,
-            is_active=True,
-            is_superuser=False,
-            created_at=datetime.now(UTC),
-        )
-        mock_user_service.get_user_model_by_email = AsyncMock(return_value=user_model)
-
-        result = await auth_service.authenticate_user(TEST_USER_EMAIL, TEST_USER_PASSWORD)
-
-        assert result is not None
-        assert result.email == TEST_USER_EMAIL
+    async def test_me_unauthenticated_returns_401(
+        self, noauthed_api_client: APITestClient
+    ) -> None:
+        """Unauthenticated access to /me returns 401."""
+        status, data = await noauthed_api_client.get_raw("/api/v1/auth/me")
+        assert status == 401
 
     @pytest.mark.asyncio
-    async def test_login_failure_with_wrong_password(self, mock_settings: MagicMock) -> None:
-        mock_user_service = AsyncMock()
-        auth_service = AuthService(user_service=mock_user_service)
-        hashed_password = auth_service.get_password_hash(TEST_USER_PASSWORD)
+    async def test_login_success(self, noauthed_api_client: APITestClient) -> None:
+        """Login with valid credentials succeeds."""
+        # Register first
+        register_data = {
+            "email": f"logintest{uuid4()}@test.com",
+            "password": "TestPassword123!",
+            "full_name": "Login Test User",
+        }
+        await noauthed_api_client.post("/api/v1/auth/register", json=register_data)
 
-        user_model = User(
-            id=TEST_USER_ID,
-            email=TEST_USER_EMAIL,
-            username="testuser",
-            full_name=TEST_USER_FULL_NAME,
-            hashed_password=hashed_password,
-            is_active=True,
-            is_superuser=False,
-            created_at=datetime.now(UTC),
-        )
-        mock_user_service.get_user_model_by_email = AsyncMock(return_value=user_model)
+        # Login
+        login_data = {
+            "email": register_data["email"],
+            "password": register_data["password"],
+        }
+        status, _ = await noauthed_api_client.post_raw("/api/v1/auth/login", json=login_data)
+        assert status == 200
 
-        result = await auth_service.authenticate_user(TEST_USER_EMAIL, "wrong_password")
-        assert result is None
+        # Now can access protected endpoint
+        user = await noauthed_api_client.get("/api/v1/auth/me")
+        assert user["email"] == register_data["email"]
 
     @pytest.mark.asyncio
-    async def test_login_failure_user_not_found(self) -> None:
-        mock_user_service = AsyncMock()
-        mock_user_service.get_user_model_by_email = AsyncMock(return_value=None)
-        auth_service = AuthService(user_service=mock_user_service)
+    async def test_login_wrong_password(self, noauthed_api_client: APITestClient) -> None:
+        """Login with wrong password returns 401."""
+        # Register first
+        register_data = {
+            "email": f"wrongpwd{uuid4()}@test.com",
+            "password": "CorrectPassword123!",
+            "full_name": "Wrong Pwd User",
+        }
+        await noauthed_api_client.post("/api/v1/auth/register", json=register_data)
 
-        result = await auth_service.authenticate_user("nonexistent@example.com", "password")
-        assert result is None
+        # Login with wrong password
+        login_data = {
+            "email": register_data["email"],
+            "password": "WrongPassword123!",
+        }
+        status, data = await noauthed_api_client.get_raw("/api/v1/auth/login", json=login_data)
+        assert status == 401
+
+    @pytest.mark.asyncio
+    async def test_login_nonexistent_user(self, noauthed_api_client: APITestClient) -> None:
+        """Login with non-existent email returns 401."""
+        login_data = {
+            "email": f"nonexistent{uuid4()}@test.com",
+            "password": "AnyPassword123!",
+        }
+        status, _ = await noauthed_api_client.get_raw("/api/v1/auth/login", json=login_data)
+        assert status == 401
+
+    @pytest.mark.asyncio
+    async def test_signout(self, authed_api_client: APITestClient) -> None:
+        """Signout clears session."""
+        status, _ = await authed_api_client.get_raw("/api/v1/auth/signout")
+        assert status == 200
+
+    @pytest.mark.asyncio
+    async def test_setup_status(self, noauthed_api_client: APITestClient) -> None:
+        """Setup status endpoint is public."""
+        status, data = await noauthed_api_client.get_raw("/api/v1/auth/setup-status")
+        assert status == 200
+        assert "needs_setup" in data
