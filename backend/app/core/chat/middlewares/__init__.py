@@ -8,6 +8,7 @@ from app.core.chat.middlewares.subagent_limit_middleware import SubagentLimitMid
 from app.core.chat.middlewares.title_middleware import TitleMiddleware
 from app.core.chat.middlewares.token_usage_middleware import TokenUsageMiddleware
 from app.core.chat.middlewares.summarization_middleware import SummarizationMiddleware
+from app.core.chat.middlewares.memory_middleware import MemoryMiddleware
 
 __all__ = [
     "AgentMiddleware",
@@ -18,4 +19,5 @@ __all__ = [
     "TitleMiddleware",
     "TokenUsageMiddleware",
     "SummarizationMiddleware",
+    "MemoryMiddleware",
 ]

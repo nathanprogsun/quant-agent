@@ -20,6 +20,7 @@ from app.core.chat.middlewares.dynamic_context_middleware import DynamicContextM
 from app.core.chat.middlewares.clarification_middleware import ClarificationMiddleware
 from app.core.chat.middlewares.loop_detection_middleware import LoopDetectionMiddleware
 from app.core.chat.middlewares.subagent_limit_middleware import SubagentLimitMiddleware
+from app.core.chat.middlewares.memory_middleware import MemoryMiddleware
 from app.settings import get_settings
 
 
@@ -149,4 +150,5 @@ def _build_middlewares(config: RunnableConfig) -> list[AgentMiddleware]:
         ClarificationMiddleware(),
         LoopDetectionMiddleware(),
         SubagentLimitMiddleware(),
+        MemoryMiddleware(),
     ]

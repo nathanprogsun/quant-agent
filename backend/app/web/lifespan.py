@@ -36,6 +36,7 @@ from app.common.stats.metric import custom_metric
 from app.common.stream_bridge.memory import MemoryStreamBridge
 from app.core.auth.service.auth_service import get_auth_service_by_engine
 from app.core.chat.service.thread_service import get_thread_service_by_engine
+from app.core.chat.middlewares.memory_middleware import set_memory_middleware_engine
 from app.core.user.service.user_service import get_user_service_by_engine
 from app.db.dbengine.core import DatabaseEngine
 from app.settings import get_settings, settings
@@ -106,6 +107,9 @@ async def setup_app_context(app: FastAPI) -> None:
         pool_size=cfg.db_pool_size,
         max_overflow=cfg.db_max_overflow,
     )
+
+    # Initialize memory middleware with database engine
+    set_memory_middleware_engine(engine)
 
     # Pre-warm connection pool if configured
     if cfg.db_conn_prewarm:
