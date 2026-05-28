@@ -1,38 +1,28 @@
 """Integration tests for health endpoint."""
-
 from __future__ import annotations
 
-from collections.abc import AsyncGenerator
-from typing import TYPE_CHECKING
-
 import pytest
-from httpx import ASGITransport, AsyncClient
 
-from app.web.application import get_app
-
-if TYPE_CHECKING:
-    pass
+from tests.integration.client import APITestClient
 
 
 @pytest.fixture
-async def client() -> AsyncGenerator[AsyncClient, None]:
-    app = get_app()
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
-        yield ac
+def health_client(api_client) -> APITestClient:
+    """Health check client (no auth needed)."""
+    return APITestClient(api_client)
 
 
 @pytest.mark.asyncio
-async def test_health_check(client: AsyncClient) -> None:
-    response = await client.get("/health")
-    assert response.status_code == 200
-    data = response.json()
-    assert "status" in data
+async def test_health_check(health_client: APITestClient) -> None:
+    """Health endpoint returns 200."""
+    status, data = await health_client.get_raw("/health")
+    assert status == 200
+    assert data["status"] == "healthy"
 
 
 @pytest.mark.asyncio
-async def test_health_check_returns_status_ok(client: AsyncClient) -> None:
-    response = await client.get("/health")
-    assert response.status_code == 200
-    data = response.json()
+async def test_health_check_status_ok(health_client: APITestClient) -> None:
+    """Health endpoint returns status OK."""
+    status, data = await health_client.get_raw("/health")
+    assert status == 200
     assert isinstance(data, dict)
