@@ -1,6 +1,7 @@
 """Integration tests for chat API."""
 from __future__ import annotations
 
+import os
 from uuid import uuid4
 
 import pytest
@@ -43,6 +44,10 @@ class TestChatAPI:
         assert status == 401
 
     @pytest.mark.asyncio
+    @pytest.mark.skipif(
+        not os.environ.get("OPENAI_API_KEY"),
+        reason="Requires OPENAI_API_KEY to be set",
+    )
     async def test_stream_run_authenticated_without_thread(
         self, authed_api_client: APITestClient
     ) -> None:
@@ -50,6 +55,7 @@ class TestChatAPI:
 
         The streaming endpoint returns 200 immediately and may send errors
         in the SSE stream. We just verify auth passed (status 200).
+        Requires OPENAI_API_KEY to be set.
         """
         thread_id = uuid4()
         status, _ = await authed_api_client.post_raw(
