@@ -39,3 +39,6 @@ node_modules/
 .next/
 playwright-report/
 test-results/
+
+# Superpowers skill artifacts
+docs/superpowers/
