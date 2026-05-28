@@ -11,7 +11,8 @@ export async function listThreads(): Promise<Thread[]> {
         throw new Error("Failed to fetch threads");
     }
 
-    return response.json();
+    const data = await response.json();
+    return data.threads;
 }
 
 export async function getThread(threadId: string): Promise<Thread> {
