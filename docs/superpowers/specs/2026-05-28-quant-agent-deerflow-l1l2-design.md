@@ -621,119 +621,14 @@ POST   /api/v1/auth/logout              # 登出
 
 ---
 
-## 四、任务依赖图与Worktree策略
+## 五、实现顺序 (4周冲刺)
 
-### 4.1 任务依赖图
-
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                           任务依赖图 (修正版)                            │
-│                                                                         │
-│  T1: 前端基础 (wt-frontend) - 无依赖，可独立启动                        │
-│   ├── CSRF保护                                                          │
-│   ├── API client增强                                                     │
-│   └── 组件复制 (Message, InputBox, CodeBlock, Artifact, Reasoning)       │
-│                                                                         │
-│  T2: 中间件链 (wt-middleware) - 无依赖，可独立启动                       │
-│   ├── 中间件基类 (base.py)                                              │
-│   ├── DynamicContextMiddleware                                          │
-│   ├── TitleMiddleware (已有代码，待启用)                                │
-│   ├── TokenUsageMiddleware (已有代码，待启用)                            │
-│   ├── SummarizationMiddleware (已有代码，待启用)                        │
-│   ├── ClarificationMiddleware                                           │
-│   ├── LoopDetectionMiddleware                                           │
-│   └── SubagentLimitMiddleware                                          │
-│                                                                         │
-│  T3: 记忆系统 (wt-memory) - 依赖T2中间件基类                            │
-│   ├── db/models/memory.py                                              │
-│   ├── memory/service.py                                                │
-│   ├── memory/api.py                                                    │
-│   └── MemoryMiddleware ───────────────────────────────────────────┐   │
-│       (依赖MemoryService必须在T3中先完成)                          │   │
-│                                                                   │   │
-│  T6: 企业安全 (wt-security) - 无依赖，可独立启动                      │   │
-│   ├── RBAC权限装饰器                                                 │   │
-│   ├── 登录速率限制                                                   │   │
-│   └── Token版本控制                                                  │   │
-│                                                                   │   │
-│  T5: 工具系统 (wt-tools) - 依赖T2中间件基类                          │   │
-│   ├── tools/builtin/task_tool.py                                     │   │
-│   ├── tools/builtin/bash_tool.py                                     │   │
-│   └── tools/mcp/client.py                                           │   │
-│                                                                   │   │
-│  T4: Skills系统 (wt-skills) - 依赖T3(记忆上下文)和T5(工具执行) ──▶┘   │
-│   ├── skills/registry.py                                              │
-│   ├── skills/executor.py                                              │
-│   ├── skills/storage.py                                               │
-│   └── skills/api.py                                                   │
-│                                                                         │
-│  T7: 端到端集成 (wt-integration) - 依赖T1-T6全部                       │
-│   └── 完整流程可运行验证                                               │
-└─────────────────────────────────────────────────────────────────────────┘
-```
-
-### 4.2 Worktree与并发分组
-
-| Worktree | 任务 | 依赖 | 启动顺序 | 测试方式 |
-|----------|------|------|---------|---------|
-| `wt-frontend` | T1: 前端增强 | 无 | 1 | E2E + 单元 |
-| `wt-middleware` | T2: 中间件链 | 无 | 1 | E2E + 单元 |
-| `wt-security` | T6: 企业安全 | 无 | 1 | E2E + 单元 |
-| `wt-memory` | T3: 记忆系统 | T2基类 | 2 | E2E + 单元 |
-| `wt-tools` | T5: 工具系统 | T2基类 | 2 | E2E + 单元 |
-| `wt-skills` | T4: Skills系统 | T3+T5 | 3 | E2E + 单元 |
-| `wt-integration` | T7: E2E测试 | T1-T6 | 4 | E2E |
-
-### 4.3 依赖关系说明
-
-**关键修正: MemoryMiddleware 依赖 MemoryService**
-
-`MemoryMiddleware` 在 before_model 钩子中调用 `MemoryService.get_user_memory()`，因此：
-- **T3必须在T2之前完成MemoryService部分**
-- T2中的MemoryMiddleware需要等T3的MemoryService就绪后才能完整工作
-
-**修正后的启动顺序:**
-
-```
-第一批 (并行启动):
-├── wt-frontend    (T1: 前端)
-├── wt-middleware  (T2: 中间件 - 但MemoryMiddleware部分需等T3)
-└── wt-security    (T6: 企业安全)
-
-第二批 (等T2 T3完成后启动):
-└── wt-memory      (T3: 记忆系统 - MemoryService完成后T2的MemoryMiddleware才能工作)
-
-第三批 (等T3, T5完成后启动):
-├── wt-tools       (T5: 工具系统 - 依赖T2基类)
-└── wt-skills      (T4: Skills系统 - 依赖T3记忆上下文和T5工具)
-
-第四批 (等全部完成后):
-└── wt-integration (T7: E2E测试)
-```
-
-### 4.4 合并流程
-
-```
-每个worktree完成 → PR到main → 合并后本地:
-git checkout main && git pull origin main
-删除本地worktree分支
-```
-
-### 4.5 测试策略
-
-| 测试类型 | 适用范围 | 说明 |
-|---------|---------|------|
-| **E2E测试** | 所有功能模块 | Playwright端到端测试，验证真实功能 |
-| **单元测试** | 核心逻辑 | 如记忆提取、权限检查、速率限制逻辑 |
-| **集成测试** | API端点 | FastAPI TestClient 测试REST API |
-
-### 4.6 交付标准
-
-每个任务完成后必须满足:
-1. **代码完成**: 实现文档中定义的所有功能
-2. **测试通过**: E2E + 单元测试全部通过
-3. **可运行**: 启动后端/前端服务，功能正常可用
-4. **合并条件**: PR review通过，CI green，main分支最新
+| 周次 | 任务 | 交付物 |
+|------|------|--------|
+| **Week 1** | 前端基础增强 | CSRF保护、Markdown渲染、Token显示、组件复制 |
+| **Week 2** | 中间件链完成 | 11层中间件全部启用、Agent执行增强 |
+| **Week 3** | 记忆+Skills系统 | Memory API、SkillRegistry、Executor |
+| **Week 4** | 企业安全+Tools | RBAC权限、速率限制、MCP工具集成 |
 
 ---
 
@@ -745,7 +640,6 @@ git checkout main && git pull origin main
 | 中间件冲突 | 多个中间件可能相互干扰 | 逐个启用，逐步测试 |
 | 前端适配 | 组件复制后样式可能不统一 | 使用shadcn作为基础，统一样式 |
 | LLM调用成本 | 记忆更新等会产生额外LLM调用 | 使用便宜模型(gpt-4o-mini) |
-| T2/T3循环依赖 | MemoryMiddleware依赖MemoryService | T3先完成MemoryService，T2再启用MemoryMiddleware |
 
 ---
 
