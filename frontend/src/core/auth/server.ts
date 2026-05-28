@@ -6,15 +6,6 @@ import { userSchema } from "./types";
 const AUTH_ME_ENDPOINT = "/api/v1/auth/me";
 const SSR_TIMEOUT_MS = 5_000;
 
-const E2E_MOCK_USER: User = {
-  id: "00000000-0000-0000-0000-000000000001",
-  email: "test@example.com",
-  username: "testuser",
-  full_name: "Test User",
-  is_active: true,
-  is_superuser: true,
-};
-
 /**
  * Server-side auth check for use in Server Components and layouts.
  * Reads the HttpOnly session cookie and validates it against the backend.
@@ -22,18 +13,7 @@ const E2E_MOCK_USER: User = {
 export async function getServerSideUser(): Promise<AuthResult> {
   const cookieStore = await cookies();
 
-  // E2E bypass: when the e2e_bypass_auth cookie is set, return mock user.
-  // Workspace tests set this cookie before navigating; auth tests don't.
-  if (cookieStore.get("e2e_bypass_auth")?.value === "1") {
-    return { status: "authenticated", user: E2E_MOCK_USER };
-  }
-
   const sessionCookie = cookieStore.get("access_token");
-
-  // Debug: log all cookies received in SSR
-  const allCookies = cookieStore.getAll();
-  console.log("[SSR] cookies:", allCookies.map((c) => `${c.name}=${c.value.substring(0, 20)}...`));
-  console.log("[SSR] access_token:", sessionCookie?.value ? `${sessionCookie.value.substring(0, 20)}...` : "MISSING");
 
   if (!sessionCookie?.value) {
     try {
@@ -62,7 +42,6 @@ export async function getServerSideUser(): Promise<AuthResult> {
     }
     return { status: "unauthenticated" };
   }
-
 
   try {
     const backendUrl = process.env.BACKEND_URL ?? "http://localhost:8000";
