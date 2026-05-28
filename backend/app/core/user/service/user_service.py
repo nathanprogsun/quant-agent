@@ -4,12 +4,12 @@ from uuid import UUID, uuid4
 
 from passlib.context import CryptContext
 
+from app.common.exception.exception import ResourceNotFoundError
 from app.core.user.types import UserCreateDTO, UserDTO, UserUpdateDTO
 from app.db.dao.user_repository import UserRepository
 from app.db.dbengine.core import DatabaseEngine
 from app.db.models.user import User
 from app.util.time import zoned_utc_now
-from app.common.exception.exception import ResourceNotFoundError
 
 _pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 

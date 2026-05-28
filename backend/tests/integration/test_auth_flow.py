@@ -1,8 +1,9 @@
 """Integration tests for auth API flows."""
 from __future__ import annotations
 
-import pytest
 from uuid import uuid4
+
+import pytest
 
 from tests.integration.client import APITestClient
 
@@ -26,7 +27,7 @@ class TestAuthFlow:
         self, noauthed_api_client: APITestClient
     ) -> None:
         """Unauthenticated access to /me returns 401."""
-        status, data = await noauthed_api_client.get_raw("/api/v1/auth/me")
+        status, _ = await noauthed_api_client.get_raw("/api/v1/auth/me")
         assert status == 401
 
     @pytest.mark.asyncio
@@ -68,7 +69,7 @@ class TestAuthFlow:
             "email": register_data["email"],
             "password": "WrongPassword123!",
         }
-        status, data = await noauthed_api_client.post_raw("/api/v1/auth/login", json=login_data)
+        status, _ = await noauthed_api_client.post_raw("/api/v1/auth/login", json=login_data)
         assert status == 401
 
     @pytest.mark.asyncio

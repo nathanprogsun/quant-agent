@@ -1,8 +1,9 @@
 """Integration tests for thread API."""
 from __future__ import annotations
 
-import pytest
 from uuid import uuid4
+
+import pytest
 
 from tests.integration.client import APITestClient
 

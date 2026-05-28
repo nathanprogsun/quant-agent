@@ -10,6 +10,7 @@ import pytest
 
 from app.core.user.service.user_service import UserService
 from app.core.user.types import UserCreateDTO, UserDTO, UserUpdateDTO
+from app.common.exception.exception import ResourceNotFoundError
 from app.db.models.user import User
 
 TEST_USER_EMAIL = "test@example.com"
@@ -37,8 +38,8 @@ class TestUserServiceGet:
         self, user_service: UserService, mock_user_repository: MagicMock
     ) -> None:
         mock_user_repository.find_by_primary_key = AsyncMock(return_value=None)
-        result = await user_service.get_by_id(TEST_USER_ID)
-        assert result is None
+        with pytest.raises(ResourceNotFoundError):
+            await user_service.get_by_id(TEST_USER_ID)
 
     @pytest.mark.asyncio
     async def test_get_by_email_found(

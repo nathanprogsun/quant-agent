@@ -10,7 +10,6 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import create_async_engine
 
 from app.app_context.app_context import AppContext, LifeSpanService
 from app.common.runs.manager import RunManager
