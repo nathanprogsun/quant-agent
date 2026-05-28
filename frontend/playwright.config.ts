@@ -30,7 +30,7 @@ export default defineConfig({
       timeout: 120_000,
       env: {
         DATABASE_URL: "sqlite+aiosqlite:///./test.db",
-        ENVIRONMENT: "test",
+        ENVIRONMENT: "local",
         JWT_SECRET_KEY: "test-secret-key-for-e2e-testing-only",
       },
     },
