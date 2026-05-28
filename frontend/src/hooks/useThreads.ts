@@ -10,10 +10,10 @@ export function useThreads() {
   });
 }
 
-export function useThread(threadId: string) {
+export function useThread(threadId: string | null) {
   return useQuery({
     queryKey: ["threads", threadId],
-    queryFn: () => threadApi.getThread(threadId),
+    queryFn: () => threadApi.getThread(threadId!),
     enabled: !!threadId,
   });
 }

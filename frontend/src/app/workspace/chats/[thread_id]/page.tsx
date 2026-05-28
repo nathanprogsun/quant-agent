@@ -8,16 +8,19 @@ import { ThreadTitle } from "@/components/workspace/ThreadTitle";
 import { useThread } from "@/hooks/useThreads";
 import { useThreadStream } from "@/core/threads/hooks";
 
+const NEW_THREAD_ID = "new";
+
 export default function ChatPage({
   params,
 }: {
   params: Promise<{ thread_id: string }>;
 }) {
   const { thread_id } = React.use(params);
-  const { data: thread } = useThread(thread_id);
+  const isNewThread = thread_id === NEW_THREAD_ID;
+  const { data: thread } = useThread(isNewThread ? null : thread_id);
 
   const { messages, isLoading, sendMessage } = useThreadStream({
-    threadId: thread_id,
+    threadId: isNewThread ? null : thread_id,
   });
 
   return (
