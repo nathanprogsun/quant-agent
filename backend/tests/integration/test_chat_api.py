@@ -22,7 +22,7 @@ class TestChatAPI:
         """Unauthenticated access to stream_run returns 401."""
         thread_id = uuid4()
         status, _ = await noauthed_api_client.post_raw(
-            f"/api/v1/chat/{thread_id}/runs/stream",
+            f"/api/v1/threads/{thread_id}/runs/stream",
             json={
                 "input": {"messages": []},
                 "config": {},
@@ -39,7 +39,7 @@ class TestChatAPI:
         thread_id = uuid4()
         run_id = uuid4()
         status, _ = await noauthed_api_client.post_raw(
-            f"/api/v1/chat/{thread_id}/runs/{run_id}/cancel",
+            f"/api/v1/threads/{thread_id}/runs/{run_id}/cancel",
         )
         assert status == 401
 
@@ -59,7 +59,7 @@ class TestChatAPI:
         """
         thread_id = uuid4()
         status, _ = await authed_api_client.post_raw(
-            f"/api/v1/chat/{thread_id}/runs/stream",
+            f"/api/v1/threads/{thread_id}/runs/stream",
             json={
                 "input": {"messages": []},
                 "config": {},
@@ -77,7 +77,7 @@ class TestChatAPI:
         thread_id = uuid4()
         run_id = uuid4()
         status, _ = await authed_api_client.post_raw(
-            f"/api/v1/chat/{thread_id}/runs/{run_id}/cancel",
+            f"/api/v1/threads/{thread_id}/runs/{run_id}/cancel",
         )
         # 404 means auth passed but run not found
         assert status == 404
