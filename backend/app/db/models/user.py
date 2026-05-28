@@ -27,5 +27,7 @@ class User(TableModel):
     hashed_password: Column[str]
     is_active: Column[bool] = True
     is_superuser: Column[bool] = False
+    role: Column[str] = "user"
+    token_version: Column[int] = 0
     created_at: Column[datetime]
     updated_at: Column[str | None] = None
