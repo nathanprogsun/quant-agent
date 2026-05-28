@@ -23,9 +23,9 @@ export default function ChatPage({
 
   const { messages, isLoading, sendMessage } = useThreadStream({
     threadId: isNewThread ? null : thread_id,
-    onThreadId: (newThreadId) => {
+    onCreated: (meta) => {
       if (isNewThread) {
-        router.replace(`/workspace/chats/${newThreadId}`);
+        router.replace(`/workspace/chats/${meta.thread_id}`);
       }
     },
   });
