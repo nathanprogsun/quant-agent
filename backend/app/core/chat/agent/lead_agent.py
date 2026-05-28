@@ -13,6 +13,13 @@ from langgraph.prebuilt import ToolNode
 from app.core.chat.agent.prompt import apply_prompt_template
 from app.core.chat.agent.thread_state import ThreadState
 from app.core.chat.middlewares.base import AgentMiddleware
+from app.core.chat.middlewares.title_middleware import TitleMiddleware
+from app.core.chat.middlewares.token_usage_middleware import TokenUsageMiddleware
+from app.core.chat.middlewares.summarization_middleware import SummarizationMiddleware
+from app.core.chat.middlewares.dynamic_context_middleware import DynamicContextMiddleware
+from app.core.chat.middlewares.clarification_middleware import ClarificationMiddleware
+from app.core.chat.middlewares.loop_detection_middleware import LoopDetectionMiddleware
+from app.core.chat.middlewares.subagent_limit_middleware import SubagentLimitMiddleware
 from app.settings import get_settings
 
 
@@ -119,7 +126,27 @@ def _should_use_tools(state: ThreadState) -> str:
 def _build_middlewares(config: RunnableConfig) -> list[AgentMiddleware]:
     """Build middleware chain.
 
-    Phase 1: empty chain.
-    Phase 2+: assemble in order per DeerFlow convention.
+    Assembles middlewares in order per DeerFlow convention:
+    1. TitleMiddleware - generates conversation title
+    2. TokenUsageMiddleware - tracks token usage
+    3. SummarizationMiddleware - handles long conversation summarization
+    4. DynamicContextMiddleware - injects current datetime/timezone
+    5. ClarificationMiddleware - detects clarification requests
+    6. LoopDetectionMiddleware - detects repeated tool call patterns
+    7. SubagentLimitMiddleware - limits concurrent subagent calls
     """
-    return []
+    configurable = config.get("configurable", {})
+
+    # Summarization enabled flag
+    summarization_enabled = configurable.get("summarization_enabled", True)
+    max_messages = configurable.get("max_messages", 50)
+
+    return [
+        TitleMiddleware(),
+        TokenUsageMiddleware(),
+        SummarizationMiddleware(max_messages=max_messages, enabled=summarization_enabled),
+        DynamicContextMiddleware(),
+        ClarificationMiddleware(),
+        LoopDetectionMiddleware(),
+        SubagentLimitMiddleware(),
+    ]
