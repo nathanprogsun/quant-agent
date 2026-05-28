@@ -12,9 +12,12 @@
 
 **deer-flow** 是一个开源的 LangGraph-based Agent 框架，提供了完整的对话系统实现。
 
-- **项目路径**: `/Users/jung/pro/deer-flow`
+- **GitHub**: https://github.com/MarketGraph/deer-flow
+- **本地路径**: `/Users/jung/pro/deer-flow`
 - **技术栈**: Python FastAPI + Next.js + LangGraph
 - **许可**: MIT
+
+> **重要约束**: quant-agent 后端必须遵循现有的 DDD 架构约束（见§1.3），不得引入新目录层级或违反现有代码组织方式。
 
 ### 0.2 deer-flow 项目结构
 
@@ -84,17 +87,23 @@ deer-flow/
 
 **核心原则**: 理解deer-flow的设计意图，在quant-agent现有架构内重新实现。
 
+**后端约束 (CRITICAL)**:
+- 必须遵循 quant-agent 现有 DDD 架构
+- 不得引入新目录层级
+- 不得违反现有的代码组织方式
+- 新模块必须放在现有 `core/chat/` 目录下
+
 | deer-flow模块 | quant-agent目标位置 | 处理方式 |
 |--------------|-------------------|---------|
 | `agents/middlewares/base.py` | `core/chat/middlewares/base.py` | 参考重写，保持接口兼容 |
 | `agents/middlewares/memory_middleware.py` | `core/chat/middlewares/memory_middleware.py` | 参考重写 |
 | `agents/middlewares/title_middleware.py` | `core/chat/middlewares/title_middleware.py` | 已有代码，启用即可 |
-| `memory/service.py` | `core/chat/memory/service.py` | 参考重写 |
-| `skills/registry.py` | `core/chat/skills/registry.py` | 参考重写 |
-| `tools/builtin/task_tool.py` | `core/chat/tools/builtin/task_tool.py` | 参考重写 |
+| `memory/service.py` | `core/chat/memory/service.py` | 参考重写，遵循DDD |
+| `skills/registry.py` | `core/chat/skills/registry.py` | 参考重写，遵循DDD |
+| `tools/builtin/task_tool.py` | `core/chat/tools/builtin/task_tool.py` | 参考重写，遵循DDD |
 | `runtime/stream_bridge/memory.py` | `common/stream_bridge/memory.py` | quant-agent已有，可直接复用 |
 | `runtime/runs/manager.py` | `common/runs/manager.py` | quant-agent已有，可直接复用 |
-| `gateway/authz.py` | `core/chat/authz.py` | 参考重写 |
+| `gateway/authz.py` | `web/middleware/authz.py` | 参考重写，放在web层 |
 | `frontend/components/ai-elements/` | `frontend/src/components/workspace/` | 直接复制并适配样式 |
 
 ### 0.4 访问deer-flow代码
@@ -102,6 +111,8 @@ deer-flow/
 AI agent需要访问deer-flow代码时，使用以下路径：
 - 后端: `/Users/jung/pro/deer-flow/backend/packages/harness/deerflow/`
 - 前端: `/Users/jung/pro/deer-flow/frontend/src/`
+
+**注意**: deer-flow代码仅供参考，必须在quant-agent现有架构约束内重新实现。
 
 ---
 
