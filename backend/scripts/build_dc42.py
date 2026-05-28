@@ -13,12 +13,16 @@ Steps:
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import re
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+LLMCall = Callable[[str], Awaitable[Any]]
 
 
 def ingest(source_dir: Path, output_dir: Path) -> list[dict[str, Any]]:
@@ -77,6 +81,141 @@ def extract_code(
             results.append({**entry, "code_status": "missing", "code": None, "code_path": None})
 
     return results
+
+
+async def llm_enrich(
+    extracted: list[dict[str, Any]],
+    llm_call: LLMCall,
+    output_dir: Path,
+    concurrency: int = 5,
+) -> list[dict[str, Any]]:
+    """03_llm_enrich: L2 pattern layer — type, factors, parameters, code_logic."""
+    semaphore = asyncio.Semaphore(concurrency)
+
+    async def process_one(item: dict[str, Any]) -> dict[str, Any]:
+        async with semaphore:
+            prompt = f"""分析以下量化策略，返回JSON:
+策略名: {item['strategy_name']}
+描述: {item.get('description', '')}
+代码: {item.get('code', '无')[:2000]}
+
+返回格式:
+{{"type": "策略类型", "factors": ["因子列表"], "parameters": {{"参数名": 默认值}}, "code_logic": "核心逻辑"}}"""
+
+            response = await llm_call(prompt)
+            text = response.content if hasattr(response, "content") else str(response)
+            try:
+                data = json.loads(text)
+            except (json.JSONDecodeError, TypeError):
+                data = {"type": "unknown", "factors": [], "parameters": {}, "code_logic": ""}
+
+            return {
+                **item,
+                "l2_type": data.get("type", "unknown"),
+                "l2_factors": data.get("factors", []),
+                "l2_parameters": data.get("parameters", {}),
+                "l2_code_logic": data.get("code_logic", ""),
+            }
+
+    tasks = [process_one(item) for item in extracted]
+    enriched = await asyncio.gather(*tasks)
+
+    output_path = output_dir / "enriched_l2.jsonl"
+    with open(output_path, "w", encoding="utf-8") as f:
+        for entry in enriched:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
+    return list(enriched)
+
+
+async def llm_experience(
+    enriched: list[dict[str, Any]],
+    llm_call: LLMCall,
+    output_dir: Path,
+    concurrency: int = 5,
+) -> list[dict[str, Any]]:
+    """04_llm_experience: L3 experience layer + L5 boundary text."""
+    semaphore = asyncio.Semaphore(concurrency)
+
+    async def process_one(item: dict[str, Any]) -> dict[str, Any]:
+        async with semaphore:
+            prompt = f"""基于以下策略信息，分析实战经验:
+策略名: {item['strategy_name']}
+类型: {item.get('l2_type', 'unknown')}
+因子: {item.get('l2_factors', [])}
+
+返回JSON:
+{{"experience": "实战经验总结", "failure_modes": ["失效模式1", "失效模式2"], "boundary_text": "边界条件"}}"""
+
+            response = await llm_call(prompt)
+            text = response.content if hasattr(response, "content") else str(response)
+            try:
+                data = json.loads(text)
+            except (json.JSONDecodeError, TypeError):
+                data = {"experience": "", "failure_modes": [], "boundary_text": ""}
+
+            return {
+                **item,
+                "experience": data.get("experience", ""),
+                "failure_modes": data.get("failure_modes", []),
+                "boundary_text": data.get("boundary_text", ""),
+            }
+
+    tasks = [process_one(item) for item in enriched]
+    results = await asyncio.gather(*tasks)
+
+    output_path = output_dir / "enriched_l3.jsonl"
+    with open(output_path, "w", encoding="utf-8") as f:
+        for entry in results:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
+    return list(results)
+
+
+async def llm_relations(
+    enriched: list[dict[str, Any]],
+    llm_call: LLMCall,
+    output_dir: Path,
+    concurrency: int = 5,
+) -> list[dict[str, Any]]:
+    """05_llm_relations: L4 relation layer."""
+    semaphore = asyncio.Semaphore(concurrency)
+    all_names = [item["strategy_name"] for item in enriched]
+
+    async def process_one(item: dict[str, Any]) -> dict[str, Any]:
+        async with semaphore:
+            prompt = f"""分析策略关系:
+策略名: {item['strategy_name']}
+类型: {item.get('l2_type', 'unknown')}
+所有策略: {all_names[:50]}
+
+返回JSON:
+{{"similar": ["相似策略名"], "derived": ["衍生策略名"], "complementary": ["互补策略名"], "substitute": ["替代策略名"]}}"""
+
+            response = await llm_call(prompt)
+            text = response.content if hasattr(response, "content") else str(response)
+            try:
+                data = json.loads(text)
+            except (json.JSONDecodeError, TypeError):
+                data = {"similar": [], "derived": [], "complementary": [], "substitute": []}
+
+            return {
+                **item,
+                "l4_similar": data.get("similar", []),
+                "l4_derived": data.get("derived", []),
+                "l4_complementary": data.get("complementary", []),
+                "l4_substitute": data.get("substitute", []),
+            }
+
+    tasks = [process_one(item) for item in enriched]
+    results = await asyncio.gather(*tasks)
+
+    output_path = output_dir / "enriched_l4.jsonl"
+    with open(output_path, "w", encoding="utf-8") as f:
+        for entry in results:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
+    return list(results)
 
 
 if __name__ == "__main__":
