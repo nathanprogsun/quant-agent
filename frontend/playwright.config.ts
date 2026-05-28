@@ -8,7 +8,6 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
   reporter: process.env.CI ? "github" : "html",
   timeout: 30_000,
-  globalSetup: "./tests/e2e/global-setup.ts",
 
   use: {
     baseURL: "http://localhost:3000",
@@ -22,27 +21,14 @@ export default defineConfig({
     },
   ],
 
-  webServer: [
-    {
-      command: "cd ../backend && rm -f test.db && uv run alembic upgrade head && uv run uvicorn app.web.__main__:app --host 0.0.0.0 --port 8000",
-      url: "http://localhost:8000/health",
-      reuseExistingServer: !process.env.CI,
-      timeout: 180_000,
-      env: {
-        DATABASE_URL: "sqlite+aiosqlite:///./test.db",
-        ENVIRONMENT: "local",
-        JWT_SECRET_KEY: "test-secret-key-for-e2e-testing-only",
-      },
+  webServer: {
+    command: "pnpm dev",
+    url: "http://localhost:3000/login",
+    reuseExistingServer: !process.env.CI,
+    timeout: 120_000,
+    env: {
+      SKIP_ENV_VALIDATION: "1",
+      E2E_BYPASS_AUTH: "1",
     },
-    {
-      command: "pnpm dev",
-      url: "http://localhost:3000",
-      reuseExistingServer: !process.env.CI,
-      timeout: 300_000,
-      env: {
-        SKIP_ENV_VALIDATION: "1",
-        BACKEND_URL: "http://localhost:8000",
-      },
-    },
-  ],
+  },
 });

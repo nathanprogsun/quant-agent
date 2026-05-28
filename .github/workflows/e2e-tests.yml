@@ -19,11 +19,9 @@ jobs:
   e2e-tests:
     if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v6
-
-      # Frontend setup
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -33,24 +31,10 @@ jobs:
         working-directory: frontend
       - run: npx playwright install chromium --with-deps
         working-directory: frontend
-
-      # Backend setup
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
-      - uses: astral-sh/setup-uv@v7
-        with:
-          enable-cache: true
-      - run: uv sync --all-extras --dev
-        working-directory: backend
-
-      # Run E2E tests
       - run: pnpm exec playwright test
         working-directory: frontend
         env:
           SKIP_ENV_VALIDATION: "1"
-          BACKEND_URL: "http://localhost:8000"
-
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
