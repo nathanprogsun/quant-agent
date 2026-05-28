@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
 import pytest
@@ -25,7 +25,6 @@ async def backtest_api_client(test_app_context):
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         client = APITestClient(ac)
-        # Register user for auth
         await client.post("/api/v1/auth/register", json={
             "email": f"{uuid4()}@test.com",
             "password": "TestPassword123!",
@@ -63,8 +62,8 @@ async def test_get_backtest_result(backtest_api_client) -> None:
         status=BacktestStatus.DONE,
         metrics=BacktestMetrics(annual_return=0.15, sharpe=1.2),
     )
-
-    data = await client.get("/api/v1/backtest/bt_12345")
+    with patch("app.web.api.backtest.views._assert_owner"):
+        data = await client.get("/api/v1/backtest/bt_12345")
 
     assert data["status"] == "done"
     assert data["backtest_id"] == "bt_12345"
@@ -75,7 +74,7 @@ async def test_abort_backtest(backtest_api_client) -> None:
     """POST /api/v1/backtest/{id}/abort should abort backtest."""
     client, svc = backtest_api_client
     svc.abort.return_value = True
-
-    data = await client.post("/api/v1/backtest/bt_12345/abort")
+    with patch("app.web.api.backtest.views._assert_owner"):
+        data = await client.post("/api/v1/backtest/bt_12345/abort")
 
     assert data["success"] is True

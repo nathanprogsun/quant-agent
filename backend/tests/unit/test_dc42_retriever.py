@@ -65,8 +65,9 @@ async def test_retrieve_by_parameters_in_range(mock_db_path):
 
     result = await retriever.retrieve_by_parameters({"n": 8})
 
-    assert isinstance(result, ParameterAnalysis)
-    assert result.in_range is True
+    assert isinstance(result, list)
+    assert len(result) == 1
+    assert result[0].in_range is True
 
 
 @pytest.mark.asyncio
@@ -80,5 +81,6 @@ async def test_retrieve_by_parameters_out_of_range(mock_db_path):
 
     result = await retriever.retrieve_by_parameters({"n": 100})
 
-    assert isinstance(result, ParameterAnalysis)
-    assert result.in_range is False
+    assert isinstance(result, list)
+    assert len(result) == 1
+    assert result[0].in_range is False
