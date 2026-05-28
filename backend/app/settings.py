@@ -183,9 +183,9 @@ class Settings(BaseSettings):
     default_main_thread_pool_size: int = 40
 
     # ==================== LLM ====================
-    llm_api_key: SecretStr = SecretStr("")
-    llm_api_base: str = "https://api.deepseek.com"
-    llm_model: str = "deepseek-v4-flash"
+    openai_api_key: SecretStr = Field(default="", validation_alias="OPENAI_API_KEY")
+    openai_base_url: str = Field(default="https://api.openai.com/v1", validation_alias="OPENAI_BASE_URL")
+    model: str = Field(default="gpt-4o-mini", validation_alias="MODEL")
 
     # ==================== Checkpointer ====================
     checkpointer_backend: Literal["memory", "sqlite", "postgres"] = "sqlite"
