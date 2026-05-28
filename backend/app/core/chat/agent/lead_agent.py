@@ -21,6 +21,8 @@ from app.core.chat.middlewares.clarification_middleware import ClarificationMidd
 from app.core.chat.middlewares.loop_detection_middleware import LoopDetectionMiddleware
 from app.core.chat.middlewares.subagent_limit_middleware import SubagentLimitMiddleware
 from app.core.chat.middlewares.memory_middleware import MemoryMiddleware
+from app.core.chat.tools.builtin.lint_tool import lint_code
+from app.core.chat.tools.builtin.param_tool import validate_parameters
 from app.settings import get_settings
 
 
@@ -51,8 +53,8 @@ def make_lead_agent(config: RunnableConfig) -> Any:
         streaming=True,
     )
 
-    # Tools — TODO: Phase 1 empty, Phase 2+ loaded dynamically
-    tools: list[Any] = []
+    # Tools — Phase 2: backtest safety tools
+    tools: list[Any] = [lint_code, validate_parameters]
 
     # System prompt
     system_prompt = apply_prompt_template()
