@@ -53,12 +53,11 @@ class DC42Retriever:
         # Look up strategy names from DB
         if chunks:
             strategy_ids = list({c.strategy_id for c in chunks})
-            conn = sqlite3.connect(str(self._db_path))
-            cursor = conn.cursor()
-            placeholders = ",".join("?" * len(strategy_ids))
-            cursor.execute(f"SELECT name FROM dc42_strategies WHERE id IN ({placeholders})", strategy_ids)
-            strategy_names = [row[0] for row in cursor.fetchall()]
-            conn.close()
+            with sqlite3.connect(str(self._db_path)) as conn:
+                cursor = conn.cursor()
+                placeholders = ",".join("?" * len(strategy_ids))
+                cursor.execute(f"SELECT name FROM dc42_strategies WHERE id IN ({placeholders})", strategy_ids)
+                strategy_names = [row[0] for row in cursor.fetchall()]
 
         summary = f"找到 {len(chunks)} 个相关 DC42 策略片段，涉及 {len(strategy_names)} 个策略"
 
@@ -68,39 +67,45 @@ class DC42Retriever:
             summary=summary,
         )
 
-    async def retrieve_by_parameters(self, params: dict[str, Any]) -> ParameterAnalysis:
+    async def retrieve_by_parameters(self, params: dict[str, Any]) -> list[ParameterAnalysis]:
         """Check if user parameters are within DC42 validated ranges."""
         if not params:
-            return ParameterAnalysis(
+            return [ParameterAnalysis(
                 parameter="none", user_value=0, dc42_p10=0, dc42_p50=0, dc42_p90=0,
                 in_range=True, recommendation="无参数需要检查",
+            )]
+
+        results: list[ParameterAnalysis] = []
+        for key, value in params.items():
+            if not isinstance(value, (int, float)):
+                continue
+
+            stats = self._parameter_stats.get(key, {})
+            p10 = stats.get("P10", 0)
+            p50 = stats.get("P50", 0)
+            p90 = stats.get("P90", 0)
+
+            in_range = p10 <= value <= p90 if p90 > 0 else True
+            recommendation = (
+                f"参数 {key}={value} 在 DC42 合理范围内 (P10={p10}, P90={p90})"
+                if in_range
+                else f"参数 {key}={value} 超出 DC42 经验范围 (P10={p10}, P90={p90})，建议调整"
             )
 
-        # Check the first parameter
-        key = next(iter(params))
-        value = float(params[key])
+            results.append(ParameterAnalysis(
+                parameter=key,
+                user_value=float(value),
+                dc42_p10=p10,
+                dc42_p50=p50,
+                dc42_p90=p90,
+                in_range=in_range,
+                recommendation=recommendation,
+            ))
 
-        stats = self._parameter_stats.get(key, {})
-        p10 = stats.get("P10", 0)
-        p50 = stats.get("P50", 0)
-        p90 = stats.get("P90", 0)
-
-        in_range = p10 <= value <= p90 if p90 > 0 else True
-        recommendation = (
-            f"参数 {key}={value} 在 DC42 合理范围内 (P10={p10}, P90={p90})"
-            if in_range
-            else f"参数 {key}={value} 超出 DC42 经验范围 (P10={p10}, P90={p90})，建议调整"
-        )
-
-        return ParameterAnalysis(
-            parameter=key,
-            user_value=value,
-            dc42_p10=p10,
-            dc42_p50=p50,
-            dc42_p90=p90,
-            in_range=in_range,
-            recommendation=recommendation,
-        )
+        return results if results else [ParameterAnalysis(
+            parameter="none", user_value=0, dc42_p10=0, dc42_p50=0, dc42_p90=0,
+            in_range=True, recommendation="无数值参数需要检查",
+        )]
 
     async def retrieve_similar_strategy(self, code_or_description: str) -> SimilarCase:
         """Find the most similar DC42 strategy."""
@@ -138,16 +143,15 @@ class DC42Retriever:
 
         examples = [doc for doc in results["documents"][0]] if results["documents"][0] else []
 
-        conn = sqlite3.connect(str(self._db_path))
-        cursor = conn.cursor()
-        cursor.execute("SELECT failure_modes FROM dc42_strategies WHERE failure_modes != '[]' LIMIT 5")
-        failure_modes = []
-        for row in cursor.fetchall():
-            try:
-                failure_modes.extend(json.loads(row[0]))
-            except (json.JSONDecodeError, TypeError):
-                pass
-        conn.close()
+        with sqlite3.connect(str(self._db_path)) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT failure_modes FROM dc42_strategies WHERE failure_modes != '[]' LIMIT 5")
+            failure_modes = []
+            for row in cursor.fetchall():
+                try:
+                    failure_modes.extend(json.loads(row[0]))
+                except (json.JSONDecodeError, TypeError):
+                    pass
 
         return Diagnosis(
             error_type=error_type,

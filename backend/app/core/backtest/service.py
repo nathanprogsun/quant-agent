@@ -27,11 +27,14 @@ TIMEOUT_SECONDS = 300
 def _check_auth_sync(token: str, cookie: str, api_base: str) -> dict[str, Any]:
     """Sync jqcli auth check — runs in thread pool."""
     from jqcli.api.client import ApiClient
-    from jqcli.api.auth import login_with_password
+    from jqcli.api.auth import get_current_user
 
     client = ApiClient(api_base, token=token, cookie=cookie)
-    # Simple validation: try to create client with credentials
-    return {"username": "authenticated"}
+    try:
+        user_info = get_current_user(client)
+        return {"username": user_info.get("username", "authenticated")}
+    finally:
+        client.close()
 
 
 def _submit_sync(
@@ -52,24 +55,26 @@ def _submit_sync(
     from jqcli.api.backtest import run_backtest
 
     client = ApiClient(api_base, token=token, cookie=cookie)
+    try:
+        # Create or update strategy with the code
+        strategy = create_strategy(client, name="auto_generated", code=code, strategy_type="Code")
+        strategy_id = str(strategy.get("id", ""))
 
-    # Create or update strategy with the code
-    strategy = create_strategy(client, name="auto_generated", code=code, strategy_type="Code")
-    strategy_id = str(strategy.get("id", ""))
+        if not strategy_id:
+            raise RuntimeError("无法创建策略")
 
-    if not strategy_id:
-        raise RuntimeError("无法创建策略")
-
-    # Submit backtest
-    result = run_backtest(
-        client,
-        strategy_id=strategy_id,
-        start_date=params_dict["start_date"],
-        end_date=params_dict.get("end_date"),
-        capital=params_dict.get("initial_capital"),
-        frequency=params_dict.get("frequency", "day"),
-    )
-    return str(result.get("id", result))
+        # Submit backtest
+        result = run_backtest(
+            client,
+            strategy_id=strategy_id,
+            start_date=params_dict["start_date"],
+            end_date=params_dict.get("end_date"),
+            capital=params_dict.get("initial_capital"),
+            frequency=params_dict.get("frequency", "day"),
+        )
+        return str(result.get("id", result))
+    finally:
+        client.close()
 
 
 def _poll_sync(backtest_id: str, token: str, cookie: str, api_base: str) -> dict[str, Any]:
@@ -78,7 +83,10 @@ def _poll_sync(backtest_id: str, token: str, cookie: str, api_base: str) -> dict
     from jqcli.api.backtest import get_backtest
 
     client = ApiClient(api_base, token=token, cookie=cookie)
-    return get_backtest(client, backtest_id)
+    try:
+        return get_backtest(client, backtest_id)
+    finally:
+        client.close()
 
 
 def _get_result_sync(backtest_id: str, token: str, cookie: str, api_base: str) -> dict[str, Any]:
@@ -87,7 +95,10 @@ def _get_result_sync(backtest_id: str, token: str, cookie: str, api_base: str) -
     from jqcli.api.backtest import get_backtest_result
 
     client = ApiClient(api_base, token=token, cookie=cookie)
-    return get_backtest_result(client, backtest_id)
+    try:
+        return get_backtest_result(client, backtest_id)
+    finally:
+        client.close()
 
 
 class BacktestService:
@@ -101,7 +112,7 @@ class BacktestService:
     async def check_auth(self) -> AuthResult:
         """Check jqcli authentication status."""
         try:
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             result = await loop.run_in_executor(
                 _executor,
                 functools.partial(_check_auth_sync, self._token, self._cookie, self._api_base),
@@ -132,7 +143,7 @@ class BacktestService:
                 "frequency": params.frequency,
                 "benchmark": params.benchmark,
             }
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             backtest_id = await loop.run_in_executor(
                 _executor,
                 functools.partial(
@@ -146,7 +157,7 @@ class BacktestService:
     async def poll(self, backtest_id: str) -> BacktestResult:
         """Poll backtest status until done/failed/cancelled."""
         try:
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             data = await loop.run_in_executor(
                 _executor,
                 functools.partial(

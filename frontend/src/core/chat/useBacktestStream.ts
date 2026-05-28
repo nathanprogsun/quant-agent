@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react'
+import { useCallback, useRef, useEffect } from 'react'
 import type { BacktestEvent, BacktestMetrics } from './types'
 
 interface BacktestStreamOptions {
@@ -11,6 +11,8 @@ interface BacktestStreamOptions {
 
 export function useBacktestStream(url: string, options: BacktestStreamOptions = {}) {
   const sourceRef = useRef<EventSource | null>(null)
+  const optionsRef = useRef(options)
+  optionsRef.current = options
 
   const connect = useCallback(() => {
     const source = new EventSource(url)
@@ -19,22 +21,23 @@ export function useBacktestStream(url: string, options: BacktestStreamOptions = 
     source.onmessage = (event: MessageEvent) => {
       try {
         const data: BacktestEvent = JSON.parse(event.data)
+        const opts = optionsRef.current
 
         switch (data.type) {
           case 'backtest_started':
-            options.onStarted?.(data.backtest_id ?? '')
+            opts.onStarted?.(data.backtest_id ?? '')
             break
           case 'backtest_progress':
-            options.onProgress?.(data.message ?? '')
+            opts.onProgress?.(data.message ?? '')
             break
           case 'backtest_completed':
-            if (data.metrics) options.onComplete?.(data.metrics)
+            if (data.metrics) opts.onComplete?.(data.metrics)
             break
           case 'backtest_failed':
-            options.onFailed?.(data.error ?? '未知错误')
+            opts.onFailed?.(data.error ?? '未知错误')
             break
           case 'backtest_aborted':
-            options.onAborted?.()
+            opts.onAborted?.()
             break
         }
       } catch {
@@ -46,11 +49,18 @@ export function useBacktestStream(url: string, options: BacktestStreamOptions = 
       source.close()
       sourceRef.current = null
     }
-  }, [url, options])
+  }, [url])
 
   const disconnect = useCallback(() => {
     sourceRef.current?.close()
     sourceRef.current = null
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      sourceRef.current?.close()
+      sourceRef.current = null
+    }
   }, [])
 
   return { connect, disconnect }

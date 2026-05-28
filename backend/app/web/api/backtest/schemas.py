@@ -16,8 +16,11 @@ class BacktestParamsInput(BaseModel):
     benchmark: str = "000300.XSHG"
 
 
+MAX_CODE_LENGTH = 65536  # 64KB
+
+
 class BacktestSubmitRequest(BaseModel):
-    code: str
+    code: str = Field(..., max_length=MAX_CODE_LENGTH)
     thread_id: UUID
     version: int = 1
     params: BacktestParamsInput = Field(default_factory=BacktestParamsInput)

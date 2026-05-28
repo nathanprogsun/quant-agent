@@ -18,13 +18,19 @@ from jqcli.errors import (
 class BacktestError(ApplicationError):
     """Unified backtest error — wraps all jqcli exceptions."""
 
-    def __init__(self, message: str, code: str = "backtest_error") -> None:
+    def __init__(
+        self,
+        message: str,
+        code: str = "backtest_error",
+        status_code: int = 500,
+    ) -> None:
         self.error_code = code
         self.message = message
+        self._status_code = status_code
         super().__init__(message)
 
     def http_code(self) -> int:
-        return HTTPStatus.INTERNAL_SERVER_ERROR
+        return self._status_code
 
 
 def map_jqcli_error(error: Exception) -> BacktestError:
@@ -33,16 +39,19 @@ def map_jqcli_error(error: Exception) -> BacktestError:
         return BacktestError(
             message="未登录聚宽，请先在设置中配置认证信息",
             code="backtest_not_authenticated",
+            status_code=401,
         )
     if isinstance(error, TimeoutError):
         return BacktestError(
             message="回测超时，请稍后查看结果或缩短回测时间范围",
             code="backtest_timeout",
+            status_code=504,
         )
     if isinstance(error, NetworkError):
         return BacktestError(
             message="无法连接到聚宽服务器，请检查网络",
             code="backtest_network_error",
+            status_code=502,
         )
     if isinstance(error, ApiError):
         return BacktestError(
@@ -55,6 +64,6 @@ def map_jqcli_error(error: Exception) -> BacktestError:
             code="backtest_jqcli_error",
         )
     return BacktestError(
-        message=f"回测发生未知错误: {error!s}",
+        message="回测发生未知错误，请联系管理员",
         code="backtest_unknown",
     )

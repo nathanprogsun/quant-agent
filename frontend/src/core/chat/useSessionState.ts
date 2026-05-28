@@ -39,6 +39,6 @@ export function useSessionState(): { state: SessionState } & SessionStateActions
     backtestComplete: useCallback(() => transition('code_ready'), [transition]),
     backtestFailed: useCallback(() => transition('code_ready'), [transition]),
     analysisComplete: useCallback(() => transition('analyzed'), [transition]),
-    reset: useCallback(() => setState('idle'), []),
+    reset: useCallback(() => transition('idle'), [transition]),
   }
 }

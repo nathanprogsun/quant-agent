@@ -259,6 +259,8 @@ def chunk_and_embed(
     """07_chunk_embed: Create SQLite metadata DB and ChromaDB vectors."""
     import sqlite3
 
+    import chromadb
+
     db_path = output_dir / "dc42.db"
     conn = sqlite3.connect(str(db_path))
     cursor = conn.cursor()
@@ -290,6 +292,18 @@ def chunk_and_embed(
             FOREIGN KEY (strategy_id) REFERENCES dc42_strategies(id)
         )
     """)
+
+    # ChromaDB setup
+    chroma_path = str(output_dir / "chroma_db")
+    chroma_client = chromadb.PersistentClient(path=chroma_path)
+    collection = chroma_client.get_or_create_collection(
+        name="dc42_chunks",
+        metadata={"hnsw:space": "cosine"},
+    )
+
+    chunk_ids: list[str] = []
+    chunk_docs: list[str] = []
+    chunk_metas: list[dict[str, Any]] = []
 
     for item in enriched:
         sid = item["hash"]
@@ -324,9 +338,28 @@ def chunk_and_embed(
                     "INSERT OR REPLACE INTO dc42_chunks VALUES (?, ?, ?, ?, ?)",
                     (chunk_id, sid, chunk_type, content, "{}"),
                 )
+                chunk_ids.append(chunk_id)
+                chunk_docs.append(content)
+                chunk_metas.append({
+                    "strategy_id": sid,
+                    "strategy_name": item["strategy_name"],
+                    "chunk_type": chunk_type,
+                    "year_bucket": item.get("year_bucket", ""),
+                })
 
     conn.commit()
     conn.close()
+
+    # Batch insert into ChromaDB (max batch size 5461 for default settings)
+    batch_size = 5000
+    for i in range(0, len(chunk_ids), batch_size):
+        collection.add(
+            ids=chunk_ids[i : i + batch_size],
+            documents=chunk_docs[i : i + batch_size],
+            metadatas=chunk_metas[i : i + batch_size],
+        )
+
+    print(f"ChromaDB: {collection.count()} chunks embedded in {chroma_path}")
 
 
 def validate(output_dir: Path) -> bool:

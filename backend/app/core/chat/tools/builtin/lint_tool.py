@@ -17,6 +17,8 @@ class LintResult:
 CRITICAL_IMPORTS = {"os", "subprocess", "shutil"}
 HIGH_IMPORTS = {"socket", "http", "urllib", "requests", "httpx"}
 MEDIUM_IMPORTS = {"pickle", "shelve", "ctypes"}
+CRITICAL_CALLS = {"eval", "exec", "__import__"}
+HIGH_ATTR_CALLS = {"importlib.import_module", "importlib.util.find_spec"}
 
 
 def lint_code(code: str) -> LintResult:
@@ -50,16 +52,27 @@ def lint_code(code: str) -> LintResult:
             elif module in HIGH_IMPORTS:
                 high.append(f"不建议从 {module} 模块导入")
 
-        # Check eval/exec calls
+        # Check dangerous calls: eval, exec, __import__
         elif isinstance(node, ast.Call):
             func_name = ""
+            func_qualname = ""
             if isinstance(node.func, ast.Name):
                 func_name = node.func.id
             elif isinstance(node.func, ast.Attribute):
                 func_name = node.func.attr
+                if isinstance(node.func.value, ast.Name):
+                    func_qualname = f"{node.func.value.id}.{func_name}"
 
-            if func_name in ("eval", "exec"):
+            if func_name in CRITICAL_CALLS:
                 critical.append(f"禁止使用 {func_name}()")
+            elif func_qualname in HIGH_ATTR_CALLS:
+                critical.append(f"禁止使用 {func_qualname}()")
+            elif func_name == "getattr" and node.args:
+                # Flag getattr with string literals that could bypass import restrictions
+                if len(node.args) >= 2 and isinstance(node.args[1], ast.Constant):
+                    attr_name = str(node.args[1].value)
+                    if attr_name in ("__import__", "__subclasses__", "__builtins__"):
+                        critical.append(f"禁止通过 getattr 访问 {attr_name}")
             elif func_name == "open" and len(node.args) > 1:
                 mode_arg = node.args[1]
                 if isinstance(mode_arg, ast.Constant) and "w" in str(mode_arg.value):

@@ -18,7 +18,7 @@
 
 ## Notes for Next Iteration
 
-- jqcli source at `/Users/jung/pro/jqcli/jqcli/` — already has api/, commands/, cli.py, config.py, errors.py, output.py
+- jqcli source package already has api/, commands/, cli.py, config.py, errors.py, output.py
 - ApplicationError is abstract (has `http_code` abstractmethod) — BacktestError must implement `http_code()`
 - Integration tests use `authed_api_client` fixture (APITestClient), not `client` + `auth_headers` — Task 8 tests need adaptation
 - Unit tests use `conftest.py` with `mock_user_service`, `sample_user_dto`, etc.

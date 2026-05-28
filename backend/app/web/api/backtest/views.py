@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, Request
 from app.core.backtest.service import BacktestService
 from app.core.backtest.types import BacktestParams
 from app.core.backtest.errors import BacktestError
+from app.core.backtest.registry import BacktestRegistry
 from app.web.api.backtest.schemas import (
     BacktestAbortResponse,
     BacktestResultResponse,
@@ -21,14 +22,24 @@ from app.db.models.user import User
 
 router = APIRouter(prefix="/api/v1/backtest", tags=["backtest"])
 
+_registry = BacktestRegistry()
+
 
 def get_backtest_service(request: Request) -> BacktestService:
     """Get BacktestService from app context."""
     app_context = getattr(request.app.state, "app_context", None)
     settings = getattr(app_context, "settings", None) if app_context else None
+    token = getattr(settings, "jqcli_token", "") if settings else ""
+    cookie = getattr(settings, "jqcli_cookie", "") if settings else ""
+    if not token and not cookie:
+        raise BacktestError(
+            message="请先在设置中配置聚宽认证信息",
+            code="backtest_not_configured",
+            status_code=400,
+        )
     return BacktestService(
-        token=getattr(settings, "jqcli_token", "") if settings else "",
-        cookie=getattr(settings, "jqcli_cookie", "") if settings else "",
+        token=token,
+        cookie=cookie,
         api_base=getattr(settings, "jqcli_api_base", "https://www.joinquant.com") if settings else "https://www.joinquant.com",
     )
 
@@ -53,7 +64,20 @@ async def submit_backtest(
         version=body.version,
         params=params,
     )
+    _registry.register(backtest_id, current_user.id)
     return BacktestSubmitResponse(backtest_id=backtest_id)
+
+
+def _assert_owner(backtest_id: str, user_id: object) -> None:
+    """Raise 404 if user does not own the backtest."""
+    from uuid import UUID
+    uid = user_id if isinstance(user_id, UUID) else UUID(str(user_id))
+    if not _registry.is_owner(backtest_id, uid):
+        raise BacktestError(
+            message="回测不存在或无权访问",
+            code="backtest_not_found",
+            status_code=404,
+        )
 
 
 @router.get("/{backtest_id}", response_model=BacktestResultResponse)
@@ -63,6 +87,7 @@ async def get_backtest_result(
     service: Annotated[BacktestService, Depends(get_backtest_service)],
 ) -> BacktestResultResponse:
     """Get backtest result by ID."""
+    _assert_owner(backtest_id, current_user.id)
     result = await service.poll(backtest_id)
 
     metrics_resp = None
@@ -84,6 +109,20 @@ async def get_backtest_result(
     )
 
 
+@router.post("/auth-check")
+async def auth_check(
+    current_user: Annotated[User, Depends(get_current_user)],
+    service: Annotated[BacktestService, Depends(get_backtest_service)],
+) -> dict[str, Any]:
+    """Check jqcli authentication status."""
+    result = await service.check_auth()
+    return {
+        "authenticated": result.is_authenticated,
+        "username": result.username,
+        "message": result.message,
+    }
+
+
 @router.post("/{backtest_id}/abort", response_model=BacktestAbortResponse)
 async def abort_backtest(
     backtest_id: str,
@@ -91,6 +130,7 @@ async def abort_backtest(
     service: Annotated[BacktestService, Depends(get_backtest_service)],
 ) -> BacktestAbortResponse:
     """Abort a running backtest."""
+    _assert_owner(backtest_id, current_user.id)
     success = await service.abort(backtest_id)
     return BacktestAbortResponse(
         success=success,
