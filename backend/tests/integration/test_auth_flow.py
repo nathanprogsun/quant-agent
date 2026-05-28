@@ -68,7 +68,7 @@ class TestAuthFlow:
             "email": register_data["email"],
             "password": "WrongPassword123!",
         }
-        status, data = await noauthed_api_client.get_raw("/api/v1/auth/login", json=login_data)
+        status, data = await noauthed_api_client.post_raw("/api/v1/auth/login", json=login_data)
         assert status == 401
 
     @pytest.mark.asyncio
@@ -78,7 +78,7 @@ class TestAuthFlow:
             "email": f"nonexistent{uuid4()}@test.com",
             "password": "AnyPassword123!",
         }
-        status, _ = await noauthed_api_client.get_raw("/api/v1/auth/login", json=login_data)
+        status, _ = await noauthed_api_client.post_raw("/api/v1/auth/login", json=login_data)
         assert status == 401
 
     @pytest.mark.asyncio

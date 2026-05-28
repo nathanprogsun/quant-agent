@@ -72,9 +72,16 @@ class APITestClient:
         return resp.status_code, resp.json()
 
     async def post_raw(self, path: str, **kwargs: Any) -> tuple[int, dict[str, Any]]:
-        """POST request, returns (status_code, json) without raising on error."""
+        """POST request, returns (status_code, json) without raising on error.
+
+        For streaming responses, the body may be empty or SSE data.
+        Returns empty dict if JSON parsing fails.
+        """
         resp = await self._client.post(path, **kwargs)
-        return resp.status_code, resp.json()
+        try:
+            return resp.status_code, resp.json()
+        except Exception:
+            return resp.status_code, {}
 
     async def patch_raw(self, path: str, **kwargs: Any) -> tuple[int, dict[str, Any]]:
         """PATCH request, returns (status_code, json) without raising on error."""
@@ -82,6 +89,12 @@ class APITestClient:
         return resp.status_code, resp.json()
 
     async def delete_raw(self, path: str, **kwargs: Any) -> tuple[int, dict[str, Any]]:
-        """DELETE request, returns (status_code, json) without raising on error."""
+        """DELETE request, returns (status_code, json) without raising on error.
+
+        Returns empty dict if JSON parsing fails (e.g., empty response body).
+        """
         resp = await self._client.delete(path, **kwargs)
-        return resp.status_code, resp.json()
+        try:
+            return resp.status_code, resp.json()
+        except Exception:
+            return resp.status_code, {}
