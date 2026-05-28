@@ -5,6 +5,7 @@ from typing import Annotated, Any
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from langgraph.checkpoint.base import RunnableConfig
 from pydantic import BaseModel
 
 from app.core.chat.service.thread_service import ThreadService
@@ -139,3 +140,27 @@ async def delete_thread(
     deleted = await thread_service.delete(thread_id, current_user.id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Thread not found")
+
+
+@router.get("/{thread_id}/history")
+async def get_thread_history(
+    thread_id: UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    request: Request,
+) -> dict[str, Any]:
+    """Get thread history from checkpointer."""
+    app_context = request.app.state.app_context
+    checkpointer = app_context.checkpointer
+
+    if not checkpointer:
+        return {"messages": []}
+
+    config = RunnableConfig(configurable={"thread_id": str(thread_id)})
+    checkpoint = await checkpointer.aget(config)
+
+    if checkpoint and checkpoint.channel_values.get("messages"):
+        messages = checkpoint.channel_values["messages"]
+    else:
+        messages = []
+
+    return {"messages": messages}
