@@ -100,6 +100,13 @@ async def create_thread(
     with contextlib.suppress(Exception):
         body = await request.json()
 
+    # Use provided thread_id if given (for LangGraph SDK compatibility)
+    if body.get("thread_id"):
+        try:
+            thread_id = UUID(body["thread_id"])
+        except ValueError:
+            pass  # Invalid UUID, use generated one
+
     thread = await thread_service.create_or_update(
         thread_id=thread_id,
         user_id=current_user.id,
