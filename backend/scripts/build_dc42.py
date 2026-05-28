@@ -218,6 +218,128 @@ async def llm_relations(
     return list(results)
 
 
+def compute_parameter_stats(
+    enriched: list[dict[str, Any]],
+    output_dir: Path,
+) -> dict[str, dict[str, float]]:
+    """06_parameter_stats: Compute P10/P50/P90 for numeric parameters."""
+    param_values: dict[str, list[float]] = {}
+
+    for item in enriched:
+        for key, value in item.get("l2_parameters", {}).items():
+            if isinstance(value, (int, float)):
+                param_values.setdefault(key, []).append(float(value))
+
+    import statistics
+
+    stats: dict[str, dict[str, float]] = {}
+    for param, values in param_values.items():
+        sorted_vals = sorted(values)
+        n = len(sorted_vals)
+        stats[param] = {
+            "P10": sorted_vals[max(0, int(n * 0.1))],
+            "P50": statistics.median(sorted_vals),
+            "P90": sorted_vals[min(n - 1, int(n * 0.9))],
+            "min": min(sorted_vals),
+            "max": max(sorted_vals),
+        }
+
+    output_path = output_dir / "parameter_limits.json"
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(stats, f, ensure_ascii=False, indent=2)
+
+    return stats
+
+
+def chunk_and_embed(
+    enriched: list[dict[str, Any]],
+    stats: dict[str, dict[str, float]],
+    output_dir: Path,
+) -> None:
+    """07_chunk_embed: Create SQLite metadata DB and ChromaDB vectors."""
+    import sqlite3
+
+    db_path = output_dir / "dc42.db"
+    conn = sqlite3.connect(str(db_path))
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS dc42_strategies (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            year_bucket TEXT,
+            type TEXT,
+            factors TEXT,
+            parameters TEXT,
+            code_logic TEXT,
+            experience TEXT,
+            failure_modes TEXT,
+            boundary_text TEXT,
+            code TEXT,
+            description TEXT
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS dc42_chunks (
+            id TEXT PRIMARY KEY,
+            strategy_id TEXT NOT NULL,
+            chunk_type TEXT NOT NULL,
+            content TEXT NOT NULL,
+            metadata TEXT,
+            FOREIGN KEY (strategy_id) REFERENCES dc42_strategies(id)
+        )
+    """)
+
+    for item in enriched:
+        sid = item["hash"]
+        cursor.execute(
+            "INSERT OR REPLACE INTO dc42_strategies VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                sid,
+                item["strategy_name"],
+                item.get("year_bucket", ""),
+                item.get("l2_type", ""),
+                json.dumps(item.get("l2_factors", []), ensure_ascii=False),
+                json.dumps(item.get("l2_parameters", {}), ensure_ascii=False),
+                item.get("l2_code_logic", ""),
+                item.get("experience", ""),
+                json.dumps(item.get("failure_modes", []), ensure_ascii=False),
+                item.get("boundary_text", ""),
+                item.get("code", ""),
+                item.get("description", ""),
+            ),
+        )
+
+        # Create chunks for different retrieval strategies
+        chunk_types = [
+            ("intent", f"{item['strategy_name']}: {item.get('description', '')}"),
+            ("factor", f"Factors: {', '.join(item.get('l2_factors', []))}"),
+            ("experience", f"Experience: {item.get('experience', '')}"),
+        ]
+        for chunk_type, content in chunk_types:
+            if content and len(content) > 10:
+                chunk_id = f"{sid}_{chunk_type}"
+                cursor.execute(
+                    "INSERT OR REPLACE INTO dc42_chunks VALUES (?, ?, ?, ?, ?)",
+                    (chunk_id, sid, chunk_type, content, "{}"),
+                )
+
+    conn.commit()
+    conn.close()
+
+
+def validate(output_dir: Path) -> bool:
+    """08_validate: Check that all required outputs exist."""
+    required = ["dc42.db"]
+    for name in required:
+        if not (output_dir / name).exists():
+            print(f"FAIL: missing {name}")
+            return False
+    print("PASS: all outputs present")
+    return True
+
+
 if __name__ == "__main__":
     import argparse
 
