@@ -1,46 +1,80 @@
 """Integration test fixtures."""
-
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock
+import asyncio
+from collections.abc import AsyncGenerator
+from pathlib import Path
 from uuid import uuid4
 
 import pytest
+from alembic import command
+from alembic.config import Config
+from httpx import ASGITransport, AsyncClient
 
-from app.core.auth.service.auth_service import AuthService
-from app.core.user.service.user_service import UserService
+from app.db.dbengine.core import DatabaseEngine
+from app.settings import get_settings
+from app.web.application import get_app
 
-TEST_USER_EMAIL = "test@example.com"
-TEST_USER_PASSWORD = "securepassword123"
-TEST_USER_FULL_NAME = "Test User"
-TEST_USER_ID = uuid4()
+# Get alembic config path
+ALEMBIC_INI = Path(__file__).parent.parent.parent / "app" / "db" / "migrations" / "alembic.ini"
+
+
+@pytest.fixture(scope="session")
+def alembic_cfg() -> Config:
+    """Create Alembic configuration."""
+    cfg = Config(str(ALEMBIC_INI))
+    return cfg
+
+
+@pytest.fixture(scope="session")
+def test_db_url() -> str:
+    """Generate unique test database URL."""
+    db_name = f"test_{uuid4()[:8]}.db"
+    return f"sqlite+aiosqlite:///{db_name}"
+
+
+@pytest.fixture(scope="session")
+def setup_test_db(alembic_cfg: Config, test_db_url: str) -> str:
+    """Run Alembic migrations for test database.
+
+    Creates the test database with proper schema, yields the URL,
+    and cleans up the file after test session.
+    """
+    # Set test database URL
+    alembic_cfg.config.set_main_option("sqlalchemy.url", test_db_url)
+
+    # Run migrations
+    command.upgrade(alembic_cfg, "head")
+
+    yield test_db_url
+
+    # Cleanup: delete test database file
+    db_path = Path(test_db_url.replace("sqlite+aiosqlite:///", ""))
+    if db_path.exists():
+        db_path.unlink()
 
 
 @pytest.fixture
-def mock_user_service() -> AsyncMock:
-    mock = AsyncMock(spec=UserService)
-    mock.get_by_id = AsyncMock(return_value=None)
-    mock.get_by_email = AsyncMock(return_value=None)
-    mock.get_user_model_by_id = AsyncMock(return_value=None)
-    mock.get_user_model_by_email = AsyncMock(return_value=None)
-    mock.create = AsyncMock()
-    mock.create_user_with_password = AsyncMock()
-    mock.update = AsyncMock()
-    mock.delete = AsyncMock()
-    mock.list_users = AsyncMock(return_value=[])
-    mock.update_password = AsyncMock(return_value=True)
-    return mock
+async def db_engine(test_db_url: str) -> AsyncGenerator[DatabaseEngine, None]:
+    """Create database engine for a test.
+
+    Note: Schema is already created by setup_test_db (session scope).
+    This fixture provides engine-level access for service layer tests.
+    """
+    engine = DatabaseEngine(url=test_db_url)
+    try:
+        yield engine
+    finally:
+        await engine.close()
 
 
 @pytest.fixture
-def auth_service(mock_user_service: AsyncMock) -> AuthService:
-    return AuthService(user_service=mock_user_service)
+async def api_client(setup_test_db: str) -> AsyncGenerator[AsyncClient, None]:
+    """Base AsyncClient - unauthenticated.
 
-
-@pytest.fixture
-def mock_settings() -> MagicMock:
-    mock = MagicMock()
-    mock.jwt_secret_key = "test-secret-key-for-testing"
-    mock.jwt_algorithm = "HS256"
-    mock.jwt_expire_minutes = 60 * 24 * 7
-    return mock
+    This is the raw client. For tests, prefer authed_api_client or noauthed_api_client.
+    """
+    app = get_app()
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        yield ac
