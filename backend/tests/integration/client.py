@@ -75,3 +75,13 @@ class APITestClient:
         """POST request, returns (status_code, json) without raising on error."""
         resp = await self._client.post(path, **kwargs)
         return resp.status_code, resp.json()
+
+    async def patch_raw(self, path: str, **kwargs: Any) -> tuple[int, dict[str, Any]]:
+        """PATCH request, returns (status_code, json) without raising on error."""
+        resp = await self._client.patch(path, **kwargs)
+        return resp.status_code, resp.json()
+
+    async def delete_raw(self, path: str, **kwargs: Any) -> tuple[int, dict[str, Any]]:
+        """DELETE request, returns (status_code, json) without raising on error."""
+        resp = await self._client.delete(path, **kwargs)
+        return resp.status_code, resp.json()
