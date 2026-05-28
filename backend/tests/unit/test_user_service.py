@@ -8,9 +8,9 @@ from uuid import uuid4
 
 import pytest
 
+from app.common.exception.exception import ResourceNotFoundError
 from app.core.user.service.user_service import UserService
 from app.core.user.types import UserCreateDTO, UserDTO, UserUpdateDTO
-from app.common.exception.exception import ResourceNotFoundError
 from app.db.models.user import User
 
 TEST_USER_EMAIL = "test@example.com"
