@@ -19,6 +19,12 @@ export async function POST(
 
     const body = await request.json();
 
+    // Transform on_disconnect value from LangGraph SDK convention to backend convention
+    // LangGraph SDK sends "continue" but backend expects "keep_alive"
+    if (body.on_disconnect === "continue") {
+      body.on_disconnect = "keep_alive";
+    }
+
     const response = await fetch(
       `${BACKEND_URL}/api/v1/threads/${thread_id}/runs/stream`,
       {
