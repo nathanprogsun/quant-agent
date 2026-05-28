@@ -9,6 +9,7 @@ from app.db.dao.user_repository import UserRepository
 from app.db.dbengine.core import DatabaseEngine
 from app.db.models.user import User
 from app.util.time import zoned_utc_now
+from app.common.exception.exception import ResourceNotFoundError
 
 _pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -22,13 +23,15 @@ class UserService:
     ):
         self.user_repository = user_repository
 
-    async def get_by_id(self, user_id: UUID) -> UserDTO | None:
+    async def get_by_id(self, user_id: UUID) -> UserDTO:
         """Get user by ID."""
         result = await self.user_repository.find_by_primary_key(
             table_model=User,
             id=user_id,
         )
-        return UserDTO.model_validate(result) if result else None
+        if not result:
+            raise ResourceNotFoundError(f"User with ID {user_id} not found")
+        return UserDTO.model_validate(result)
 
     async def get_by_email(self, email: str) -> UserDTO | None:
         """Get user by email."""

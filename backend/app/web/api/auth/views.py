@@ -8,7 +8,7 @@ from app.core.auth.types import (
     RegisterRequest,
 )
 from app.core.user.types import UserDTO
-from app.web.api.deps import get_current_user, get_current_user_from_cookie
+from app.web.api.deps import get_current_user
 from app.web.lifespan_service import auth_service_from_lifespan
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
@@ -26,7 +26,7 @@ def validate_csrf(request: Request, csrf_token: str) -> bool:
 
 @router.get("/me")
 async def get_me(
-    current_user: UserDTO = Depends(get_current_user_from_cookie),
+    current_user: UserDTO = Depends(get_current_user),
 ) -> UserDTO:
     """Returns current authenticated user."""
     return current_user
