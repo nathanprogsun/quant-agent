@@ -197,9 +197,11 @@ class BacktestService:
 
     async def abort(self, backtest_id: str) -> bool:
         """Abort a running backtest."""
-        # jqcli doesn't have a direct abort API; poll and check status
-        result = await self.poll(backtest_id)
-        return result.status in (BacktestStatus.DONE, BacktestStatus.FAILED, BacktestStatus.CANCELLED)
+        raise BacktestError(
+            message="聚宽不支持取消回测，请等待回测结束或重新提交",
+            code="backtest_abort_unavailable",
+            status_code=501,
+        )
 
     async def get_metrics(self, backtest_id: str) -> BacktestMetrics:
         """Get backtest metrics."""
