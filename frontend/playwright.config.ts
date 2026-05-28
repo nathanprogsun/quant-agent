@@ -27,7 +27,7 @@ export default defineConfig({
       command: "cd ../backend && rm -f test.db && uv run alembic upgrade head && uv run uvicorn app.web.__main__:app --host 0.0.0.0 --port 8000",
       url: "http://localhost:8000/health",
       reuseExistingServer: !process.env.CI,
-      timeout: 120_000,
+      timeout: 180_000,
       env: {
         DATABASE_URL: "sqlite+aiosqlite:///./test.db",
         ENVIRONMENT: "local",
@@ -36,9 +36,9 @@ export default defineConfig({
     },
     {
       command: "pnpm dev",
-      url: "http://localhost:3000/login",
+      url: "http://localhost:3000",
       reuseExistingServer: !process.env.CI,
-      timeout: 120_000,
+      timeout: 300_000,
       env: {
         SKIP_ENV_VALIDATION: "1",
         BACKEND_URL: "http://localhost:8000",
