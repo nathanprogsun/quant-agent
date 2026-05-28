@@ -8,7 +8,7 @@ import pytest
 
 # Override settings before importing app modules
 os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///./test.db"
-os.environ["ENVIRONMENT"] = "testing"
+os.environ["ENVIRONMENT"] = "local"
 
 
 @pytest.fixture(scope="session")
