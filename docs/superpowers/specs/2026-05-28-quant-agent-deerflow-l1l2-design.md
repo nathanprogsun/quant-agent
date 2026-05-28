@@ -6,6 +6,105 @@
 
 ---
 
+## 零、deer-flow 项目背景
+
+### 0.1 deer-flow是什么
+
+**deer-flow** 是一个开源的 LangGraph-based Agent 框架，提供了完整的对话系统实现。
+
+- **项目路径**: `/Users/jung/pro/deer-flow`
+- **技术栈**: Python FastAPI + Next.js + LangGraph
+- **许可**: MIT
+
+### 0.2 deer-flow 项目结构
+
+```
+deer-flow/
+├── backend/
+│   ├── app/
+│   │   ├── gateway/              # 网关层 (HTTP路由)
+│   │   │   ├── routers/         # API路由
+│   │   │   │   ├── threads.py
+│   │   │   │   ├── memory.py
+│   │   │   │   ├── skills.py
+│   │   │   │   └── ...
+│   │   │   ├── auth_middleware.py
+│   │   │   └── authz.py        # 权限系统
+│   │   │
+│   │   ├── channels/            # 多渠道集成 (Slack, Discord等)
+│   │   │   ├── slack.py
+│   │   │   ├── discord.py
+│   │   │   └── ...
+│   │   │
+│   │   └── gateway/app.py      # Gateway主入口
+│   │
+│   └── packages/
+│       └── harness/
+│           └── deerflow/        # 核心业务逻辑
+│               ├── agents/     # Agent相关
+│               │   ├── lead_agent/      # 主Agent工厂
+│               │   └── middlewares/    # 中间件链
+│               │       ├── base.py
+│               │       ├── memory_middleware.py
+│               │       ├── title_middleware.py
+│               │       ├── token_usage_middleware.py
+│               │       └── ...
+│               ├── memory/     # 记忆系统
+│               ├── skills/     # 技能系统
+│               ├── tools/      # 工具系统
+│               │   ├── builtin/
+│               │   └── mcp/
+│               └── runtime/    # 运行时基础设施
+│                   ├── stream_bridge/  # SSE事件桥
+│                   └── runs/   # Run生命周期
+│
+├── frontend/
+│   └── src/
+│       ├── app/                # Next.js App Router
+│       ├── components/
+│       │   ├── ai-elements/   # AI相关组件 (60+)
+│       │   │   ├── message.tsx
+│       │   │   ├── prompt-input.tsx
+│       │   │   ├── code-block.tsx
+│       │   │   ├── artifact.tsx
+│       │   │   ├── reasoning.tsx
+│       │   │   └── ...
+│       │   └── workspace/
+│       ├── core/
+│       │   ├── api/           # API客户端
+│       │   │   └── fetcher.ts
+│       │   ├── threads/       # Thread管理
+│       │   ├── messages/      # 消息处理
+│       │   ├── i18n/         # 国际化
+│       │   └── ...
+│       └── lib/
+```
+
+### 0.3 参考实现指导
+
+**核心原则**: 理解deer-flow的设计意图，在quant-agent现有架构内重新实现。
+
+| deer-flow模块 | quant-agent目标位置 | 处理方式 |
+|--------------|-------------------|---------|
+| `agents/middlewares/base.py` | `core/chat/middlewares/base.py` | 参考重写，保持接口兼容 |
+| `agents/middlewares/memory_middleware.py` | `core/chat/middlewares/memory_middleware.py` | 参考重写 |
+| `agents/middlewares/title_middleware.py` | `core/chat/middlewares/title_middleware.py` | 已有代码，启用即可 |
+| `memory/service.py` | `core/chat/memory/service.py` | 参考重写 |
+| `skills/registry.py` | `core/chat/skills/registry.py` | 参考重写 |
+| `tools/builtin/task_tool.py` | `core/chat/tools/builtin/task_tool.py` | 参考重写 |
+| `runtime/stream_bridge/memory.py` | `common/stream_bridge/memory.py` | quant-agent已有，可直接复用 |
+| `runtime/runs/manager.py` | `common/runs/manager.py` | quant-agent已有，可直接复用 |
+| `gateway/authz.py` | `core/chat/authz.py` | 参考重写 |
+| `frontend/components/ai-elements/` | `frontend/src/components/workspace/` | 直接复制并适配样式 |
+
+### 0.4 访问deer-flow代码
+
+AI agent需要访问deer-flow代码时，使用以下路径：
+- 后端: `/Users/jung/pro/deer-flow/backend/packages/harness/deerflow/`
+- 前端: `/Users/jung/pro/deer-flow/frontend/src/`
+
+---
+
 ## 一、背景与目标
 
 ### 1.1 现状
@@ -40,7 +139,7 @@ quant-agent 基于 deer-flow 的核心架构进行了精简实现，但在以下
 - **部署环境**: 本地开发，SQLite存储
 - **架构一致性**: 遵循quant-agent现有DDD架构，不引入新目录层级
 - **代码质量**: E2E测试 + 单元测试 + 集成测试，确保功能可验证
-- **策略**: 参考deer-flow设计重新实现，非直接移植代码
+- **策略**: 参考deer-flow设计重新实现，详见§0.3参考实现指导
 
 ---
 
