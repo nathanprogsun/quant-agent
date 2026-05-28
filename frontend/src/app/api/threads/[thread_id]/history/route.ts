@@ -42,6 +42,7 @@ export async function GET(
 }
 
 // POST support for LangGraph SDK state history fetch
+// LangGraph SDK sends POST but backend only supports GET, so transform to GET
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ thread_id: string }> }
@@ -49,17 +50,13 @@ export async function POST(
   try {
     const { thread_id } = await params;
     const cookie = await getSessionCookie();
-    const body = await request.json().catch(() => ({}));
 
+    // Transform POST to GET - LangGraph SDK sends POST but backend only supports GET
     const response = await fetch(
       `${BACKEND_URL}/api/v1/threads/${thread_id}/history`,
       {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Cookie: cookie,
-        },
-        body: JSON.stringify(body),
+        method: "GET",
+        headers: { Cookie: cookie },
       }
     );
 
