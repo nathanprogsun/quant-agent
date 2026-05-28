@@ -30,3 +30,5 @@ jobs:
         working-directory: backend
       - run: uv run pytest tests/unit --cov=app
         working-directory: backend
+      - run: uv run pytest tests/integration/ -v --tb=short
+        working-directory: backend
