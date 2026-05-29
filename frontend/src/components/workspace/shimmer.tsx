@@ -1,5 +1,5 @@
 "use client";
-/ eslint-disable react-hooks/static-components */
+/* eslint-disable react-hooks/static-components */
 
 import { cn } from "@/lib/utils";
 import { motion } from "motion/react";
@@ -26,6 +26,7 @@ const ShimmerComponent = ({
   duration = 2,
   spread = 2,
 }: TextShimmerProps) => {
+  // eslint-disable-next-line react-hooks/static-components
   const MotionComponent = useMemo(
     () => motion.create(Component as keyof JSX.IntrinsicElements),
     [Component],
@@ -37,6 +38,7 @@ const ShimmerComponent = ({
   );
 
   return (
+    // eslint-disable-next-line react-hooks/static-components
     <MotionComponent
       animate={{ backgroundPosition: "0% center" }}
       className={cn(
