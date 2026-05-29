@@ -104,10 +104,8 @@ async def create_thread(
     # SDK sends threadId (camelCase) but we also check thread_id (snake_case)
     provided_id = body.get("thread_id") or body.get("threadId")
     if provided_id:
-        try:
+        with contextlib.suppress(ValueError):
             thread_id = UUID(provided_id)
-        except ValueError:
-            pass  # Invalid UUID, use generated one
 
     thread = await thread_service.create_or_update(
         thread_id=thread_id,

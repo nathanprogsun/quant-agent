@@ -37,10 +37,7 @@ class ClarificationMiddleware(AgentMiddleware):
 
     def _is_clarification_request(self, text: str) -> bool:
         """Check if text contains clarification request patterns."""
-        for pattern in self._patterns:
-            if pattern.search(text):
-                return True
-        return False
+        return any(pattern.search(text) for pattern in self._patterns)
 
     async def after_model(self, state: dict[str, Any], config: dict[str, Any]) -> dict[str, Any] | None:
         """Detect clarification requests in model response."""

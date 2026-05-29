@@ -51,8 +51,7 @@ def _make_llm_call(response_text: str) -> AsyncMock:
     """Create a mock LLM callable that returns a response with .content."""
     response = AsyncMock()
     response.content = response_text
-    llm_call = AsyncMock(return_value=response)
-    return llm_call
+    return AsyncMock(return_value=response)
 
 
 @pytest.mark.asyncio

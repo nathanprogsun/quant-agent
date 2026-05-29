@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import sqlite3
 from pathlib import Path
@@ -148,10 +149,8 @@ class DC42Retriever:
             cursor.execute("SELECT failure_modes FROM dc42_strategies WHERE failure_modes != '[]' LIMIT 5")
             failure_modes = []
             for row in cursor.fetchall():
-                try:
+                with contextlib.suppress(json.JSONDecodeError, TypeError):
                     failure_modes.extend(json.loads(row[0]))
-                except (json.JSONDecodeError, TypeError):
-                    pass
 
         return Diagnosis(
             error_type=error_type,

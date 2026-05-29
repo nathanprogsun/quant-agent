@@ -51,11 +51,11 @@ def test_submit_success(service: BacktestService) -> None:
 
 def test_submit_api_error(service: BacktestService) -> None:
     """submit should raise BacktestError on ApiError."""
-    with patch("app.core.backtest.service._submit_sync", side_effect=ApiError("server error", status_code=500)):
-        with pytest.raises(BacktestError, match="聚宽"):
-            asyncio.get_event_loop().run_until_complete(
-                service.submit(code="code", thread_id=uuid4(), version=1, params=BacktestParams())
-            )
+    with patch("app.core.backtest.service._submit_sync", side_effect=ApiError("server error", status_code=500)), \
+         pytest.raises(BacktestError, match="聚宽"):
+        asyncio.get_event_loop().run_until_complete(
+            service.submit(code="code", thread_id=uuid4(), version=1, params=BacktestParams())
+        )
 
 
 def test_poll_done(service: BacktestService) -> None:
@@ -69,6 +69,6 @@ def test_poll_done(service: BacktestService) -> None:
 
 def test_poll_timeout(service: BacktestService) -> None:
     """poll should raise BacktestError on timeout."""
-    with patch("app.core.backtest.service._poll_sync", side_effect=TimeoutError()):
-        with pytest.raises(BacktestError, match="超时"):
-            asyncio.get_event_loop().run_until_complete(service.poll("bt_12345"))
+    with patch("app.core.backtest.service._poll_sync", side_effect=TimeoutError()), \
+         pytest.raises(BacktestError, match="超时"):
+        asyncio.get_event_loop().run_until_complete(service.poll("bt_12345"))

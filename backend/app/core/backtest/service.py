@@ -145,13 +145,12 @@ class BacktestService:
                 "benchmark": params.benchmark,
             }
             loop = asyncio.get_running_loop()
-            backtest_id = await loop.run_in_executor(
+            return await loop.run_in_executor(
                 _executor,
                 functools.partial(
                     _submit_sync, code, params_dict, self._token, self._cookie, self._api_base
                 ),
             )
-            return backtest_id
         except Exception as e:
             raise map_jqcli_error(e)
 

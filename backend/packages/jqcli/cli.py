@@ -80,11 +80,11 @@ def main(
     )
 
 
-from .commands.auth import auth_group
-from .commands.backtest import backtest_group
-from .commands.community import community_group
-from .commands.strategy import strategy_group
-from .commands.web import web_group
+from .commands.auth import auth_group  # noqa: E402
+from .commands.backtest import backtest_group  # noqa: E402
+from .commands.community import community_group  # noqa: E402
+from .commands.strategy import strategy_group  # noqa: E402
+from .commands.web import web_group  # noqa: E402
 
 main.add_command(auth_group, "auth")
 main.add_command(backtest_group, "backtest")
