@@ -7,7 +7,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.common.runs.manager import MultitaskStrategy
 from app.common.runs.schemas import DisconnectMode
@@ -28,20 +28,34 @@ MAX_MESSAGE_LENGTH = 32768  # 32KB
 
 
 class MessageInput(BaseModel):
-    role: Literal["user", "assistant", "system"]
+    model_config = ConfigDict(populate_by_name=True)
+
+    role: Literal["user", "assistant", "system"] | None = Field(default=None, validation_alias="type")
+    type: Literal["human", "ai", "system", "tool"] | None = Field(default=None, validation_alias="role")
     content: str = Field(..., max_length=MAX_MESSAGE_LENGTH)
 
 
 class RunCreateRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     input: dict[str, Any] = Field(
         default_factory=lambda: {"messages": []},
         description="包含 messages 数组的输入",
     )
     config: dict[str, Any] = Field(default_factory=dict)
     context: dict[str, Any] = Field(default_factory=dict)
-    stream_mode: list[str] = Field(default_factory=lambda: ["values"])
-    on_disconnect: DisconnectMode = DisconnectMode.CANCEL
-    multitask_strategy: MultitaskStrategy = MultitaskStrategy.REJECT
+    stream_mode: list[str] = Field(
+        default_factory=lambda: ["values"],
+        validation_alias="streamMode",
+    )
+    on_disconnect: DisconnectMode = Field(
+        default=DisconnectMode.CANCEL,
+        validation_alias="onDisconnect",
+    )
+    multitask_strategy: MultitaskStrategy = Field(
+        default=MultitaskStrategy.REJECT,
+        validation_alias="multitaskStrategy",
+    )
 
     @field_validator("input")
     @classmethod

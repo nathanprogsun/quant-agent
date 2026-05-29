@@ -97,7 +97,6 @@ async def setup_app_context(app: FastAPI) -> None:
     Args:
         app: FastAPI application.
     """
-
     cfg = get_settings()
 
     # Create database engine
@@ -117,10 +116,26 @@ async def setup_app_context(app: FastAPI) -> None:
         await engine.prewarm_db_connection()
 
     # Checkpointer
+    # AsyncSqliteSaver.from_conn_string() is an async generator factory — it must
+    # be consumed within async with for the saver instance to be valid. We use a
+    # module-level variable so the consumed instance is accessible after setup.
     if cfg.checkpointer_backend == "sqlite":
         from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
-        checkpointer = AsyncSqliteSaver.from_conn_string(cfg.checkpointer_connection_string)
+        _sqlite_checkpointer: Any = None
+
+        async def _get_sqlite_checkpointer():
+            nonlocal _sqlite_checkpointer
+            async with AsyncSqliteSaver.from_conn_string(
+                cfg.checkpointer_connection_string
+            ) as cp:
+                _sqlite_checkpointer = cp
+                yield cp
+
+        from contextlib import aclosing
+
+        async with aclosing(_get_sqlite_checkpointer()) as cm:
+            checkpointer: Any = _sqlite_checkpointer
     else:
         from langgraph.checkpoint.memory import InMemorySaver
 
@@ -151,7 +166,6 @@ async def setup_app_context(app: FastAPI) -> None:
         run_manager=run_manager,
     )
     set_app_context(app=app, app_context=app_context)
-
     logger.info("Application context initialized")  # type: ignore[no-untyped-call]
 
 
