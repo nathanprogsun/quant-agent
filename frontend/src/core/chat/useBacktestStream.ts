@@ -12,7 +12,10 @@ interface BacktestStreamOptions {
 export function useBacktestStream(url: string, options: BacktestStreamOptions = {}) {
   const sourceRef = useRef<EventSource | null>(null)
   const optionsRef = useRef(options)
-  optionsRef.current = options
+
+  useEffect(() => {
+    optionsRef.current = options
+  })
 
   const connect = useCallback(() => {
     const source = new EventSource(url)

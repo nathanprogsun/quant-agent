@@ -7,7 +7,6 @@ import httpx
 
 from jqcli.errors import ApiError, NetworkError
 
-
 LOGIN_PAGE = "/user/login/index"
 LOGIN_ENDPOINT = "/user/login/doLogin"
 

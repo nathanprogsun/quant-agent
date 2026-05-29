@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 
-import type { AuthResult, User } from "./types";
+import type { AuthResult } from "./types";
 import { userSchema } from "./types";
 
 const AUTH_ME_ENDPOINT = "/api/v1/auth/me";

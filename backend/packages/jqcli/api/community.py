@@ -10,7 +10,6 @@ from jqcli.errors import ApiError, UsageError
 from .backtest import get_backtest_stats
 from .client import ApiClient
 
-
 COMMUNITY_CATEGORY_TAG_IDS = {
     1: "3",
     2: "10",

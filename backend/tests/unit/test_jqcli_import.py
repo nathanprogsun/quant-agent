@@ -2,16 +2,14 @@
 
 from __future__ import annotations
 
-import pytest
-
 
 def test_jqcli_api_backtest_importable():
     """jqcli.api.backtest functions should be importable."""
     from jqcli.api.backtest import (
-        run_backtest,
         get_backtest,
-        get_backtest_stats,
         get_backtest_result,
+        get_backtest_stats,
+        run_backtest,
     )
     assert callable(run_backtest)
     assert callable(get_backtest)
@@ -23,9 +21,8 @@ def test_jqcli_errors_importable():
     """jqcli error classes should be importable."""
     from jqcli.errors import (
         ApiError,
-        TimeoutError,
         NotAuthenticatedError,
-        NetworkError,
+        TimeoutError,
     )
     assert issubclass(ApiError, Exception)
     assert issubclass(TimeoutError, Exception)

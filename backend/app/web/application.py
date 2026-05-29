@@ -10,9 +10,9 @@ from app.settings import get_settings
 from app.web.api.auth.views import router as auth_router
 from app.web.api.backtest.views import router as backtest_router
 from app.web.api.chat.views import router as chat_router
-from app.web.api.thread.views import router as thread_router
 from app.web.api.memory.route import router as memory_router
 from app.web.api.skills.route import router as skills_router
+from app.web.api.thread.views import router as thread_router
 from app.web.lifespan import lifespan
 from app.web.middleware.auth_middleware import AuthMiddleware
 from app.web.middleware.exception.exception_handler import (

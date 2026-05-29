@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import pytest
+from jqcli.errors import ApiError, NetworkError, NotAuthenticatedError, TimeoutError
 
 from app.core.backtest.errors import BacktestError, map_jqcli_error
-from jqcli.errors import ApiError, TimeoutError, NotAuthenticatedError, NetworkError
 
 
 def test_map_api_error():

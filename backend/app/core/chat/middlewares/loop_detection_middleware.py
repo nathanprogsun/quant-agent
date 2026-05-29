@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections import Counter
 from typing import Any
 
 from app.core.chat.middlewares.base import AgentMiddleware

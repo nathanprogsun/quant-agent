@@ -10,7 +10,6 @@ from typing import Any
 
 from .errors import FileError
 
-
 APP_NAME = "jqcli"
 
 

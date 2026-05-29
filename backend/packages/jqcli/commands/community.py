@@ -7,7 +7,13 @@ from rich.console import Console
 from rich.table import Table
 
 from jqcli.api.client import ApiClient
-from jqcli.api.community import check_strategy_clone, clone_strategy, get_post_detail, iter_latest_posts, list_latest_posts
+from jqcli.api.community import (
+    check_strategy_clone,
+    clone_strategy,
+    get_post_detail,
+    iter_latest_posts,
+    list_latest_posts,
+)
 from jqcli.cli import AppContext
 from jqcli.errors import NotAuthenticatedError
 from jqcli.output import write_json, write_json_line
@@ -85,16 +91,15 @@ def latest(
             ):
                 write_json_line(event)
             return
-        else:
-            payload = list_latest_posts(
-                client,
-                page_size=page_size,
-                max_pages=max_pages,
-                until=until,
-                list_type=list_type,
-                tags=tags,
-                since_id=since_id or None,
-            )
+        payload = list_latest_posts(
+            client,
+            page_size=page_size,
+            max_pages=max_pages,
+            until=until,
+            list_type=list_type,
+            tags=tags,
+            since_id=since_id or None,
+        )
     finally:
         close_client(client)
     if app.json_output:

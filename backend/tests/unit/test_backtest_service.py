@@ -3,15 +3,15 @@
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
+from jqcli.errors import ApiError, NotAuthenticatedError, TimeoutError
 
-from app.core.backtest.service import BacktestService
-from app.core.backtest.types import BacktestParams, BacktestResult, BacktestStatus, AuthResult
 from app.core.backtest.errors import BacktestError
-from jqcli.errors import ApiError, TimeoutError, NotAuthenticatedError
+from app.core.backtest.service import BacktestService
+from app.core.backtest.types import AuthResult, BacktestParams, BacktestStatus
 
 
 @pytest.fixture

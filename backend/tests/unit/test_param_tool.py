@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from app.core.chat.tools.builtin.param_tool import validate_parameters
 
 

@@ -9,11 +9,16 @@ from rich.console import Console
 from rich.table import Table
 
 from jqcli.api.client import ApiClient
-from jqcli.api.strategy import create_strategy, delete_strategy, get_strategy, list_strategies, update_strategy
+from jqcli.api.strategy import (
+    create_strategy,
+    delete_strategy,
+    get_strategy,
+    list_strategies,
+    update_strategy,
+)
 from jqcli.cli import AppContext
 from jqcli.errors import ConfirmationRequiredError, FileError, NotAuthenticatedError, UsageError
 from jqcli.output import write_json
-
 
 TEMPLATE = """def initialize(context):
     pass

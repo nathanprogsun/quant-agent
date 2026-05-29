@@ -21,7 +21,6 @@ from jqcli.api.client import ApiClient
 from jqcli.errors import ConfirmationRequiredError, NotAuthenticatedError, TimeoutError
 from jqcli.output import write_json
 
-
 if TYPE_CHECKING:
     from jqcli.cli import AppContext
 

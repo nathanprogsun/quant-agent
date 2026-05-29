@@ -9,7 +9,6 @@ from urllib.parse import parse_qs, urlparse
 
 from .client import ApiClient
 
-
 _VOID_TAGS = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"}
 
 

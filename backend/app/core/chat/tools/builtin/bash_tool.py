@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import shlex
-from typing import Any
 
 from langchain_core.callbacks import CallbackManagerForToolRun
 from langchain_core.tools import BaseTool, ToolException
@@ -89,7 +87,7 @@ class BashTool(BaseTool):
                     process.communicate(),
                     timeout=timeout,
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 process.kill()
                 raise ToolException(f"Command timed out after {timeout} seconds")
 
@@ -110,4 +108,4 @@ class BashTool(BaseTool):
         except ToolException:
             raise
         except Exception as e:
-            raise ToolException(f"Command execution failed: {str(e)}")
+            raise ToolException(f"Command execution failed: {e!s}")

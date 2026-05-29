@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
-from typing import Any, Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
+from typing import Any
 from uuid import UUID
 
 from app.core.backtest.types import BacktestMetrics
 from app.core.dc42.retriever import DC42Retriever
-
 
 LLMCall = Callable[[str], Awaitable[Any]]
 

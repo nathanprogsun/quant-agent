@@ -2,17 +2,15 @@
 
 from __future__ import annotations
 
-from http import HTTPStatus
-from typing import Any
-
-from app.common.exception.exception import ApplicationError
 from jqcli.errors import (
     ApiError,
+    JqcliError,
     NetworkError,
     NotAuthenticatedError,
     TimeoutError,
-    JqcliError,
 )
+
+from app.common.exception.exception import ApplicationError
 
 
 class BacktestError(ApplicationError):

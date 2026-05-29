@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
 
 from app.core.dc42.retriever import DC42Retriever
-from app.core.dc42.types import RetrievalResult, ParameterAnalysis, SimilarCase, Diagnosis
+from app.core.dc42.types import RetrievalResult
 
 
 @pytest.fixture

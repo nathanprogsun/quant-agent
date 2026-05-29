@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from app.core.chat.middlewares.base import AgentMiddleware
@@ -20,7 +20,7 @@ class DynamicContextMiddleware(AgentMiddleware):
         if not messages:
             return None
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         context = (
             f"\n\n[System Context] Current UTC datetime: {now.strftime('%Y-%m-%d %H:%M:%S')} | "
             f"Timezone: UTC | This context is automatically injected for time-aware responses."

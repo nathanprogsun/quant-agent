@@ -8,6 +8,8 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 from uuid import UUID
 
+from jqcli.errors import NotAuthenticatedError
+
 from app.core.backtest.errors import BacktestError, map_jqcli_error
 from app.core.backtest.types import (
     AuthResult,
@@ -16,7 +18,6 @@ from app.core.backtest.types import (
     BacktestResult,
     BacktestStatus,
 )
-from jqcli.errors import NotAuthenticatedError
 
 _executor = ThreadPoolExecutor(max_workers=4)
 
@@ -26,8 +27,8 @@ TIMEOUT_SECONDS = 300
 
 def _check_auth_sync(token: str, cookie: str, api_base: str) -> dict[str, Any]:
     """Sync jqcli auth check — runs in thread pool."""
-    from jqcli.api.client import ApiClient
     from jqcli.api.auth import get_current_user
+    from jqcli.api.client import ApiClient
 
     client = ApiClient(api_base, token=token, cookie=cookie)
     try:
@@ -50,9 +51,9 @@ def _submit_sync(
     the code must first be saved to a strategy, then backtest is submitted.
     This is a simplified version for the integration.
     """
-    from jqcli.api.client import ApiClient
-    from jqcli.api.strategy import create_strategy, update_strategy
     from jqcli.api.backtest import run_backtest
+    from jqcli.api.client import ApiClient
+    from jqcli.api.strategy import create_strategy
 
     client = ApiClient(api_base, token=token, cookie=cookie)
     try:
@@ -79,8 +80,8 @@ def _submit_sync(
 
 def _poll_sync(backtest_id: str, token: str, cookie: str, api_base: str) -> dict[str, Any]:
     """Sync jqcli backtest poll — runs in thread pool."""
-    from jqcli.api.client import ApiClient
     from jqcli.api.backtest import get_backtest
+    from jqcli.api.client import ApiClient
 
     client = ApiClient(api_base, token=token, cookie=cookie)
     try:
@@ -91,8 +92,8 @@ def _poll_sync(backtest_id: str, token: str, cookie: str, api_base: str) -> dict
 
 def _get_result_sync(backtest_id: str, token: str, cookie: str, api_base: str) -> dict[str, Any]:
     """Sync jqcli get backtest result — runs in thread pool."""
-    from jqcli.api.client import ApiClient
     from jqcli.api.backtest import get_backtest_result
+    from jqcli.api.client import ApiClient
 
     client = ApiClient(api_base, token=token, cookie=cookie)
     try:

@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import pytest
-
-from app.core.chat.tools.builtin.lint_tool import lint_code, LintResult
+from app.core.chat.tools.builtin.lint_tool import LintResult, lint_code
 
 
 def test_lint_clean_code():

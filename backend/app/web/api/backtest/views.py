@@ -2,23 +2,23 @@
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Request
 
-from app.core.backtest.service import BacktestService
-from app.core.backtest.types import BacktestParams
 from app.core.backtest.errors import BacktestError
 from app.core.backtest.registry import BacktestRegistry
+from app.core.backtest.service import BacktestService
+from app.core.backtest.types import BacktestParams
+from app.db.models.user import User
 from app.web.api.backtest.schemas import (
     BacktestAbortResponse,
+    BacktestMetricsResponse,
     BacktestResultResponse,
     BacktestSubmitRequest,
     BacktestSubmitResponse,
-    BacktestMetricsResponse,
 )
 from app.web.api.deps import get_current_user
-from app.db.models.user import User
 
 router = APIRouter(prefix="/api/v1/backtest", tags=["backtest"])
 

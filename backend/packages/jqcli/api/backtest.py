@@ -6,10 +6,10 @@ from html import unescape
 from html.parser import HTMLParser
 from typing import Any
 
-from .client import ApiClient
-from .strategy import parse_strategy_edit_html
 from jqcli.errors import ApiError
 
+from .client import ApiClient
+from .strategy import parse_strategy_edit_html
 
 STATUS_MAP = {"0": "running", "1": "failed", "2": "done", "3": "cancelled"}
 BUILD_ERROR_MESSAGES = {
