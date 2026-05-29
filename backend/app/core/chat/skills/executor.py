@@ -14,7 +14,6 @@ from app.core.chat.skills.registry import SkillDefinition, get_skill_registry
 class SkillExecutionError(Exception):
     """Raised when skill execution fails."""
 
-    pass
 
 
 class SkillExecutor:

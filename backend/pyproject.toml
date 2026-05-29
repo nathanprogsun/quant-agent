@@ -44,6 +44,7 @@ dependencies = [
     "langgraph-checkpoint>=4.1.1",
     "langgraph-checkpoint-sqlite>=3.1.0",
     "debugpy>=1.8.20",
+    "chromadb>=0.5.0",
 ]
 
 [project.optional-dependencies]
@@ -60,8 +61,8 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-where = ["."]
-include = ["app*"]
+where = [".", "packages"]
+include = ["app*", "jqcli*"]
 
 [tool.mypy]
 python_version = "3.11"
@@ -77,6 +78,7 @@ disable_error_code = [
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+pythonpath = [".", "packages"]
 markers = [
     "unit: Unit tests (fast, mocked dependencies)",
     "integration: Integration tests (service flows, HTTP endpoints)",

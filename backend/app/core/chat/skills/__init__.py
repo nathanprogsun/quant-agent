@@ -1,6 +1,6 @@
 """Skills package - skill registry and execution."""
 
-from app.core.chat.skills.executor import SkillExecutor, SkillExecutionError
+from app.core.chat.skills.executor import SkillExecutionError, SkillExecutor
 from app.core.chat.skills.registry import (
     SkillDefinition,
     SkillParameter,
@@ -10,9 +10,9 @@ from app.core.chat.skills.registry import (
 
 __all__ = [
     "SkillDefinition",
+    "SkillExecutionError",
+    "SkillExecutor",
     "SkillParameter",
     "SkillRegistry",
-    "SkillExecutor",
-    "SkillExecutionError",
     "get_skill_registry",
 ]

@@ -43,3 +43,7 @@ test-results/
 # Superpowers skill artifacts
 docs/superpowers/
 .gstack/
+
+# continuous-claude runtime artifacts
+continuous-run-*.log
+continuous-run-*.pid

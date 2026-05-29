@@ -31,7 +31,15 @@ jobs:
         working-directory: frontend
       - run: npx playwright install chromium --with-deps
         working-directory: frontend
+      - id: has-tests
+        run: |
+          if [ -d "frontend/e2e" ] && [ "$(ls -A frontend/e2e/*.spec.* 2>/dev/null | wc -l)" -gt 0 ]; then
+            echo "has_tests=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_tests=false" >> $GITHUB_OUTPUT
+          fi
       - run: pnpm exec playwright test
+        if: steps.has-tests.outputs.has_tests == 'true'
         working-directory: frontend
         env:
           SKIP_ENV_VALIDATION: "1"

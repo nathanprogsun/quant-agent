@@ -35,8 +35,8 @@ from app.common.runs.manager import RunManager
 from app.common.stats.metric import custom_metric
 from app.common.stream_bridge.memory import MemoryStreamBridge
 from app.core.auth.service.auth_service import get_auth_service_by_engine
-from app.core.chat.service.thread_service import get_thread_service_by_engine
 from app.core.chat.middlewares.memory_middleware import set_memory_middleware_engine
+from app.core.chat.service.thread_service import get_thread_service_by_engine
 from app.core.user.service.user_service import get_user_service_by_engine
 from app.db.dbengine.core import DatabaseEngine
 from app.settings import get_settings, settings
