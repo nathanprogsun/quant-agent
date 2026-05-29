@@ -134,7 +134,7 @@ async def setup_app_context(app: FastAPI) -> None:
 
         from contextlib import aclosing
 
-        async with aclosing(_get_sqlite_checkpointer()) as cm:
+        async with aclosing(_get_sqlite_checkpointer()) as _:
             checkpointer: Any = _sqlite_checkpointer
     else:
         from langgraph.checkpoint.memory import InMemorySaver
