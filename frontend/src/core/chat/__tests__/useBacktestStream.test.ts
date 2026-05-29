@@ -28,6 +28,7 @@ class MockEventSource {
 describe('useBacktestStream', () => {
   beforeEach(() => {
     MockEventSource.instances = []
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     vi.stubGlobal('EventSource', MockEventSource as any)
   })
 
