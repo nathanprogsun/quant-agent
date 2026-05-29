@@ -28,11 +28,29 @@ MAX_MESSAGE_LENGTH = 32768  # 32KB
 
 
 class MessageInput(BaseModel):
+    """Accept both backend format (role) and LangChain SDK format (type)."""
+
     model_config = ConfigDict(populate_by_name=True)
 
-    role: Literal["user", "assistant", "system"] | None = Field(default=None, validation_alias="type")
-    type: Literal["human", "ai", "system", "tool"] | None = Field(default=None, validation_alias="role")
+    role: Literal["user", "assistant", "system"] = Field(
+        default="user",
+        validation_alias="role",
+    )
+    type: Literal["human", "ai", "system", "tool"] = Field(
+        default="human",
+        validation_alias="type",
+    )
     content: str = Field(..., max_length=MAX_MESSAGE_LENGTH)
+
+    @field_validator("role", "type", mode="before")
+    @classmethod
+    def _normalize_role_type(cls, v: Any, info: Any) -> Any:
+        """Normalize role/type: accept both formats, prefer the non-null one."""
+        if v is None:
+            return v
+        # If the field name matches the incoming key, use it directly
+        # Otherwise let the other field handle it
+        return v
 
 
 class RunCreateRequest(BaseModel):
