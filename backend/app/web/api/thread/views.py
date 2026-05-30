@@ -8,21 +8,20 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from langgraph.checkpoint.base import RunnableConfig
 
+from app.core.chat.agent.lead_agent import make_lead_agent
 from app.core.chat.service.thread_service import ThreadService
 from app.db.models.user import User
 from app.web.api.deps import get_current_user
-from app.web.lifespan_service import thread_service_from_lifespan
 from app.web.api.thread.schema import (
-    ThreadListResponse,
-    ThreadResponse,
-    UpdateTitleRequest,
     RunCreateRequest,
     RunListResponse,
     RunResponse,
+    ThreadListResponse,
+    ThreadResponse,
+    UpdateTitleRequest,
 )
 from app.web.api.thread.services import sse_consumer, start_run
-from app.core.chat.agent.lead_agent import make_lead_agent
-
+from app.web.lifespan_service import thread_service_from_lifespan
 
 router = APIRouter(prefix="/api/v1/threads", tags=["threads"])
 
