@@ -10,6 +10,36 @@ MAX_MESSAGES = 50
 MAX_MESSAGE_LENGTH = 32768  # 32KB
 
 
+class ThreadTokenUsageModelBreakdown(BaseModel):
+    model_name: str
+    total_input_tokens: int = 0
+    total_output_tokens: int = 0
+    total_tokens: int = 0
+    llm_call_count: int = 0
+
+
+class ThreadTokenUsageCallerBreakdown(BaseModel):
+    caller: str
+    total_input_tokens: int = 0
+    total_output_tokens: int = 0
+    total_tokens: int = 0
+    llm_call_count: int = 0
+
+
+class ThreadTokenUsageResponse(BaseModel):
+    thread_id: UUID
+    total_input_tokens: int = 0
+    total_output_tokens: int = 0
+    total_tokens: int = 0
+    llm_call_count: int = 0
+    lead_agent_tokens: int = 0
+    subagent_tokens: int = 0
+    middleware_tokens: int = 0
+    message_count: int = 0
+    by_model: list[ThreadTokenUsageModelBreakdown] = Field(default_factory=list)
+    by_caller: list[ThreadTokenUsageCallerBreakdown] = Field(default_factory=list)
+
+
 class ThreadResponse(BaseModel):
     id: UUID
     user_id: UUID
@@ -35,11 +65,20 @@ class RunResponse(BaseModel):
     model_name: str | None = None
     assistant_id: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
+    kwargs: dict[str, Any] = Field(default_factory=dict)
     on_disconnect: DisconnectMode
     multitask_strategy: MultitaskStrategy
     error: str | None = None
     created_at: str
     updated_at: str
+    total_input_tokens: int = 0
+    total_output_tokens: int = 0
+    total_tokens: int = 0
+    llm_call_count: int = 0
+    lead_agent_tokens: int = 0
+    subagent_tokens: int = 0
+    middleware_tokens: int = 0
+    message_count: int = 0
 
     def from_run_record(record: RunRecord) -> Self:
         return RunResponse(
@@ -50,11 +89,20 @@ class RunResponse(BaseModel):
             model_name=record.model_name,
             assistant_id=record.assistant_id,
             metadata=record.metadata,
+            kwargs=getattr(record, "kwargs", {}),
             on_disconnect=record.on_disconnect,
             multitask_strategy=record.multitask_strategy,
             error=record.error,
             created_at=record.created_at,
             updated_at=record.updated_at,
+            total_input_tokens=getattr(record, "total_input_tokens", 0),
+            total_output_tokens=getattr(record, "total_output_tokens", 0),
+            total_tokens=getattr(record, "total_tokens", 0),
+            llm_call_count=getattr(record, "llm_call_count", 0),
+            lead_agent_tokens=getattr(record, "lead_agent_tokens", 0),
+            subagent_tokens=getattr(record, "subagent_tokens", 0),
+            middleware_tokens=getattr(record, "middleware_tokens", 0),
+            message_count=getattr(record, "message_count", 0),
         )
 
 
@@ -108,6 +156,73 @@ class RunCreateRequest(BaseModel):
     multitask_strategy: MultitaskStrategy = Field(
         default=MultitaskStrategy.REJECT,
         validation_alias="multitaskStrategy",
+    )
+    # New fields for deer-flow alignment
+    assistant_id: str | None = Field(
+        default=None,
+        description="Agent / assistant to use",
+        validation_alias="assistantId",
+    )
+    command: dict[str, Any] | None = Field(
+        default=None,
+        description="LangGraph Command",
+    )
+    metadata: dict[str, Any] | None = Field(
+        default=None,
+        description="Run metadata",
+    )
+    webhook: str | None = Field(
+        default=None,
+        description="Completion callback URL",
+    )
+    checkpoint_id: str | None = Field(
+        default=None,
+        description="Resume from checkpoint",
+        validation_alias="checkpointId",
+    )
+    checkpoint: dict[str, Any] | None = Field(
+        default=None,
+        description="Full checkpoint object",
+    )
+    interrupt_before: list[str] | Literal["*"] | None = Field(
+        default=None,
+        description="Nodes to interrupt before",
+        validation_alias="interruptBefore",
+    )
+    interrupt_after: list[str] | Literal["*"] | None = Field(
+        default=None,
+        description="Nodes to interrupt after",
+        validation_alias="interruptAfter",
+    )
+    stream_subgraphs: bool = Field(
+        default=False,
+        description="Include subgraph events",
+        validation_alias="streamSubgraphs",
+    )
+    stream_resumable: bool | None = Field(
+        default=None,
+        description="SSE resumable mode",
+        validation_alias="streamResumable",
+    )
+    on_completion: Literal["delete", "keep"] = Field(
+        default="keep",
+        description="Delete temp thread on completion",
+        validation_alias="onCompletion",
+    )
+    after_seconds: float | None = Field(
+        default=None,
+        description="Delayed execution",
+        validation_alias="afterSeconds",
+    )
+    if_not_exists: Literal["reject", "create"] = Field(
+        default="create",
+        description="Thread creation policy",
+        validation_alias="ifNotExists",
+    )
+    feedback_keys: list[str] | None = Field(
+        default=None,
+        description="LangSmith feedback keys",
+        validation_alias="feedbackKeys",
     )
 
     @field_validator("input")
