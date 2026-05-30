@@ -5,62 +5,25 @@ from typing import Annotated, Any
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from langgraph.checkpoint.base import RunnableConfig
-from pydantic import BaseModel
 
-from app.common.runs.manager import RunManager
-from app.common.runs.schemas import RunStatus
+from app.core.chat.agent.lead_agent import make_lead_agent
 from app.core.chat.service.thread_service import ThreadService
 from app.db.models.user import User
 from app.web.api.deps import get_current_user
+from app.web.api.thread.schema import (
+    RunCreateRequest,
+    RunListResponse,
+    RunResponse,
+    ThreadListResponse,
+    ThreadResponse,
+    UpdateTitleRequest,
+)
+from app.web.api.thread.services import sse_consumer, start_run
 from app.web.lifespan_service import thread_service_from_lifespan
 
 router = APIRouter(prefix="/api/v1/threads", tags=["threads"])
-
-
-# ── Request / Response models ────────────────────────────────
-
-
-class ThreadResponse(BaseModel):
-    id: UUID
-    user_id: UUID
-    title: str | None = None
-    model_name: str | None = None
-    created_at: str | None = None
-    updated_at: str | None = None
-
-
-class ThreadListResponse(BaseModel):
-    threads: list[ThreadResponse]
-
-
-class UpdateTitleRequest(BaseModel):
-    title: str
-
-
-# ── Run response models ────────────────────────────────────────
-
-
-class RunResponse(BaseModel):
-    run_id: UUID
-    thread_id: UUID
-    user_id: UUID
-    status: RunStatus
-    model_name: str | None = None
-    assistant_id: str | None = None
-    metadata: dict[str, Any] = {}
-    on_disconnect: str | None = None
-    multitask_strategy: str | None = None
-    error: str | None = None
-    created_at: str | None = None
-    updated_at: str | None = None
-
-
-class RunListResponse(BaseModel):
-    runs: list[RunResponse]
-
-
-# ── Routes ───────────────────────────────────────────────────
 
 
 @router.get("", response_model=ThreadListResponse)
@@ -71,7 +34,9 @@ async def list_threads(
     offset: int = 0,
 ) -> ThreadListResponse:
     """List threads for the current user."""
-    threads = await thread_service.list_by_user_id(current_user.id, limit=limit, offset=offset)
+    threads = await thread_service.list_by_user_id(
+        current_user.id, limit=limit, offset=offset
+    )
     return ThreadListResponse(
         threads=[
             ThreadResponse(
@@ -107,9 +72,10 @@ async def create_thread(
         with contextlib.suppress(ValueError):
             thread_id = UUID(provided_id)
 
-    thread = await thread_service.create_or_update(
+    thread = await thread_service.create(
         thread_id=thread_id,
         user_id=current_user.id,
+        title=body.get("title"),
         model_name=body.get("model_name"),
     )
     return ThreadResponse(
@@ -173,76 +139,55 @@ async def delete_thread(
         raise HTTPException(status_code=404, detail="Thread not found")
 
 
-# ── Run management routes ──────────────────────────────────────
-# Nested under /api/v1/threads/{thread_id}/runs
-
-
-def _get_run_manager(request: Request) -> RunManager:
-    """Extract RunManager from app context."""
-    app_context = request.app.state.app_context
-    if app_context.run_manager is None:
-        raise HTTPException(status_code=503, detail="RunManager not available")
-    return app_context.run_manager
-
-
-def _run_to_response(record) -> RunResponse:
-    """Convert RunRecord to RunResponse."""
-    return RunResponse(
-        run_id=record.run_id,
-        thread_id=record.thread_id,
-        user_id=record.user_id,
-        status=record.status,
-        model_name=record.model_name,
-        assistant_id=record.assistant_id,
-        metadata=record.metadata,
-        on_disconnect=record.on_disconnect.value if record.on_disconnect else None,
-        multitask_strategy=record.multitask_strategy,
-        error=record.error,
-        created_at=record.created_at,
-        updated_at=record.updated_at,
-    )
-
-
 @router.get("/{thread_id}/runs", response_model=RunListResponse)
 async def list_runs(
     thread_id: UUID,
+    request: Request,
     current_user: Annotated[User, Depends(get_current_user)],
-    run_manager: Annotated[RunManager, Depends(_get_run_manager)],
 ) -> RunListResponse:
     """List all runs for a thread."""
-    records = await run_manager.list_by_thread(thread_id)
-    return RunListResponse(runs=[_run_to_response(r) for r in records])
+    app_context = request.app.state.app_context
+    if app_context.run_manager is None:
+        raise HTTPException(status_code=503, detail="RunManager not available")
+    records = await app_context.run_manager.list_by_thread(thread_id)
+    return RunListResponse(runs=[RunResponse.from_run_record(r) for r in records])
 
 
 @router.get("/{thread_id}/runs/{run_id}", response_model=RunResponse)
 async def get_run(
     thread_id: UUID,
     run_id: UUID,
+    request: Request,
     current_user: Annotated[User, Depends(get_current_user)],
-    run_manager: Annotated[RunManager, Depends(_get_run_manager)],
 ) -> RunResponse:
     """Get a specific run by ID."""
-    record = await run_manager.get(run_id)
+    app_context = request.app.state.app_context
+    if app_context.run_manager is None:
+        raise HTTPException(status_code=503, detail="RunManager not available")
+
+    record = await app_context.run_manager.get(run_id)
     if not record or record.thread_id != thread_id:
         raise HTTPException(status_code=404, detail="Run not found")
-    return _run_to_response(record)
+    return RunResponse.from_run_record(record)
 
 
 @router.post("/{thread_id}/runs", response_model=RunResponse, status_code=201)
 async def create_run(
     thread_id: UUID,
+    request: Request,
     current_user: Annotated[User, Depends(get_current_user)],
-    run_manager: Annotated[RunManager, Depends(_get_run_manager)],
 ) -> RunResponse:
     """Create a new run (non-streaming) - TODO: implement."""
-    raise HTTPException(status_code=501, detail="Not implemented: use POST /api/v1/chat/stream instead")
+    raise HTTPException(
+        status_code=501, detail="Not implemented: use POST /api/v1/chat/stream instead"
+    )
 
 
 @router.post("/{thread_id}/runs/wait", response_model=RunResponse)
 async def wait_for_run(
     thread_id: UUID,
+    request: Request,
     current_user: Annotated[User, Depends(get_current_user)],
-    run_manager: Annotated[RunManager, Depends(_get_run_manager)],
 ) -> RunResponse:
     """Block and wait for a run to complete - TODO: implement."""
     raise HTTPException(status_code=501, detail="Not implemented")
@@ -252,14 +197,64 @@ async def wait_for_run(
 async def join_run(
     thread_id: UUID,
     run_id: UUID,
+    request: Request,
     current_user: Annotated[User, Depends(get_current_user)],
-    run_manager: Annotated[RunManager, Depends(_get_run_manager)],
 ):
     """Join an existing run's SSE stream - TODO: implement."""
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
-# ── History route ──────────────────────────────────────────────
+@router.post("/{thread_id}/runs/stream")
+async def stream_run(
+    thread_id: UUID,
+    body: RunCreateRequest,
+    current_user: Annotated[User, Depends(get_current_user)],
+    thread_service: Annotated[ThreadService, Depends(thread_service_from_lifespan)],
+    request: Request,
+) -> StreamingResponse:
+    """Create a run and stream events via SSE."""
+    app_context = request.app.state.app_context
+
+    record = await start_run(
+        bridge=app_context.stream_bridge,
+        run_manager=app_context.run_manager,
+        thread_service=thread_service,
+        checkpointer=app_context.checkpointer,
+        body=body,
+        thread_id=thread_id,
+        request=request,
+        agent_factory=make_lead_agent,
+    )
+
+    return StreamingResponse(
+        sse_consumer(
+            bridge=app_context.stream_bridge,
+            record=record,
+            request=request,
+            run_manager=app_context.run_manager,
+        ),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@router.post("/{thread_id}/runs/{run_id}/cancel")
+async def cancel_run(
+    thread_id: UUID,
+    run_id: UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    request: Request,
+) -> dict[str, Any]:
+    """Cancel a running run."""
+    app_context = request.app.state.app_context
+    cancelled = await app_context.run_manager.cancel(run_id)
+    if not cancelled:
+        raise HTTPException(status_code=404, detail="Run not found or already finished")
+    return {"status": "cancelled", "run_id": run_id}
 
 
 @router.get("/{thread_id}/history")

@@ -7,8 +7,8 @@ from pydantic import ValidationError
 
 from app.common.runs.manager import MultitaskStrategy
 from app.common.runs.schemas import DisconnectMode
-from app.web.api.chat.services import MAX_MESSAGE_LENGTH, normalize_input
-from app.web.api.chat.views import MAX_MESSAGES, MessageInput, RunCreateRequest
+from app.web.api.thread.schema import MAX_MESSAGES, MessageInput, RunCreateRequest
+from app.web.api.thread.services import MAX_MESSAGE_LENGTH, normalize_input
 
 # ── MessageInput model tests ─────────────────────────────────
 

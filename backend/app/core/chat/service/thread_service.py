@@ -16,11 +16,12 @@ class ThreadService:
     def __init__(self, thread_repository: ThreadRepository) -> None:
         self._repo = thread_repository
 
-    async def create_or_update(
+    async def create(
         self,
         thread_id: UUID,
         user_id: UUID,
         *,
+        title: str | None = None,
         model_name: str | None = None,
     ) -> Thread:
         """Create a thread if it doesn't exist, otherwise return existing."""
@@ -31,6 +32,7 @@ class ThreadService:
         thread = Thread(
             id=thread_id,
             user_id=user_id,
+            title=title,
             model_name=model_name,
             created_at=datetime.now(UTC),
         )

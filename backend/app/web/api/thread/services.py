@@ -160,7 +160,7 @@ async def start_run(
 
     Flow:
     1. RunManager.create_or_reject (concurrency control)
-    2. ThreadService.create_or_update (ensure thread exists)
+    2. ThreadService.create (ensure thread exists)
     3. normalize_input (message format conversion)
     4. build_run_config (RunnableConfig construction)
     5. asyncio.create_task(run_agent(...))
@@ -182,7 +182,7 @@ async def start_run(
         raise HTTPException(status_code=409, detail=str(e))
 
     # 3. Ensure thread exists
-    await thread_service.create_or_update(
+    await thread_service.create(
         thread_id=thread_id,
         user_id=request.state.current_user_id,
         model_name=model_name,
