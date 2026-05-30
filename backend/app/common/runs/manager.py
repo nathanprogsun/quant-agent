@@ -25,6 +25,16 @@ class MultitaskStrategy(StrEnum):
 MULTITASK_STRATEGIES = tuple(s.value for s in MultitaskStrategy)
 
 
+@dataclass(frozen=True)
+class PersistenceRetryPolicy:
+    """Retry policy for SQLite operations with exponential backoff."""
+
+    max_attempts: int = 5
+    initial_delay: float = 0.05
+    max_delay: float = 1.0
+    backoff_factor: float = 2.0
+
+
 @dataclass
 class RunRecord:
     """Run record — mutable by design.
@@ -41,6 +51,7 @@ class RunRecord:
     model_name: str | None = None
     assistant_id: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
+    kwargs: dict[str, Any] = field(default_factory=dict)
     on_disconnect: DisconnectMode = DisconnectMode.CANCEL
     multitask_strategy: str = "reject"
     task: asyncio.Task[None] | None = None
@@ -49,6 +60,18 @@ class RunRecord:
     error: str | None = None
     created_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
     updated_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
+    # Token usage fields
+    total_input_tokens: int = 0
+    total_output_tokens: int = 0
+    total_tokens: int = 0
+    llm_call_count: int = 0
+    lead_agent_tokens: int = 0
+    subagent_tokens: int = 0
+    middleware_tokens: int = 0
+    message_count: int = 0
+    last_ai_message: str | None = None
+    first_human_message: str | None = None
+    store_only: bool = False
 
 
 class ConflictError(Exception):
@@ -233,6 +256,9 @@ class RunManager:
             multitask_strategy=kwargs.get("multitask_strategy", "reject"),
             on_disconnect=kwargs.get("on_disconnect", DisconnectMode.CANCEL),
             metadata=kwargs.get("metadata", {}),
+            kwargs=kwargs.get("kwargs", {}),
+            model_name=kwargs.get("model_name"),
+            assistant_id=kwargs.get("assistant_id"),
         )
         self._runs[record.run_id] = record
         return record
@@ -252,6 +278,36 @@ class RunManager:
             if record:
                 record.metadata.update(kwargs)
                 await self._store.save(record)
+
+    async def update_run_progress(self, run_id: UUID, **kwargs: Any) -> None:
+        """Update run progress fields (token counts, messages, etc.)."""
+        async with self._lock:
+            record = self._runs.get(run_id)
+            if not record:
+                return
+            for key, value in kwargs.items():
+                if hasattr(record, key):
+                    setattr(record, key, value)
+            record.updated_at = datetime.now(UTC).isoformat()
+            await self._store.save(record)
+
+    async def reconcile_orphaned_inflight_runs(self) -> list[UUID]:
+        """Find and mark runs whose tasks have unexpectedly completed.
+
+        Returns list of orphaned run_ids that were cleaned up.
+        """
+        orphaned = []
+        async with self._lock:
+            for run_id, record in self._runs.items():
+                if record.status not in (RunStatus.PENDING, RunStatus.RUNNING):
+                    continue
+                if record.task is not None and record.task.done():
+                    record.status = RunStatus.INTERRUPTED
+                    record.error = "Orphaned run detected - task completed unexpectedly"
+                    record.updated_at = datetime.now(UTC).isoformat()
+                    orphaned.append(run_id)
+                    await self._store.save(record)
+        return orphaned
 
     async def cleanup(self, run_id: UUID, *, delay: float = 300) -> None:
         if delay > 0:
