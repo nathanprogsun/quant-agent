@@ -33,4 +33,11 @@ async def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="用户不存在",
         )
+    # Token version check: invalidates tokens when password changes
+    token_ver = getattr(request.state, "token_ver", None)
+    if token_ver is not None and user.token_version != token_ver:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token已失效，请重新登录",
+        )
     return user

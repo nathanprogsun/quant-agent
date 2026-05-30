@@ -121,6 +121,15 @@ class UserService:
         await self.user_repository.update(user)
         return True
 
+    async def update_token_version(self, user_id: UUID) -> bool:
+        """Increment token version to invalidate old tokens."""
+        user = await self.user_repository.find_by_primary_key(User, id=user_id)
+        if not user:
+            return False
+        user = user.model_copy(update={"token_version": user.token_version + 1})
+        await self.user_repository.update(user)
+        return True
+
     async def count_users(self) -> int:
         """Count total users in the system."""
         return await self.user_repository.count_all()

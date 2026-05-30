@@ -15,6 +15,7 @@ class UserDTO(BaseModel):
     full_name: str | None = None
     is_active: bool = True
     is_superuser: bool = False
+    token_version: int = 0
     created_at: datetime
     updated_at: datetime | None = None
 
