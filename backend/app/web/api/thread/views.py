@@ -18,6 +18,7 @@ from app.web.api.thread.schema import (
     RunResponse,
     ThreadListResponse,
     ThreadResponse,
+    ThreadTokenUsageResponse,
     UpdateTitleRequest,
 )
 from app.web.api.thread.services import sse_consumer, start_run
@@ -199,9 +200,223 @@ async def join_run(
     run_id: UUID,
     request: Request,
     current_user: Annotated[User, Depends(get_current_user)],
-):
-    """Join an existing run's SSE stream - TODO: implement."""
-    raise HTTPException(status_code=501, detail="Not implemented")
+) -> StreamingResponse:
+    """Join an existing run's SSE stream."""
+    app_context = request.app.state.app_context
+    if app_context.run_manager is None:
+        raise HTTPException(status_code=503, detail="RunManager not available")
+
+    record = await app_context.run_manager.get(run_id)
+    if not record or record.thread_id != thread_id:
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    return StreamingResponse(
+        sse_consumer(
+            bridge=app_context.stream_bridge,
+            record=record,
+            request=request,
+            run_manager=app_context.run_manager,
+        ),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@router.get("/{thread_id}/runs/{run_id}/stream")
+async def get_stream_run(
+    thread_id: UUID,
+    run_id: UUID,
+    request: Request,
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> StreamingResponse:
+    """Get or cancel+get SSE stream for an existing run."""
+    action = request.query_params.get("action")
+
+    app_context = request.app.state.app_context
+    if app_context.run_manager is None:
+        raise HTTPException(status_code=503, detail="RunManager not available")
+
+    record = await app_context.run_manager.get(run_id)
+    if not record or record.thread_id != thread_id:
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    if action == "cancel":
+        await app_context.run_manager.cancel(run_id)
+
+    return StreamingResponse(
+        sse_consumer(
+            bridge=app_context.stream_bridge,
+            record=record,
+            request=request,
+            run_manager=app_context.run_manager,
+        ),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@router.get("/{thread_id}/messages")
+async def get_messages(
+    thread_id: UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    request: Request,
+    limit: int = 50,
+    before: int | None = None,
+    after: int | None = None,
+) -> dict[str, Any]:
+    """Get messages for a thread with optional pagination."""
+    app_context = request.app.state.app_context
+
+    if not app_context.checkpointer:
+        raise HTTPException(status_code=503, detail="Checkpointer not available")
+
+    config = RunnableConfig(configurable={"thread_id": str(thread_id)})
+    checkpoint = await app_context.checkpointer.aget(config)
+
+    if not checkpoint or not checkpoint.channel_values.get("messages"):
+        return {"messages": [], "total": 0}
+
+    messages = checkpoint.channel_values["messages"]
+
+    if before is not None:
+        messages = [m for m in messages if m.get("seq", 0) < before]
+    if after is not None:
+        messages = [m for m in messages if m.get("seq", 0) > after]
+
+    messages = messages[-limit:]
+    return {"messages": messages, "total": len(messages)}
+
+
+@router.get("/{thread_id}/runs/{run_id}/messages")
+async def get_run_messages(
+    thread_id: UUID,
+    run_id: UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    request: Request,
+    limit: int = 50,
+    before: int | None = None,
+) -> dict[str, Any]:
+    """Get messages for a specific run with pagination."""
+    app_context = request.app.state.app_context
+
+    record = await app_context.run_manager.get(run_id)
+    if not record or record.thread_id != thread_id:
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    if not app_context.checkpointer:
+        return {"messages": [], "total": 0}
+
+    config = RunnableConfig(configurable={"thread_id": str(thread_id), "run_id": str(run_id)})
+    checkpoint = await app_context.checkpointer.aget(config)
+
+    if not checkpoint or not checkpoint.channel_values.get("messages"):
+        return {"messages": [], "total": 0}
+
+    messages = checkpoint.channel_values["messages"]
+
+    if before is not None:
+        messages = [m for m in messages if m.get("seq", 0) < before]
+
+    messages = messages[-limit:]
+    return {"messages": messages, "total": len(messages)}
+
+
+@router.get("/{thread_id}/runs/{run_id}/events")
+async def get_events(
+    thread_id: UUID,
+    run_id: UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    request: Request,
+    event_types: str | None = None,
+    limit: int = 100,
+) -> dict[str, Any]:
+    """Get events for a run."""
+    app_context = request.app.state.app_context
+
+    record = await app_context.run_manager.get(run_id)
+    if not record or record.thread_id != thread_id:
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    parsed_types = event_types.split(",") if event_types else None
+
+    events = []
+    async for event in app_context.stream_bridge.subscribe(
+        run_id,
+        last_event_id=None,
+        heartbeat_interval=15.0,
+    ):
+        if parsed_types is None or event.event in parsed_types:
+            events.append({"event": event.event, "data": event.data, "id": event.id})
+        if len(events) >= limit:
+            break
+
+    return {"events": events, "total": len(events)}
+
+
+@router.get("/{thread_id}/token-usage", response_model=ThreadTokenUsageResponse)
+async def get_token_usage(
+    thread_id: UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    request: Request,
+) -> ThreadTokenUsageResponse:
+    """Get aggregated token usage for a thread."""
+    app_context = request.app.state.app_context
+    if app_context.run_manager is None:
+        raise HTTPException(status_code=503, detail="RunManager not available")
+
+    records = await app_context.run_manager.list_by_thread(thread_id)
+
+    total_input = 0
+    total_output = 0
+    total_tokens = 0
+    llm_calls = 0
+    lead_tokens = 0
+    subagent_tokens = 0
+    middleware_tokens = 0
+    message_count = 0
+    by_model: dict[str, dict[str, int]] = {}
+
+    for record in records:
+        total_input += getattr(record, "total_input_tokens", 0)
+        total_output += getattr(record, "total_output_tokens", 0)
+        total_tokens += getattr(record, "total_tokens", 0)
+        llm_calls += getattr(record, "llm_call_count", 0)
+        lead_tokens += getattr(record, "lead_agent_tokens", 0)
+        subagent_tokens += getattr(record, "subagent_tokens", 0)
+        middleware_tokens += getattr(record, "middleware_tokens", 0)
+        message_count += getattr(record, "message_count", 0)
+
+        model = record.model_name or "unknown"
+        if model not in by_model:
+            by_model[model] = {"total_input": 0, "total_output": 0, "total": 0, "calls": 0}
+        by_model[model]["total_input"] += getattr(record, "total_input_tokens", 0)
+        by_model[model]["total_output"] += getattr(record, "total_output_tokens", 0)
+        by_model[model]["total"] += getattr(record, "total_tokens", 0)
+        by_model[model]["calls"] += getattr(record, "llm_call_count", 0)
+
+    return ThreadTokenUsageResponse(
+        thread_id=thread_id,
+        total_input_tokens=total_input,
+        total_output_tokens=total_output,
+        total_tokens=total_tokens,
+        llm_call_count=llm_calls,
+        lead_agent_tokens=lead_tokens,
+        subagent_tokens=subagent_tokens,
+        middleware_tokens=middleware_tokens,
+        message_count=message_count,
+        by_model=[
+            {"model_name": m, "total_input_tokens": v["total_input"], "total_output_tokens": v["total_output"], "total_tokens": v["total"], "llm_call_count": v["calls"]}
+            for m, v in by_model.items()
+        ],
+    )
 
 
 @router.post("/{thread_id}/runs/stream")
