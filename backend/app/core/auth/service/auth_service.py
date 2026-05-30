@@ -1,7 +1,7 @@
 import contextlib
 from datetime import UTC, datetime, timedelta
 from typing import Any
-from uuid import UUID, uuid4
+from uuid import UUID
 
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -39,21 +39,20 @@ class AuthService:
         return pwd_context.hash(password)
 
     def create_access_token(
-        self, data: dict[str, Any], expires_delta: timedelta | None = None
+        self,
+        data: dict[str, Any],
+        expires_delta: timedelta | None = None,
+        token_version: int = 0,
     ) -> str:
         settings = get_settings()
         to_encode = _convert_to_json_serializable(data)
         expire = datetime.now(UTC) + (
             expires_delta or timedelta(minutes=settings.jwt_expire_minutes)
         )
-        to_encode.update({"exp": expire})
+        to_encode.update({"exp": expire, "ver": token_version})
         return jwt.encode(
             to_encode, settings.jwt_secret_key.get_secret_value(), algorithm=settings.jwt_algorithm
         )
-
-    def create_csrf_token(self) -> str:
-        """Generate a CSRF token using UUID4."""
-        return str(uuid4())
 
     async def authenticate_user(self, email: str, password: str) -> UserDTO | None:
         user = await self.user_service.get_user_model_by_email(email)

@@ -17,16 +17,11 @@ class RegisterRequest(BaseModel):
 class ChangePasswordRequest(BaseModel):
     old_password: str
     new_password: str
-    csrf_token: str
 
 
 class AuthResponse(BaseModel):
     message: str
     user_id: str | None = None
-
-
-class CSRFResponse(BaseModel):
-    csrf_token: str
 
 
 # Type alias for JWT payload dict used in the codebase

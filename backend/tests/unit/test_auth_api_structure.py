@@ -25,7 +25,6 @@ class TestAuthAPIStructure:
             "/api/v1/auth/login",
             "/api/v1/auth/signout",
             "/api/v1/auth/change-password",
-            "/api/v1/auth/refresh",
             "/api/v1/auth/me",
             "/api/v1/auth/initialize",
             "/api/v1/auth/setup-status",
@@ -61,7 +60,7 @@ class TestAuthAPIStructure:
         from app.core.auth.types import ChangePasswordRequest
 
         valid = ChangePasswordRequest(
-            old_password="oldpass", new_password="newpass", csrf_token="csrf-token"
+            old_password="oldpass", new_password="newpass"
         )
         assert valid.old_password == "oldpass"
         assert valid.new_password == "newpass"
@@ -75,9 +74,3 @@ class TestAuthAPIStructure:
 
         response2 = AuthResponse(message="Error")
         assert response2.user_id is None
-
-    def test_csrf_response_model(self) -> None:
-        from app.core.auth.types import CSRFResponse
-
-        response = CSRFResponse(csrf_token="token123")
-        assert response.csrf_token == "token123"

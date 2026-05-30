@@ -27,5 +27,6 @@ class User(TableModel):
     hashed_password: Column[str]
     is_active: Column[bool] = True
     is_superuser: Column[bool] = False
+    token_version: Column[int] = 0  # password change increments this, invalidating old tokens
     created_at: Column[datetime]
     updated_at: Column[str | None] = None

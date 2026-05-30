@@ -83,18 +83,6 @@ class TestAuthServiceToken:
             assert payload is None
 
 
-class TestAuthServiceCSRF:
-    def test_create_csrf_token(self, auth_service: AuthService) -> None:
-        token = auth_service.create_csrf_token()
-        assert isinstance(token, str)
-        assert len(token) == 36
-
-    def test_create_csrf_token_unique(self, auth_service: AuthService) -> None:
-        token1 = auth_service.create_csrf_token()
-        token2 = auth_service.create_csrf_token()
-        assert token1 != token2
-
-
 class TestAuthServiceAuthenticateUser:
     @pytest.mark.asyncio
     async def test_authenticate_user_success(

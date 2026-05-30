@@ -14,7 +14,6 @@ if TYPE_CHECKING:
 PUBLIC_PATHS = frozenset({
     "/api/v1/auth/login",
     "/api/v1/auth/register",
-    "/api/v1/auth/csrf",
     "/api/v1/auth/initialize",
     "/api/v1/auth/setup-status",
     "/health",
@@ -75,5 +74,6 @@ class AuthMiddleware(BaseHTTPMiddleware):
         # Set user info on request state
         request.state.current_user_id = user_id
         request.state.current_user_email = payload.get("email")
+        request.state.token_ver = payload.get("ver", 0)  # Token version for revocation check
 
         return await call_next(request)
