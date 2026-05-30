@@ -25,13 +25,16 @@ logger = logging.getLogger(__name__)
 _DEFAULT_ASSISTANT_ID = "lead_agent"
 
 # Config keys injectable via request context
-_CONTEXT_KEYS = frozenset(
+_CONTEXT_CONFIGURABLE_KEYS = frozenset(
     {
         "model_name",
         "thinking_enabled",
         "reasoning_effort",
         "is_plan_mode",
         "subagent_enabled",
+        "max_concurrent_subagents",
+        "agent_name",
+        "is_bootstrap",
     }
 )
 
@@ -118,7 +121,7 @@ def build_run_config(
     """Build RunnableConfig from request parameters."""
     configurable: dict[str, Any] = {"thread_id": thread_id}
 
-    for key in _CONTEXT_KEYS:
+    for key in _CONTEXT_CONFIGURABLE_KEYS:
         if key in request_config:
             configurable[key] = request_config[key]
 
@@ -137,13 +140,48 @@ def merge_run_context_overrides(
 ) -> RunnableConfig:
     """Merge request context into configurable."""
     configurable = dict(config.get("configurable", {}))
-    for key in _CONTEXT_KEYS:
+    for key in _CONTEXT_CONFIGURABLE_KEYS:
         if key in context:
             configurable[key] = context[key]
     return RunnableConfig(
         configurable=configurable,
         metadata=config.get("metadata") or {},
     )
+
+
+def normalize_stream_modes(stream_mode: Any) -> list[str]:
+    """Normalize stream_mode to a list of strings.
+
+    Handles None, str, and list inputs.
+    """
+    if stream_mode is None:
+        return ["values"]
+    if isinstance(stream_mode, str):
+        return [stream_mode]
+    if isinstance(stream_mode, list):
+        return stream_mode
+    return ["values"]
+
+
+def inject_authenticated_user_context(
+    config: RunnableConfig,
+    user_id: UUID,
+) -> RunnableConfig:
+    """Inject authenticated user_id into runnable config."""
+    configurable = dict(config.get("configurable", {}))
+    configurable["user_id"] = user_id
+    return RunnableConfig(configurable=configurable, metadata=config.get("metadata") or {})
+
+
+def resolve_agent_factory(assistant_id: str | None) -> Any:
+    """Resolve agent factory based on assistant_id.
+
+    Currently returns make_lead_agent. In the future this would
+    support multiple agent types based on assistant_id.
+    """
+    from app.core.chat.agent.lead_agent import make_lead_agent
+
+    return make_lead_agent
 
 
 async def start_run(
@@ -165,7 +203,8 @@ async def start_run(
     4. build_run_config (RunnableConfig construction)
     5. asyncio.create_task(run_agent(...))
     """
-    # 1. Extract model name
+    # 1. Extract assistant_id and model name
+    assistant_id = getattr(body, "assistant_id", None) or _DEFAULT_ASSISTANT_ID
     context = getattr(body, "context", {}) or {}
     model_name = context.get("model_name")
 
@@ -175,8 +214,10 @@ async def start_run(
             thread_id=thread_id,
             user_id=request.state.current_user_id,
             model_name=model_name,
+            assistant_id=assistant_id,
             multitask_strategy=getattr(body, "multitask_strategy", "reject"),
             on_disconnect=DisconnectMode(getattr(body, "on_disconnect", "cancel")),
+            metadata=getattr(body, "metadata", None),
         )
     except ConflictError as e:
         raise HTTPException(status_code=409, detail=str(e))
@@ -195,22 +236,29 @@ async def start_run(
     # 5. Build config
     request_config = getattr(body, "config", {}) or {}
     metadata = getattr(body, "metadata", {}) or {}
-    config = build_run_config(thread_id, request_config, metadata)
+    config = build_run_config(thread_id, request_config, metadata, assistant_id=assistant_id)
 
     # 6. Merge context
     config = merge_run_context_overrides(config, context)
 
-    # 7. Inject user_id
+    # 7. Inject user_id via helper
+    config = inject_authenticated_user_context(config, request.state.current_user_id)
+
+    # 8. Inject checkpointer and additional config
     configurable = dict(config.get("configurable", {}))
-    configurable["user_id"] = request.state.current_user_id
-    config = RunnableConfig(configurable=configurable, metadata=config.get("metadata") or {})
-
-    # 8. Inject checkpointer
     configurable["checkpointer"] = checkpointer
+    # Pass through interrupt/configure options
+    if getattr(body, "interrupt_before", None):
+        configurable["interrupt_before"] = body.interrupt_before
+    if getattr(body, "interrupt_after", None):
+        configurable["interrupt_after"] = body.interrupt_after
+    if getattr(body, "stream_subgraphs", False):
+        configurable["stream_subgraphs"] = True
     config = RunnableConfig(configurable=configurable, metadata=config.get("metadata") or {})
 
-    # 9. Build agent and start background task
-    agent = agent_factory(config=config)
+    # 9. Resolve agent factory and build agent
+    resolved_factory = resolve_agent_factory(assistant_id)
+    agent = resolved_factory(config=config)
 
     task = asyncio.create_task(
         run_agent(
@@ -228,6 +276,10 @@ async def start_run(
     return record
 
 
+HEARTBEAT_SENTINEL = ": heartbeat\n\n"
+END_SENTINEL = None
+
+
 async def sse_consumer(
     bridge: StreamBridge,
     record: Any,
@@ -237,6 +289,7 @@ async def sse_consumer(
     """Consume StreamBridge events as SSE frames.
 
     Supports reconnection via Last-Event-ID header.
+    Per-event disconnect detection to handle client disconnection promptly.
     """
     last_event_id = request.headers.get("Last-Event-ID")
     try:
@@ -245,8 +298,13 @@ async def sse_consumer(
             last_event_id=last_event_id,
             heartbeat_interval=15.0,
         ):
+            # Per-event disconnect check
+            if await request.is_disconnected():
+                logger.info("Client disconnected for run %s, cancelling", record.run_id)
+                break
+
             if event.event == "__heartbeat__":
-                yield ": heartbeat\n\n"
+                yield HEARTBEAT_SENTINEL
                 continue
 
             if event.event == "__end__":
@@ -259,4 +317,5 @@ async def sse_consumer(
         logger.info("SSE client disconnected for run %s", record.run_id)
     finally:
         if record.on_disconnect == DisconnectMode.CANCEL:
-            await run_manager.cancel(record.run_id)
+            if record.status.value in ("pending", "running"):
+                await run_manager.cancel(record.run_id)
