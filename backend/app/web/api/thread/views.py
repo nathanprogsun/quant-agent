@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import contextlib
 from typing import Annotated, Any
 from uuid import UUID, uuid4
@@ -8,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from langgraph.checkpoint.base import RunnableConfig
 
+from app.common.runs.schemas import RunStatus
 from app.core.chat.agent.lead_agent import make_lead_agent
 from app.core.chat.service.thread_service import ThreadService
 from app.db.models.user import User
@@ -175,23 +177,77 @@ async def get_run(
 @router.post("/{thread_id}/runs", response_model=RunResponse, status_code=201)
 async def create_run(
     thread_id: UUID,
-    request: Request,
+    body: RunCreateRequest,
     current_user: Annotated[User, Depends(get_current_user)],
+    thread_service: Annotated[ThreadService, Depends(thread_service_from_lifespan)],
+    request: Request,
 ) -> RunResponse:
-    """Create a new run (non-streaming) - TODO: implement."""
-    raise HTTPException(
-        status_code=501, detail="Not implemented: use POST /api/v1/chat/stream instead"
+    """Create a new run (non-streaming) and wait for completion."""
+    app_context = request.app.state.app_context
+    if app_context.run_manager is None:
+        raise HTTPException(status_code=503, detail="RunManager not available")
+
+    record = await start_run(
+        bridge=app_context.stream_bridge,
+        run_manager=app_context.run_manager,
+        thread_service=thread_service,
+        checkpointer=app_context.checkpointer,
+        body=body,
+        thread_id=thread_id,
+        request=request,
+        agent_factory=make_lead_agent,
     )
+
+    try:
+        await asyncio.wait_for(
+            asyncio.shield(record.task),
+            timeout=300.0,
+        )
+    except asyncio.TimeoutError:
+        pass
+
+    await app_context.run_manager.set_status(record.run_id, RunStatus.COMPLETED)
+
+    return RunResponse.from_run_record(record)
 
 
 @router.post("/{thread_id}/runs/wait", response_model=RunResponse)
 async def wait_for_run(
     thread_id: UUID,
-    request: Request,
+    body: RunCreateRequest,
     current_user: Annotated[User, Depends(get_current_user)],
+    thread_service: Annotated[ThreadService, Depends(thread_service_from_lifespan)],
+    request: Request,
 ) -> RunResponse:
-    """Block and wait for a run to complete - TODO: implement."""
-    raise HTTPException(status_code=501, detail="Not implemented")
+    """Block and wait for a run to complete."""
+    app_context = request.app.state.app_context
+    if app_context.run_manager is None:
+        raise HTTPException(status_code=503, detail="RunManager not available")
+
+    record = await start_run(
+        bridge=app_context.stream_bridge,
+        run_manager=app_context.run_manager,
+        thread_service=thread_service,
+        checkpointer=app_context.checkpointer,
+        body=body,
+        thread_id=thread_id,
+        request=request,
+        agent_factory=make_lead_agent,
+    )
+
+    if record.task:
+        try:
+            await asyncio.wait_for(
+                asyncio.shield(record.task),
+                timeout=300.0,
+            )
+        except asyncio.TimeoutError:
+            pass
+
+    updated_record = await app_context.run_manager.get(record.run_id)
+    if updated_record:
+        return RunResponse.from_run_record(updated_record)
+    return RunResponse.from_run_record(record)
 
 
 @router.get("/{thread_id}/runs/{run_id}/join")
