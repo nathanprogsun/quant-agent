@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.exc import IntegrityError
 
+from app.common.exception import ApplicationError
 from app.settings import get_settings
 from app.web.api.auth.views import router as auth_router
 from app.web.api.backtest.views import router as backtest_router
@@ -16,7 +16,7 @@ from app.web.api.thread.views import router as thread_router
 from app.web.lifespan import lifespan
 from app.web.middleware.auth_middleware import AuthMiddleware
 from app.web.middleware.exception.exception_handler import (
-    integrity_error_handler,
+    application_error_handler,
 )
 
 
@@ -48,7 +48,7 @@ def create_app() -> FastAPI:
     app.add_middleware(AuthMiddleware)
 
     # Register exception handlers
-    app.add_exception_handler(IntegrityError, integrity_error_handler)  # type: ignore[arg-type]
+    app.add_exception_handler(ApplicationError, application_error_handler)
 
     # Include routers
     app.include_router(auth_router)
