@@ -24,6 +24,16 @@ from typing import Any
 LLMCall = Callable[[str], Awaitable[Any]]
 
 
+def _read_text(path: Path) -> str:
+    """Read strategy text with common Chinese encodings."""
+    for encoding in ("utf-8", "gb18030", "gbk"):
+        try:
+            return path.read_text(encoding=encoding)
+        except UnicodeDecodeError:
+            continue
+    return path.read_text(encoding="utf-8", errors="replace")
+
+
 def ingest(source_dir: Path, output_dir: Path) -> list[dict[str, Any]]:
     """01_ingest: Scan source directory, create manifest with file metadata."""
     manifest: list[dict[str, Any]] = []
@@ -35,7 +45,7 @@ def ingest(source_dir: Path, output_dir: Path) -> list[dict[str, Any]]:
         year_bucket = year_match.group(1) if year_match else "unknown"
 
         for txt_file in sorted(year_dir.glob("*.txt")):
-            content = txt_file.read_text(encoding="utf-8")
+            content = _read_text(txt_file)
             file_hash = hashlib.sha256(content.encode()).hexdigest()[:16]
             entry = {
                 "path": str(txt_file.relative_to(source_dir)),
@@ -67,7 +77,7 @@ def extract_code(
 
     for entry in manifest:
         file_path = source_dir / entry["path"]
-        content = file_path.read_text(encoding="utf-8")
+        content = _read_text(file_path)
         matches = code_pattern.findall(content)
 
         strategy_id = entry["hash"]
@@ -302,7 +312,7 @@ def chunk_and_embed(
 
     chunk_ids: list[str] = []
     chunk_docs: list[str] = []
-    chunk_metas: list[dict[str, Any]] = []
+    chunk_metas: list[dict[str, str]] = []
 
     for item in enriched:
         sid = item["hash"]
@@ -355,31 +365,159 @@ def chunk_and_embed(
         collection.add(
             ids=chunk_ids[i : i + batch_size],
             documents=chunk_docs[i : i + batch_size],
-            metadatas=chunk_metas[i : i + batch_size],
+            metadatas=chunk_metas[i : i + batch_size],  # type: ignore[arg-type]
         )
 
     print(f"ChromaDB: {collection.count()} chunks embedded in {chroma_path}")
 
 
+def build_without_llm(extracted: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Build minimal enriched records without LLM (code-only metadata)."""
+    enriched: list[dict[str, Any]] = []
+    for item in extracted:
+        if item.get("code_status") != "ok":
+            continue
+        enriched.append(
+            {
+                **item,
+                "description": item["strategy_name"],
+                "l2_type": "unknown",
+                "l2_factors": [],
+                "l2_parameters": {},
+                "l2_code_logic": "",
+                "experience": "",
+                "failure_modes": [],
+                "boundary_text": "",
+            }
+        )
+    return enriched
+
+
+def load_staging_extracts(staging_dir: Path) -> list[dict[str, Any]]:
+    """Load pre-extracted strategy code from an existing staging directory."""
+    manifest_path = staging_dir / "manifest.jsonl"
+    if not manifest_path.is_file():
+        msg = f"missing manifest: {manifest_path}"
+        raise FileNotFoundError(msg)
+
+    enriched: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
+    for line in manifest_path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        entry = json.loads(line)
+        if entry.get("code_status") != "ok":
+            continue
+
+        strategy_id = entry["id"]
+        if strategy_id in seen_ids:
+            continue
+        seen_ids.add(strategy_id)
+        code_path = staging_dir / f"{strategy_id}.py"
+        if not code_path.is_file():
+            continue
+
+        code = _read_text(code_path)
+        item: dict[str, Any] = {
+            "hash": strategy_id,
+            "strategy_name": entry.get("title", strategy_id),
+            "year_bucket": entry.get("year_bucket", ""),
+            "description": entry.get("title", ""),
+            "code": code,
+            "code_status": "ok",
+            "l2_type": "unknown",
+            "l2_factors": [],
+            "l2_parameters": {},
+            "l2_code_logic": "",
+            "experience": "",
+            "failure_modes": [],
+            "boundary_text": "",
+        }
+
+        meta_path = staging_dir / f"{strategy_id}.meta.json"
+        if meta_path.is_file():
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            llm = meta.get("llm_extraction", {})
+            item["l2_type"] = llm.get("type", "unknown")
+            factors = llm.get("factors", [])
+            item["l2_factors"] = [
+                factor["name"] if isinstance(factor, dict) else str(factor) for factor in factors
+            ]
+            item["l2_parameters"] = llm.get("parameters", {})
+            item["l2_code_logic"] = llm.get("code_logic", "")
+
+        enriched.append(item)
+
+    return enriched
+
+
 def validate(output_dir: Path) -> bool:
     """08_validate: Check that all required outputs exist."""
-    required = ["dc42.db"]
+    required = ["dc42.db", "chroma_db"]
     for name in required:
-        if not (output_dir / name).exists():
+        path = output_dir / name
+        if not path.exists():
             print(f"FAIL: missing {name}")
             return False
     print("PASS: all outputs present")
     return True
 
 
+def _reset_artifact_outputs(output_dir: Path) -> None:
+    """Remove prior db/chroma artifacts before a full rebuild."""
+    import shutil
+
+    db_path = output_dir / "dc42.db"
+    chroma_path = output_dir / "chroma_db"
+    if db_path.is_file():
+        db_path.unlink()
+    if chroma_path.is_dir():
+        shutil.rmtree(chroma_path)
+
+
 if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="Build DC42 knowledge base")
-    parser.add_argument("--source", type=Path, required=True)
+    parser.add_argument("--source", type=Path, help="DC42 txt source tree")
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument(
+        "--no-llm",
+        action="store_true",
+        help="Skip LLM enrichment; build dc42.db + chroma_db from extracted code only",
+    )
+    parser.add_argument(
+        "--staging",
+        type=Path,
+        help="Load pre-extracted code from staging/ (manifest.jsonl + *.py)",
+    )
     args = parser.parse_args()
 
-    manifest = ingest(source_dir=args.source, output_dir=args.output)
-    results = extract_code(manifest=manifest, source_dir=args.source, output_dir=args.output)
-    print(f"Ingested {len(manifest)} strategies, {sum(1 for r in results if r['code_status'] == 'ok')} with code")
+    if not args.staging and args.source is None:
+        parser.error("--source is required unless --staging is provided")
+
+    args.output.mkdir(parents=True, exist_ok=True)
+
+    if args.staging:
+        enriched = load_staging_extracts(args.staging)
+        _reset_artifact_outputs(args.output)
+        stats = compute_parameter_stats(enriched, args.output)
+        chunk_and_embed(enriched=enriched, stats=stats, output_dir=args.output)
+        validate(args.output)
+        print(f"Built artifacts from staging for {len(enriched)} strategies")
+    elif args.no_llm:
+        manifest = ingest(source_dir=args.source, output_dir=args.output)
+        results = extract_code(manifest=manifest, source_dir=args.source, output_dir=args.output)
+        ok_count = sum(1 for r in results if r["code_status"] == "ok")
+        print(f"Ingested {len(manifest)} strategies, {ok_count} with code")
+        enriched = build_without_llm(results)
+        _reset_artifact_outputs(args.output)
+        stats = compute_parameter_stats(enriched, args.output)
+        chunk_and_embed(enriched=enriched, stats=stats, output_dir=args.output)
+        validate(args.output)
+        print(f"Built artifacts for {len(enriched)} strategies")
+    else:
+        manifest = ingest(source_dir=args.source, output_dir=args.output)
+        results = extract_code(manifest=manifest, source_dir=args.source, output_dir=args.output)
+        ok_count = sum(1 for r in results if r["code_status"] == "ok")
+        print(f"Ingested {len(manifest)} strategies, {ok_count} with code")
