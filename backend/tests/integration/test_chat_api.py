@@ -58,6 +58,10 @@ class TestChatAPI:
 
         monkeypatch.setattr("app.web.api.thread.services.run_agent", noop_run_agent)
         monkeypatch.setattr("app.web.api.thread.views.sse_consumer", immediate_sse)
+        monkeypatch.setattr(
+            "app.web.api.thread.views.make_lead_agent",
+            lambda config=None: object(),
+        )
 
         thread_id = uuid4()
         status, _, events = await authed_api_client.post_sse(

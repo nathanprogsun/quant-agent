@@ -166,6 +166,10 @@ class TestThreadStreamSDK:
 
         monkeypatch.setattr("app.web.api.thread.services.run_agent", noop_run_agent)
         monkeypatch.setattr("app.web.api.thread.views.sse_consumer", immediate_sse)
+        monkeypatch.setattr(
+            "app.web.api.thread.views.make_lead_agent",
+            lambda config=None: object(),
+        )
 
         created = await authed_api_client.post("/api/v1/threads", json={"model_name": "gpt-4"})
         thread_id = created["id"]
