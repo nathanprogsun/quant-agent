@@ -104,6 +104,28 @@ async def test_agent_node_calls_middlewares() -> None:
 
 
 @pytest.mark.asyncio
+async def test_agent_node_passes_full_history_to_after_model() -> None:
+    """after_model hooks should see prior messages, not only the latest AI reply."""
+    mw = RecordingMiddleware()
+    mock_model = AsyncMock()
+    mock_model.ainvoke = AsyncMock(return_value=AIMessage(content="response"))
+
+    node = _make_agent_node(
+        model=mock_model,
+        system_prompt="test prompt",
+        middlewares=[mw],
+    )
+
+    state: ThreadState = {"messages": [HumanMessage(content="hi")]}
+    await node(state)
+
+    after_state = mw.after_model_calls[0]
+    assert len(after_state["messages"]) == 2
+    assert after_state["messages"][0].content == "hi"
+    assert after_state["messages"][1].content == "response"
+
+
+@pytest.mark.asyncio
 async def test_agent_node_injects_system_prompt() -> None:
     """agent_node prepends SystemMessage if not present."""
     mock_model = AsyncMock()

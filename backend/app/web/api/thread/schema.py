@@ -5,6 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validat
 
 from app.common.runs.manager import MultitaskStrategy, RunRecord
 from app.common.runs.schemas import DisconnectMode
+from app.core.chat.service.stream_modes import DEFAULT_STREAM_MODES
 
 MAX_MESSAGES = 50
 MAX_MESSAGE_LENGTH = 32768  # 32KB
@@ -105,7 +106,7 @@ class RunCreateRequest(BaseModel):
     config: dict[str, Any] = Field(default_factory=dict)
     context: dict[str, Any] = Field(default_factory=dict)
     stream_mode: list[str] = Field(
-        default_factory=lambda: ["values"],
+        default_factory=lambda: list(DEFAULT_STREAM_MODES),
         validation_alias="streamMode",
     )
     on_disconnect: DisconnectMode = Field(
@@ -116,6 +117,14 @@ class RunCreateRequest(BaseModel):
         default=MultitaskStrategy.REJECT,
         validation_alias="multitaskStrategy",
     )
+
+    @field_validator("on_disconnect", mode="before")
+    @classmethod
+    def normalize_on_disconnect(cls, v: Any) -> Any:
+        """Accept LangGraph SDK alias ``continue`` for keep-alive runs."""
+        if v == "continue":
+            return DisconnectMode.CONTINUE.value
+        return v
 
     @field_validator("input")
     @classmethod

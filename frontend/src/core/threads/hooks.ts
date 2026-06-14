@@ -1,77 +1,25 @@
 import type { Message } from "@langchain/langgraph-sdk";
 import { useStream } from "@langchain/langgraph-sdk/react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import {
+  filterConfirmedOptimistic,
+  mergeMessages,
+  normalizeCheckpointMessages,
+} from "@/core/messages/merge";
 import { getAPIClient } from "../api";
 
 import type { AgentThreadState } from "./types";
 
-// ── Message Identity ────────────────────────────────────────────────────────
-
-function messageIdentity(message: Message): string | undefined {
-  if (
-    "tool_call_id" in message &&
-    typeof message.tool_call_id === "string" &&
-    message.tool_call_id.length > 0
-  ) {
-    return `tool:${message.tool_call_id}`;
-  }
-  if (typeof message.id === "string" && message.id.length > 0) {
-    return `message:${message.id}`;
-  }
-  return undefined;
-}
-
-// ── Merge Messages ──────────────────────────────────────────────────────────
-
-function dedupeMessagesByIdentity(messages: Message[]): Message[] {
-  const lastIndexByIdentity = new Map<string, number>();
-
-  messages.forEach((message, index) => {
-    const identity = messageIdentity(message);
-    if (identity) lastIndexByIdentity.set(identity, index);
-  });
-
-  return messages.filter((message, index) => {
-    const identity = messageIdentity(message);
-    return !identity || lastIndexByIdentity.get(identity) === index;
-  });
-}
+const NEW_THREAD_ID = "new";
 
 function historyMessagesFromThread(
   history: Array<{ values?: AgentThreadState }> | undefined,
 ): Message[] {
   const head = history?.[0]?.values;
-  return head?.messages ?? [];
-}
-
-export function mergeMessages(
-  historyMessages: Message[],
-  threadMessages: Message[],
-  optimisticMessages: Message[],
-): Message[] {
-  const threadMessageIds = new Set(
-    threadMessages.map(messageIdentity).filter(Boolean) as string[],
-  );
-
-  // Find overlap cutoff in history
-  let cutoff = historyMessages.length;
-  for (let i = historyMessages.length - 1; i >= 0; i--) {
-    const msg = historyMessages[i];
-    if (!msg) continue;
-    const identity = messageIdentity(msg);
-    if (identity && threadMessageIds.has(identity)) {
-      cutoff = i;
-    } else {
-      break;
-    }
-  }
-
-  return dedupeMessagesByIdentity([
-    ...historyMessages.slice(0, cutoff),
-    ...threadMessages,
-    ...optimisticMessages,
-  ]);
+  const messages = head?.messages ?? [];
+  return normalizeCheckpointMessages(messages);
 }
 
 // ── Thread Stream Options ───────────────────────────────────────────────────
@@ -93,16 +41,22 @@ export function useThreadStream({
   onCreated,
   onFinish,
 }: ThreadStreamOptions) {
-  const [onStreamThreadId, setOnStreamThreadId] = useState(() => threadId);
+  const isNewThread = !threadId || threadId === NEW_THREAD_ID;
+  const [onStreamThreadId, setOnStreamThreadId] = useState<string | undefined>(
+    () => (isNewThread ? undefined : threadId),
+  );
   const [optimisticMessages, setOptimisticMessages] = useState<Message[]>([]);
   const listeners = useRef({ onCreated, onFinish, onThreadId });
+  const pendingNavigationThreadId = useRef<string | null>(null);
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     listeners.current = { onCreated, onFinish, onThreadId };
   }, [onCreated, onFinish, onThreadId]);
 
   useEffect(() => {
-    setOnStreamThreadId(threadId ?? undefined);
+    if (!threadId || threadId === NEW_THREAD_ID) return;
+    setOnStreamThreadId(threadId);
   }, [threadId]);
 
   const thread = useStream<AgentThreadState>({
@@ -116,6 +70,7 @@ export function useThreadStream({
       listeners.current.onThreadId?.(newThreadId);
     },
     onCreated(meta) {
+      pendingNavigationThreadId.current = meta.thread_id;
       listeners.current.onCreated?.({
         thread_id: meta.thread_id,
         run_id: meta.run_id,
@@ -124,6 +79,16 @@ export function useThreadStream({
     onFinish(state) {
       setOptimisticMessages([]);
       listeners.current.onFinish?.(state);
+
+      const activeThreadId =
+        pendingNavigationThreadId.current ??
+        onStreamThreadId ??
+        (threadId && threadId !== NEW_THREAD_ID ? threadId : null);
+
+      if (activeThreadId) {
+        queryClient.invalidateQueries({ queryKey: ["threads"] });
+        queryClient.invalidateQueries({ queryKey: ["threads", activeThreadId] });
+      }
     },
   });
 
@@ -144,11 +109,15 @@ export function useThreadStream({
   );
 
   const historyMessages = historyMessagesFromThread(thread.history);
+  const pendingOptimistic = filterConfirmedOptimistic(
+    thread.messages,
+    optimisticMessages,
+  );
 
   const messages = mergeMessages(
     historyMessages,
     thread.messages,
-    optimisticMessages,
+    pendingOptimistic,
   );
 
   return {
@@ -156,5 +125,8 @@ export function useThreadStream({
     messages,
     sendMessage,
     clearOptimistic: () => setOptimisticMessages([]),
+    pendingNavigationThreadId,
   };
 }
+
+export { NEW_THREAD_ID };

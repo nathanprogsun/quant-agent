@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 
+from app.core.chat.tools.builtin.param_tool import load_default_dc42_ranges
 from app.core.dc42.retriever import DC42Retriever
 from app.core.dc42.types import RetrievalResult
 
@@ -51,3 +52,8 @@ async def build_dc42_context(
         return ""
 
     return format_dc42_context(result, max_chunks=top_k)
+
+
+def load_dc42_ranges() -> dict[str, dict[str, float]]:
+    """Load DC42 parameter percentile bounds for tool validation."""
+    return load_default_dc42_ranges()

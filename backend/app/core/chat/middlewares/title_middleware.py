@@ -19,7 +19,7 @@ class TitleMiddleware(AgentMiddleware):
 
     async def after_model(self, state: dict[str, Any], config: dict[str, Any]) -> dict[str, Any] | None:
         """Generate title from conversation if not already generated."""
-        if self._title_generated:
+        if self._title_generated or state.get("title"):
             return None
 
         messages = state.get("messages", [])
@@ -37,7 +37,7 @@ class TitleMiddleware(AgentMiddleware):
                         title += "..."
                     self._title = title
                     self._title_generated = True
-                    return {"conversation_title": title}
+                    return {"title": title}
                 break
 
         return None

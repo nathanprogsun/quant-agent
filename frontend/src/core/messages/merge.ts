@@ -1,81 +1,100 @@
 import type { Message } from "@langchain/langgraph-sdk";
 
-/**
- * Message identity for deduplication.
- * Uses message.id or tool_call_id as unique key.
- */
-function getMessageIdentity(message: Message): string | null {
-  if (message.id) return message.id;
-  if ("tool_call_id" in message && message.tool_call_id) {
+import { extractContentFromMessage } from "./utils";
+
+function messageIdentity(message: Message): string | undefined {
+  if (
+    "tool_call_id" in message &&
+    typeof message.tool_call_id === "string" &&
+    message.tool_call_id.length > 0
+  ) {
     return `tool:${message.tool_call_id}`;
   }
-  return null;
+  if (typeof message.id === "string" && message.id.length > 0) {
+    return `message:${message.id}`;
+  }
+  return undefined;
+}
+
+function dedupeMessagesByIdentity(messages: Message[]): Message[] {
+  const lastIndexByIdentity = new Map<string, number>();
+
+  messages.forEach((message, index) => {
+    const identity = messageIdentity(message);
+    if (identity) lastIndexByIdentity.set(identity, index);
+  });
+
+  return messages.filter((message, index) => {
+    const identity = messageIdentity(message);
+    return !identity || lastIndexByIdentity.get(identity) === index;
+  });
+}
+
+/** Normalize LangChain checkpoint dict messages into SDK Message shape. */
+export function normalizeCheckpointMessage(message: Message): Message {
+  if (typeof message.content === "string" || Array.isArray(message.content)) {
+    return message;
+  }
+
+  const data = (message as Message & {
+    data?: { content?: unknown; id?: string };
+  }).data;
+
+  if (!data) return message;
+
+  return {
+    ...message,
+    id: message.id ?? data.id,
+    content: data.content as Message["content"],
+  };
+}
+
+export function normalizeCheckpointMessages(messages: Message[]): Message[] {
+  return messages.map(normalizeCheckpointMessage);
+}
+
+/** Drop optimistic human messages once the stream has confirmed the same text. */
+export function filterConfirmedOptimistic(
+  stream: Message[],
+  optimistic: Message[],
+): Message[] {
+  if (optimistic.length === 0) return optimistic;
+
+  const confirmedHumanContent = new Set(
+    stream
+      .filter((message) => message.type === "human")
+      .map((message) => extractContentFromMessage(message))
+      .filter(Boolean),
+  );
+
+  return optimistic.filter((message) => {
+    if (message.type !== "human") return true;
+    const content = extractContentFromMessage(message);
+    return !content || !confirmedHumanContent.has(content);
+  });
 }
 
 /**
- * Merge three message sources with O(1) deduplication.
+ * Merge thread messages for display.
  *
- * Priority: optimistic > stream > history
- * - optimistic: user messages not yet confirmed by server
- * - stream: real-time SSE messages (highest server priority)
- * - history: loaded from backend (may overlap with stream on reconnect)
+ * LangGraph SDK `messages` already reflects `stream.values ?? historyValues`.
+ * Do not concatenate history checkpoint messages on top — that duplicates turns.
+ * History is only used before stream hydration (initial thread load).
  */
 export function mergeMessages(
   history: Message[],
   stream: Message[],
   optimistic: Message[],
 ): Message[] {
-  const seen = new Map<string, Message>();
-  const result: Message[] = [];
+  const normalizedHistory = normalizeCheckpointMessages(history);
+  const base = stream.length > 0 ? stream : normalizedHistory;
+  const confirmationSource = stream.length > 0 ? stream : base;
+  const pendingOptimistic = filterConfirmedOptimistic(
+    confirmationSource,
+    optimistic,
+  );
 
-  // 1. Add history messages (lowest priority)
-  for (const msg of history) {
-    const key = getMessageIdentity(msg);
-    if (key) {
-      seen.set(key, msg);
-      result.push(msg);
-    } else {
-      result.push(msg);
-    }
-  }
-
-  // 2. Merge stream messages (higher priority — overwrites history)
-  for (const msg of stream) {
-    const key = getMessageIdentity(msg);
-    if (key) {
-      if (seen.has(key)) {
-        const idx = result.findIndex(
-          (m) => getMessageIdentity(m) === key,
-        );
-        if (idx !== -1) result[idx] = msg;
-      } else {
-        result.push(msg);
-      }
-      seen.set(key, msg);
-    } else {
-      result.push(msg);
-    }
-  }
-
-  // 3. Merge optimistic messages (highest priority)
-  for (const msg of optimistic) {
-    const key = getMessageIdentity(msg);
-    if (key) {
-      if (seen.has(key)) {
-        const idx = result.findIndex(
-          (m) => getMessageIdentity(m) === key,
-        );
-        if (idx !== -1) result[idx] = msg;
-      } else {
-        result.push(msg);
-      }
-      seen.set(key, msg);
-    } else {
-      result.push(msg);
-    }
-  }
-
-  return result;
+  return dedupeMessagesByIdentity([...base, ...pendingOptimistic]);
 }
 
 /**
@@ -91,13 +110,13 @@ export function mergeIncremental(
 
   const seen = new Set<string>();
   for (const msg of existing) {
-    const key = getMessageIdentity(msg);
+    const key = messageIdentity(msg);
     if (key) seen.add(key);
   }
 
   const newMessages: Message[] = [];
   for (const msg of incoming) {
-    const key = getMessageIdentity(msg);
+    const key = messageIdentity(msg);
     if (!key || !seen.has(key)) {
       newMessages.push(msg);
     }

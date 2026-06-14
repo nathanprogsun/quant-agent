@@ -127,6 +127,24 @@ describe("extractContentFromMessage", () => {
     const message = { id: "1", type: "ai", content: "  hello  " } as Message;
     expect(extractContentFromMessage(message)).toBe("hello");
   });
+
+  test("extracts LangChain checkpoint data.content string", () => {
+    const message = {
+      type: "human",
+      data: { content: "hi", id: "msg-1" },
+    } as unknown as Message;
+    expect(extractContentFromMessage(message)).toBe("hi");
+  });
+
+  test("extracts LangChain checkpoint data.content array", () => {
+    const message = {
+      type: "ai",
+      data: {
+        content: [{ type: "text", text: "Hello" }],
+      },
+    } as unknown as Message;
+    expect(extractContentFromMessage(message)).toBe("Hello");
+  });
 });
 
 describe("extractToolCallsFromMessage", () => {

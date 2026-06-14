@@ -98,18 +98,27 @@ def _make_agent_node(
             messages = [SystemMessage(content=system_prompt), *messages]
 
         # before_model hooks
+        state_patches: dict[str, Any] = {}
         for mw in middlewares:
             modified = await mw.before_model(dict(state), {})
             if modified:
                 messages = modified.get("messages", messages)
+                for key, value in modified.items():
+                    if key != "messages":
+                        state_patches[key] = value
 
         # LLM call
         response = await model.ainvoke(messages)
 
         # after_model hooks
-        state_update: dict[str, Any] = {"messages": [response]}
+        state_update: dict[str, Any] = {"messages": [response], **state_patches}
+        preview_state = {**dict(state), **state_update}
+        preview_state["messages"] = [
+            *list(state.get("messages", [])),
+            *state_update.get("messages", []),
+        ]
         for mw in middlewares:
-            modified = await mw.after_model({**dict(state), **state_update}, {})
+            modified = await mw.after_model(preview_state, {})
             if modified:
                 state_update.update(modified)
 

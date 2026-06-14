@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Annotated, Any
 
 from langchain_core.tools import BaseTool, tool
+from langgraph.prebuilt import InjectedState
 
 from app.core.dc42.paths import DEFAULT_PARAMETER_LIMITS_PATH
 
@@ -58,18 +59,40 @@ def load_default_dc42_ranges() -> dict[str, dict[str, float]]:
     """Load committed DC42 parameter limits for agent tool validation."""
     if not DEFAULT_PARAMETER_LIMITS_PATH.is_file():
         return {}
-    return json.loads(DEFAULT_PARAMETER_LIMITS_PATH.read_text(encoding="utf-8"))
+    data: dict[str, dict[str, float]] = json.loads(
+        DEFAULT_PARAMETER_LIMITS_PATH.read_text(encoding="utf-8")
+    )
+    return data
+
+
+def resolve_dc42_ranges(
+    state: dict[str, Any] | None,
+    *,
+    fallback: dict[str, dict[str, float]] | None = None,
+) -> dict[str, dict[str, float]]:
+    """Resolve DC42 ranges from graph state, then defaults."""
+    if state:
+        cached = state.get("dc42_ranges")
+        if isinstance(cached, dict) and cached:
+            return cached
+    if fallback is not None:
+        return fallback
+    return load_default_dc42_ranges()
 
 
 def make_validate_parameters_tool(
     dc42_ranges: dict[str, dict[str, float]] | None = None,
 ) -> BaseTool:
     """Create a LangChain tool that validates params against DC42 ranges."""
-    ranges = dc42_ranges if dc42_ranges is not None else load_default_dc42_ranges()
+    factory_ranges = dc42_ranges
 
     @tool
-    def validate_strategy_parameters(params: dict[str, Any]) -> dict[str, Any]:
+    def validate_strategy_parameters(
+        params: dict[str, Any],
+        state: Annotated[dict[str, Any], InjectedState],
+    ) -> dict[str, Any]:
         """Validate strategy parameters against DC42 historical percentile ranges."""
+        ranges = resolve_dc42_ranges(state, fallback=factory_ranges)
         return validation_result_to_dict(validate_parameters(params, ranges))
 
     return validate_strategy_parameters

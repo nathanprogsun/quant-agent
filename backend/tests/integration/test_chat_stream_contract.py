@@ -16,6 +16,14 @@ def _assistant_text_from_events(events: list[tuple[str, Any]]) -> str:
     chunks: list[str] = []
 
     for event_name, data in events:
+        if event_name == "messages" and isinstance(data, list) and len(data) == 2:
+            chunk = data[0]
+            if isinstance(chunk, dict):
+                content = chunk.get("content")
+                if isinstance(content, str) and content.strip():
+                    chunks.append(content.strip())
+            continue
+
         if event_name not in {"values", "messages"} or not isinstance(data, dict):
             continue
 
@@ -28,7 +36,7 @@ def _assistant_text_from_events(events: list[tuple[str, Any]]) -> str:
                 continue
 
             role = message.get("type") or message.get("role")
-            if role not in {"ai", "assistant", "AIMessage"}:
+            if role not in {"ai", "assistant", "AIMessage", "AIMessageChunk"}:
                 continue
 
             content = message.get("content")
@@ -42,7 +50,19 @@ def _assistant_text_from_events(events: list[tuple[str, Any]]) -> str:
                 if isinstance(nested, str) and nested.strip():
                     chunks.append(nested.strip())
 
+    if not chunks:
+        return ""
+
     return max(chunks, key=len, default="")
+
+
+def _message_chunk_events(events: list[tuple[str, Any]]) -> list[list[Any]]:
+    """Return SSE payloads shaped as [chunk, metadata] tuples."""
+    return [
+        data
+        for event_name, data in events
+        if event_name == "messages" and isinstance(data, list) and len(data) == 2
+    ]
 
 
 @pytest.mark.asyncio
@@ -71,7 +91,6 @@ async def test_chat_stream_contract(
                 ],
             },
             "context": {"model_name": settings.model},
-            "stream_mode": ["values"],
         },
     )
 
@@ -97,3 +116,9 @@ async def test_chat_stream_contract(
 
     assistant_text = _assistant_text_from_events(events)
     assert assistant_text.strip(), "expected non-empty assistant content in values/messages events"
+
+    message_events = _message_chunk_events(events)
+    assert len(message_events) >= 2, "expected multiple incremental messages events"
+
+    thread = await authed_api_client.get(f"/api/v1/threads/{thread_id}")
+    assert thread["title"] == "Reply with the single word: hello"

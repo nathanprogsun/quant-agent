@@ -9,7 +9,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 from app.core.chat.middlewares.base import AgentMiddleware
 from app.core.dc42.retriever import DC42Retriever, create_default_retriever
-from app.core.generation.context_builder import DEFAULT_TOP_K, build_dc42_context
+from app.core.generation.context_builder import DEFAULT_TOP_K, build_dc42_context, load_dc42_ranges
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +77,10 @@ class DC42ContextMiddleware(AgentMiddleware):
         else:
             messages.insert(0, SystemMessage(content=block.strip()))
 
-        return {"messages": messages}
+        return {
+            "messages": messages,
+            "dc42_ranges": load_dc42_ranges(),
+        }
 
 
 def _latest_human_content(messages: list[Any]) -> str:
