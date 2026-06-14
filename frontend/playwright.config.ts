@@ -21,12 +21,14 @@ export default defineConfig({
     },
   ],
 
-  webServer: [
+  webServer: process.env.CI
+    ? undefined
+    : [
     {
       command:
         "cd ../backend && uv run alembic upgrade head && uv run uvicorn app.web.application:app --port 8000",
       url: "http://localhost:8000/health",
-      reuseExistingServer: !process.env.CI,
+      reuseExistingServer: true,
       timeout: 120_000,
       env: {
         ...process.env,
@@ -37,7 +39,7 @@ export default defineConfig({
     {
       command: "pnpm dev",
       url: "http://localhost:3000",
-      reuseExistingServer: !process.env.CI,
+      reuseExistingServer: true,
       timeout: 120_000,
       env: {
         ...process.env,
