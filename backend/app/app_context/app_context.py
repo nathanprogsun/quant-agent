@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import dataclasses
-from typing import Any
+from contextlib import AsyncExitStack
+from typing import Any, Literal
 
 from httpx import AsyncClient
 from langgraph.checkpoint.base import BaseCheckpointSaver
@@ -14,6 +15,29 @@ from app.core.auth.service.auth_service import AuthService
 from app.core.chat.service.thread_service import ThreadService
 from app.core.user.service.user_service import UserService
 from app.db.dbengine.core import DatabaseEngine
+
+
+async def create_checkpointer(
+    exit_stack: AsyncExitStack,
+    *,
+    backend: Literal["memory", "sqlite", "postgres"] = "sqlite",
+    connection_string: str = "checkpoints.db",
+) -> BaseCheckpointSaver[Any]:
+    """Enter a checkpointer context on ``exit_stack`` for the app lifetime."""
+    if backend == "sqlite":
+        from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+
+        return await exit_stack.enter_async_context(
+            AsyncSqliteSaver.from_conn_string(connection_string),
+        )
+
+    if backend == "memory":
+        from langgraph.checkpoint.memory import InMemorySaver
+
+        return InMemorySaver()
+
+    msg = f"Checkpointer backend {backend!r} is not implemented"
+    raise NotImplementedError(msg)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -49,6 +73,11 @@ class AppContext:
     checkpointer: BaseCheckpointSaver[Any] | None = None
     stream_bridge: StreamBridge | None = None
     run_manager: RunManager | None = None
+    lifespan_exit_stack: AsyncExitStack | None = dataclasses.field(
+        default=None,
+        compare=False,
+        repr=False,
+    )
 
     async def close(self) -> None:
         """Close all resources held by the app context."""
@@ -56,6 +85,7 @@ class AppContext:
         await self.http_aclient.aclose()
         if self.stream_bridge:
             await self.stream_bridge.close()
-        # InMemorySaver 没有 close() 方法, 但其他实现可能有资源需要清理
-        if self.checkpointer and hasattr(self.checkpointer, "close"):
+        if self.lifespan_exit_stack is not None:
+            await self.lifespan_exit_stack.aclose()
+        elif self.checkpointer is not None and hasattr(self.checkpointer, "close"):
             await self.checkpointer.close()

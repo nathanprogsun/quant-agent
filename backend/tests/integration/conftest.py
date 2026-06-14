@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import AsyncGenerator
+from contextlib import AsyncExitStack
 from pathlib import Path
 from uuid import uuid4
 
@@ -11,7 +12,7 @@ from alembic import command
 from alembic.config import Config
 from httpx import ASGITransport, AsyncClient
 
-from app.app_context.app_context import AppContext, LifeSpanService
+from app.app_context.app_context import AppContext, LifeSpanService, create_checkpointer
 from app.common.runs.manager import RunManager
 from app.common.stream_bridge.memory import MemoryStreamBridge
 from app.core.auth.service.auth_service import get_auth_service_by_engine
@@ -72,9 +73,19 @@ def setup_test_db(alembic_cfg: Config, test_db_url: str) -> str:
 
 
 @pytest.fixture(scope="session")
-async def test_app_context(setup_test_db: str) -> AppContext:
-    """Create test app context with test database."""
+async def test_app_context(
+    setup_test_db: str,
+    tmp_path_factory: pytest.TempPathFactory,
+) -> AsyncGenerator[AppContext, None]:
+    """Create test app context with test database and sqlite checkpointer."""
     engine = DatabaseEngine(url=setup_test_db)
+    lifespan_exit_stack = AsyncExitStack()
+    checkpoint_db = tmp_path_factory.mktemp("checkpoints") / "checkpoints.db"
+    checkpointer = await create_checkpointer(
+        lifespan_exit_stack,
+        backend="sqlite",
+        connection_string=str(checkpoint_db),
+    )
 
     # Create services with test engine using factory functions
     auth_service = get_auth_service_by_engine(db_engine=engine)
@@ -102,14 +113,13 @@ async def test_app_context(setup_test_db: str) -> AppContext:
         lifespan_service=lifespan_service,
         run_manager=run_manager,
         stream_bridge=stream_bridge,
+        checkpointer=checkpointer,
+        lifespan_exit_stack=lifespan_exit_stack,
     )
 
     yield app_context
 
-    # Cleanup
-    await http_aclient.aclose()
-    await stream_bridge.close()
-    await engine.close()
+    await app_context.close()
 
 
 @pytest.fixture

@@ -10,7 +10,7 @@ import asyncio
 import logging
 import time
 from collections.abc import AsyncGenerator
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 from typing import Any, cast
 
 import anyio
@@ -29,7 +29,7 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.trace import set_tracer_provider
 
-from app.app_context.app_context import AppContext, LifeSpanService
+from app.app_context.app_context import AppContext, LifeSpanService, create_checkpointer
 from app.app_logging import get_logger
 from app.common.runs.manager import RunManager
 from app.common.stats.metric import custom_metric
@@ -115,31 +115,13 @@ async def setup_app_context(app: FastAPI) -> None:
         logger.info("Pre-warming database connection pool")  # type: ignore[no-untyped-call]
         await engine.prewarm_db_connection()
 
-    # Checkpointer
-    # AsyncSqliteSaver.from_conn_string() is an async generator factory — it must
-    # be consumed within async with for the saver instance to be valid. We use a
-    # module-level variable so the consumed instance is accessible after setup.
-    if cfg.checkpointer_backend == "sqlite":
-        from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
-
-        _sqlite_checkpointer: Any = None
-
-        async def _get_sqlite_checkpointer():
-            nonlocal _sqlite_checkpointer
-            async with AsyncSqliteSaver.from_conn_string(
-                cfg.checkpointer_connection_string
-            ) as cp:
-                _sqlite_checkpointer = cp
-                yield cp
-
-        from contextlib import aclosing
-
-        async with aclosing(_get_sqlite_checkpointer()) as _:
-            checkpointer: Any = _sqlite_checkpointer
-    else:
-        from langgraph.checkpoint.memory import InMemorySaver
-
-        checkpointer = InMemorySaver()
+    # Checkpointer stays open for the app lifetime via AsyncExitStack (closed on shutdown).
+    lifespan_exit_stack = AsyncExitStack()
+    checkpointer = await create_checkpointer(
+        lifespan_exit_stack,
+        backend=cfg.checkpointer_backend,
+        connection_string=cfg.checkpointer_connection_string,
+    )
 
     # StreamBridge
     stream_bridge = MemoryStreamBridge(queue_maxsize=cfg.stream_bridge_queue_maxsize)
@@ -164,6 +146,7 @@ async def setup_app_context(app: FastAPI) -> None:
         checkpointer=checkpointer,
         stream_bridge=stream_bridge,
         run_manager=run_manager,
+        lifespan_exit_stack=lifespan_exit_stack,
     )
     set_app_context(app=app, app_context=app_context)
     logger.info("Application context initialized")  # type: ignore[no-untyped-call]
