@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 from unittest.mock import AsyncMock, patch
 from uuid import uuid4
-
-from typing import Any
 
 import pytest
 from httpx import ASGITransport, AsyncClient
