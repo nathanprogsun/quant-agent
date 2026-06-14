@@ -66,13 +66,20 @@ export async function POST(
       },
     });
 
+    const responseHeaders: Record<string, string> = {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
+    };
+
+    const contentLocation = response.headers.get("Content-Location");
+    if (contentLocation) {
+      responseHeaders["Content-Location"] = contentLocation;
+    }
+
     return new Response(stream, {
-      headers: {
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
-        "Connection": "keep-alive",
-        "X-Accel-Buffering": "no",
-      },
+      headers: responseHeaders,
     });
   } catch (error) {
     console.error("Run stream proxy error:", error);

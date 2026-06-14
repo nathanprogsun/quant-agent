@@ -29,19 +29,18 @@ export async function GET(
 ) {
   try {
     const { thread_id } = await params;
-
-    const response = await proxyJson(`/api/v1/threads/${thread_id}/history`);
+    const response = await proxyJson(`/api/v1/threads/${thread_id}/state`);
 
     if (!response.ok) {
-      return NextResponse.json(
-        { detail: "Failed to fetch thread history" },
-        { status: response.status }
-      );
+      const error = await response.json().catch(() => ({
+        detail: "Failed to fetch thread state",
+      }));
+      return NextResponse.json(error, { status: response.status });
     }
 
     return NextResponse.json(await response.json());
   } catch (error) {
-    console.error("Get thread history proxy error:", error);
+    console.error("Get thread state proxy error:", error);
     return NextResponse.json(
       { detail: "Internal server error" },
       { status: 500 }
@@ -57,7 +56,7 @@ export async function POST(
     const { thread_id } = await params;
     const body = await request.json();
 
-    const response = await proxyJson(`/api/v1/threads/${thread_id}/history`, {
+    const response = await proxyJson(`/api/v1/threads/${thread_id}/state`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -65,14 +64,14 @@ export async function POST(
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({
-        detail: "Failed to fetch thread history",
+        detail: "Failed to update thread state",
       }));
       return NextResponse.json(error, { status: response.status });
     }
 
     return NextResponse.json(await response.json());
   } catch (error) {
-    console.error("Post thread history proxy error:", error);
+    console.error("Post thread state proxy error:", error);
     return NextResponse.json(
       { detail: "Internal server error" },
       { status: 500 }

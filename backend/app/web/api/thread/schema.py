@@ -131,3 +131,25 @@ class RunCreateRequest(BaseModel):
         if isinstance(v, str):
             return [v]
         return v
+
+
+class HistoryRequest(BaseModel):
+    """LangGraph SDK POST /history body."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    limit: int = Field(default=10, ge=1, le=1000)
+    before: dict[str, Any] | None = None
+    metadata: dict[str, Any] | None = None
+    checkpoint: dict[str, Any] | None = None
+
+
+class StateUpdateRequest(BaseModel):
+    """LangGraph SDK POST /state body."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    values: dict[str, Any] | None = None
+    checkpoint: dict[str, Any] | None = None
+    checkpoint_id: str | None = Field(default=None, validation_alias="checkpointId")
+    as_node: str | None = Field(default=None, validation_alias="asNode")

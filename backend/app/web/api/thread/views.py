@@ -12,10 +12,19 @@ from app.core.chat.agent.lead_agent import make_lead_agent
 from app.core.chat.service.thread_service import ThreadService
 from app.db.models.user import User
 from app.web.api.deps import get_current_user
+from app.web.api.thread.checkpoint_state import (
+    checkpoint_tuple_to_thread_state,
+    empty_thread_state,
+    new_checkpoint,
+    serialize_state_values,
+    thread_config,
+)
 from app.web.api.thread.schema import (
+    HistoryRequest,
     RunCreateRequest,
     RunListResponse,
     RunResponse,
+    StateUpdateRequest,
     ThreadListResponse,
     ThreadResponse,
     UpdateTitleRequest,
@@ -264,21 +273,138 @@ async def cancel_run(
 async def get_thread_history(
     thread_id: UUID,
     current_user: Annotated[User, Depends(get_current_user)],
+    thread_service: Annotated[ThreadService, Depends(thread_service_from_lifespan)],
     request: Request,
 ) -> dict[str, Any]:
-    """Get thread history from checkpointer."""
+    """Legacy GET history — returns latest checkpoint messages."""
+    await thread_service.get(thread_id, current_user.id)
+
     app_context = request.app.state.app_context
     checkpointer = app_context.checkpointer
-
     if not checkpointer:
         return {"messages": []}
 
-    config = RunnableConfig(configurable={"thread_id": str(thread_id)})
+    config = thread_config(thread_id)
     checkpoint = await checkpointer.aget(config)
+    if checkpoint and checkpoint.get("channel_values", {}).get("messages"):
+        values = serialize_state_values(checkpoint["channel_values"])
+        return {"messages": values.get("messages", [])}
 
-    if checkpoint and checkpoint.channel_values.get("messages"):
-        messages = checkpoint.channel_values["messages"]
+    return {"messages": []}
+
+
+@router.post("/{thread_id}/history")
+async def post_thread_history(
+    thread_id: UUID,
+    body: HistoryRequest,
+    current_user: Annotated[User, Depends(get_current_user)],
+    thread_service: Annotated[ThreadService, Depends(thread_service_from_lifespan)],
+    request: Request,
+) -> list[dict[str, Any]]:
+    """Return checkpoint history in LangGraph SDK ThreadState shape."""
+    await thread_service.get(thread_id, current_user.id)
+
+    app_context = request.app.state.app_context
+    checkpointer = app_context.checkpointer
+    if not checkpointer:
+        return []
+
+    config = thread_config(thread_id)
+    before_config: RunnableConfig | None = None
+    if body.before is not None:
+        before_config = RunnableConfig(configurable=body.before)
+    elif body.checkpoint is not None:
+        before_config = RunnableConfig(configurable=body.checkpoint)
+
+    states: list[dict[str, Any]] = []
+    async for checkpoint_tuple in checkpointer.alist(
+        config,
+        before=before_config,
+        limit=body.limit,
+    ):
+        states.append(checkpoint_tuple_to_thread_state(checkpoint_tuple))
+
+    return states
+
+
+@router.get("/{thread_id}/state")
+async def get_thread_state(
+    thread_id: UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    thread_service: Annotated[ThreadService, Depends(thread_service_from_lifespan)],
+    request: Request,
+) -> dict[str, Any]:
+    """Return latest thread state in LangGraph SDK shape."""
+    await thread_service.get(thread_id, current_user.id)
+
+    app_context = request.app.state.app_context
+    checkpointer = app_context.checkpointer
+    if not checkpointer:
+        return empty_thread_state(thread_id)
+
+    config = thread_config(thread_id)
+    checkpoint_tuple = await checkpointer.aget_tuple(config)
+    if checkpoint_tuple is None:
+        return empty_thread_state(thread_id)
+
+    return checkpoint_tuple_to_thread_state(checkpoint_tuple)
+
+
+@router.post("/{thread_id}/state")
+async def post_thread_state(
+    thread_id: UUID,
+    body: StateUpdateRequest,
+    current_user: Annotated[User, Depends(get_current_user)],
+    thread_service: Annotated[ThreadService, Depends(thread_service_from_lifespan)],
+    request: Request,
+) -> dict[str, Any]:
+    """Update thread state values and return the new ThreadState snapshot."""
+    if not body.values:
+        return await get_thread_state(
+            thread_id, current_user, thread_service, request
+        )
+
+    await thread_service.get(thread_id, current_user.id)
+
+    app_context = request.app.state.app_context
+    checkpointer = app_context.checkpointer
+    if not checkpointer:
+        return empty_thread_state(thread_id)
+
+    config = thread_config(thread_id)
+    if body.checkpoint is not None:
+        config = RunnableConfig(
+            configurable={
+                **(config.get("configurable") or {}),
+                **body.checkpoint,
+            }
+        )
+    if body.checkpoint_id is not None:
+        configurable = dict(config.get("configurable") or {})
+        configurable["checkpoint_id"] = body.checkpoint_id
+        config = RunnableConfig(configurable=configurable)
+
+    checkpoint_tuple = await checkpointer.aget_tuple(config)
+    if checkpoint_tuple is None:
+        checkpoint = new_checkpoint(dict(body.values))
+        metadata: dict[str, Any] = {}
+        write_config = config
     else:
-        messages = []
+        channel_values = dict(checkpoint_tuple.checkpoint.get("channel_values") or {})
+        channel_values.update(body.values)
+        checkpoint = dict(checkpoint_tuple.checkpoint)
+        checkpoint["channel_values"] = channel_values
+        metadata = checkpoint_tuple.metadata or {}
+        write_config = checkpoint_tuple.config
 
-    return {"messages": messages}
+    next_config = await checkpointer.aput(
+        write_config,
+        checkpoint,
+        metadata,
+        {},
+    )
+    next_tuple = await checkpointer.aget_tuple(next_config)
+    if next_tuple is None:
+        return empty_thread_state(thread_id)
+
+    return checkpoint_tuple_to_thread_state(next_tuple)

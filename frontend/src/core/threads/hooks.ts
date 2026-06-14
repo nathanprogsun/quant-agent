@@ -38,6 +38,13 @@ function dedupeMessagesByIdentity(messages: Message[]): Message[] {
   });
 }
 
+function historyMessagesFromThread(
+  history: Array<{ values?: AgentThreadState }> | undefined,
+): Message[] {
+  const head = history?.[0]?.values;
+  return head?.messages ?? [];
+}
+
 export function mergeMessages(
   historyMessages: Message[],
   threadMessages: Message[],
@@ -136,8 +143,10 @@ export function useThreadStream({
     [thread],
   );
 
+  const historyMessages = historyMessagesFromThread(thread.history);
+
   const messages = mergeMessages(
-    [],
+    historyMessages,
     thread.messages,
     optimisticMessages,
   );
