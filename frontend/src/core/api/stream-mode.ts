@@ -11,28 +11,37 @@ const SUPPORTED_RUN_STREAM_MODES = new Set([
 ] as const);
 
 export function sanitizeRunStreamOptions<T>(options: T): T {
-  if (
-    typeof options !== "object" ||
-    options === null ||
-    !("streamMode" in options)
-  ) {
+  if (typeof options !== "object" || options === null) {
     return options;
   }
 
-  const streamMode = options.streamMode;
-  if (streamMode == null) return options;
+  let next = options;
 
-  const requestedModes = Array.isArray(streamMode) ? streamMode : [streamMode];
-  const sanitizedModes = requestedModes.filter((mode) =>
-    SUPPORTED_RUN_STREAM_MODES.has(mode),
-  );
+  if ("streamMode" in options) {
+    const streamMode = options.streamMode;
+    if (streamMode != null) {
+      const requestedModes = Array.isArray(streamMode) ? streamMode : [streamMode];
+      const sanitizedModes = requestedModes.filter((mode) =>
+        SUPPORTED_RUN_STREAM_MODES.has(mode),
+      );
 
-  if (sanitizedModes.length === requestedModes.length) return options;
+      if (sanitizedModes.length !== requestedModes.length) {
+        next = {
+          ...next,
+          streamMode: Array.isArray(streamMode)
+            ? sanitizedModes
+            : sanitizedModes[0],
+        };
+      }
+    }
+  }
 
-  return {
-    ...options,
-    streamMode: Array.isArray(streamMode)
-      ? sanitizedModes
-      : sanitizedModes[0],
-  };
+  if ("onDisconnect" in next && next.onDisconnect === "continue") {
+    next = {
+      ...next,
+      onDisconnect: "keep_alive",
+    };
+  }
+
+  return next;
 }

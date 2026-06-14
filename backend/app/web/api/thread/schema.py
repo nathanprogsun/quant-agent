@@ -1,10 +1,11 @@
-from typing import Any, Literal, Self
+from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
 
 from app.common.runs.manager import MultitaskStrategy, RunRecord
 from app.common.runs.schemas import DisconnectMode
+from app.core.chat.service.stream_modes import DEFAULT_STREAM_MODES
 
 MAX_MESSAGES = 50
 MAX_MESSAGE_LENGTH = 32768  # 32KB
@@ -17,6 +18,12 @@ class ThreadResponse(BaseModel):
     model_name: str | None = None
     created_at: str | None = None
     updated_at: str | None = None
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def thread_id(self) -> UUID:
+        """LangGraph SDK expects ``thread_id`` alongside legacy ``id``."""
+        return self.id
 
 
 class ThreadListResponse(BaseModel):
@@ -41,7 +48,8 @@ class RunResponse(BaseModel):
     created_at: str
     updated_at: str
 
-    def from_run_record(record: RunRecord) -> Self:
+    @staticmethod
+    def from_run_record(record: RunRecord) -> "RunResponse":
         return RunResponse(
             run_id=record.run_id,
             thread_id=record.thread_id,
@@ -98,7 +106,7 @@ class RunCreateRequest(BaseModel):
     config: dict[str, Any] = Field(default_factory=dict)
     context: dict[str, Any] = Field(default_factory=dict)
     stream_mode: list[str] = Field(
-        default_factory=lambda: ["values"],
+        default_factory=lambda: list(DEFAULT_STREAM_MODES),
         validation_alias="streamMode",
     )
     on_disconnect: DisconnectMode = Field(
@@ -109,6 +117,14 @@ class RunCreateRequest(BaseModel):
         default=MultitaskStrategy.REJECT,
         validation_alias="multitaskStrategy",
     )
+
+    @field_validator("on_disconnect", mode="before")
+    @classmethod
+    def normalize_on_disconnect(cls, v: Any) -> Any:
+        """Accept LangGraph SDK alias ``continue`` for keep-alive runs."""
+        if v == "continue":
+            return DisconnectMode.CONTINUE.value
+        return v
 
     @field_validator("input")
     @classmethod
@@ -124,3 +140,25 @@ class RunCreateRequest(BaseModel):
         if isinstance(v, str):
             return [v]
         return v
+
+
+class HistoryRequest(BaseModel):
+    """LangGraph SDK POST /history body."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    limit: int = Field(default=10, ge=1, le=1000)
+    before: dict[str, Any] | None = None
+    metadata: dict[str, Any] | None = None
+    checkpoint: dict[str, Any] | None = None
+
+
+class StateUpdateRequest(BaseModel):
+    """LangGraph SDK POST /state body."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    values: dict[str, Any] | None = None
+    checkpoint: dict[str, Any] | None = None
+    checkpoint_id: str | None = Field(default=None, validation_alias="checkpointId")
+    as_node: str | None = Field(default=None, validation_alias="asNode")

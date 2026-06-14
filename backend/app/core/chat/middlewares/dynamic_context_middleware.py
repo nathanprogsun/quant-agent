@@ -22,12 +22,12 @@ class DynamicContextMiddleware(AgentMiddleware):
 
         now = datetime.now(UTC)
         context = (
-            f"\n\n[System Context] Current UTC datetime: {now.strftime('%Y-%m-%d %H:%M:%S')} | "
-            f"Timezone: UTC | This context is automatically injected for time-aware responses."
+            f"\n\n[系统上下文] 当前 UTC 时间：{now.strftime('%Y-%m-%d %H:%M:%S')}。"
+            "此信息仅供时间相关判断参考。"
         )
 
         # Inject after system message if present
-        if messages and hasattr(messages[0], "content") and "[System Context]" not in str(messages[0].content):
+        if messages and hasattr(messages[0], "content") and "[系统上下文]" not in str(messages[0].content):
             system_content = messages[0].content if isinstance(messages[0].content, str) else str(messages[0].content)
             messages[0] = messages[0].__class__(content=system_content + context)
         else:

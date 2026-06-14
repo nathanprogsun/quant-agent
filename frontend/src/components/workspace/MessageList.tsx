@@ -15,11 +15,16 @@ interface MessageListProps {
 
 export function MessageList({ messages, isLoading }: MessageListProps) {
   const groups = getMessageGroups(messages);
+  const hasAssistantContent = messages.some(
+    (message) =>
+      message.type === "ai" && extractContentFromMessage(message).length > 0,
+  );
+  const showThinkingIndicator = Boolean(isLoading && !hasAssistantContent);
 
   if (groups.length === 0) {
     return (
       <div className="flex h-full items-center justify-center text-gray-400">
-        {isLoading ? "Thinking..." : "Start a conversation"}
+        {showThinkingIndicator ? "Thinking..." : "Start a conversation"}
       </div>
     );
   }
@@ -48,7 +53,7 @@ export function MessageList({ messages, isLoading }: MessageListProps) {
         return null;
       })}
 
-      {isLoading && (
+      {showThinkingIndicator && (
         <div className="flex justify-start">
           <div className="rounded-lg bg-gray-100 px-4 py-2">
             <span className="animate-pulse">Thinking...</span>

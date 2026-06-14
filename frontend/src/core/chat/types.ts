@@ -21,3 +21,22 @@ export interface AnalyzeEvent {
   content?: string
   improvement_suggestions?: string[]
 }
+
+/** SSE event names emitted by POST /threads/{id}/runs/stream (LangGraph Platform). */
+export type ChatStreamEventName =
+  | 'metadata'
+  | 'values'
+  | 'messages'
+  | 'updates'
+  | 'custom'
+  | 'error'
+  | 'end'
+
+export interface ChatStreamMetadataEvent {
+  run_id: string
+  thread_id: string
+}
+
+export interface ChatStreamErrorEvent {
+  message: string
+}

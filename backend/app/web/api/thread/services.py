@@ -17,6 +17,7 @@ from langchain_core.runnables import RunnableConfig
 from app.common.runs.manager import ConflictError, RunManager
 from app.common.runs.schemas import DisconnectMode
 from app.common.stream_bridge.base import StreamBridge
+from app.core.chat.service.stream_modes import normalize_request_stream_modes
 from app.core.chat.service.thread_service import ThreadService
 from app.core.chat.service.worker import run_agent
 
@@ -212,6 +213,8 @@ async def start_run(
     # 9. Build agent and start background task
     agent = agent_factory(config=config)
 
+    stream_modes = normalize_request_stream_modes(getattr(body, "stream_mode", None))
+
     task = asyncio.create_task(
         run_agent(
             bridge=bridge,
@@ -220,6 +223,9 @@ async def start_run(
             agent=agent,
             graph_input=graph_input,
             config=config,
+            stream_modes=stream_modes,
+            thread_service=thread_service,
+            user_id=request.state.current_user_id,
         ),
         name=f"run-{record.run_id}",
     )

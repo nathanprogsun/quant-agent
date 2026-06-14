@@ -1,7 +1,6 @@
 """Integration tests for chat API."""
 from __future__ import annotations
 
-import os
 from uuid import uuid4
 
 import pytest
@@ -44,21 +43,28 @@ class TestChatAPI:
         assert status == 401
 
     @pytest.mark.asyncio
-    @pytest.mark.skipif(
-        not os.environ.get("OPENAI_API_KEY"),
-        reason="Requires OPENAI_API_KEY to be set",
-    )
     async def test_stream_run_authenticated_without_thread(
-        self, authed_api_client: APITestClient
+        self,
+        authed_api_client: APITestClient,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """Authenticated user with non-existent thread - endpoint accepts request.
+        """Authenticated stream request returns 200 without starting a live LLM run."""
+        async def noop_run_agent(*_args: object, **_kwargs: object) -> None:
+            return None
 
-        The streaming endpoint returns 200 immediately and may send errors
-        in the SSE stream. We just verify auth passed (status 200).
-        Requires OPENAI_API_KEY to be set.
-        """
+        async def immediate_sse(*_args: object, **_kwargs: object):
+            return
+            yield  # pragma: no cover - makes this an async generator
+
+        monkeypatch.setattr("app.web.api.thread.services.run_agent", noop_run_agent)
+        monkeypatch.setattr("app.web.api.thread.views.sse_consumer", immediate_sse)
+        monkeypatch.setattr(
+            "app.web.api.thread.views.make_lead_agent",
+            lambda config=None: object(),
+        )
+
         thread_id = uuid4()
-        status, _ = await authed_api_client.post_raw(
+        status, _, events = await authed_api_client.post_sse(
             f"/api/v1/threads/{thread_id}/runs/stream",
             json={
                 "input": {"messages": []},
@@ -66,8 +72,8 @@ class TestChatAPI:
                 "context": {},
             },
         )
-        # 200 means auth passed (streaming endpoint accepts request)
         assert status == 200
+        assert events == []
 
     @pytest.mark.asyncio
     async def test_cancel_run_authenticated_without_run(

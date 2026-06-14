@@ -38,6 +38,11 @@ venv/
 *.sqlite
 *.sqlite3
 
+# Committed DC42 knowledge base (exceptions — see repo root .gitignore)
+!data/
+!data/dc42/
+!data/dc42/**
+
 # IDE
 .idea/
 .vscode/

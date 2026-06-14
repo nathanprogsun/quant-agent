@@ -78,6 +78,24 @@ export function extractContentFromMessage(message: Message): string {
       .join("\n")
       .trim();
   }
+
+  const data = (message as Message & { data?: { content?: unknown } }).data;
+  if (data && typeof data.content === "string") {
+    return data.content.trim();
+  }
+  if (data && Array.isArray(data.content)) {
+    return data.content
+      .map((part) => {
+        if (typeof part === "string") return part;
+        if (part && typeof part === "object" && "text" in part) {
+          return String(part.text);
+        }
+        return "";
+      })
+      .join("\n")
+      .trim();
+  }
+
   return "";
 }
 

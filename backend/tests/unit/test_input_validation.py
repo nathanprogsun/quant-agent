@@ -59,7 +59,7 @@ class TestRunCreateRequest:
         assert req.on_disconnect == DisconnectMode.CANCEL
         assert req.multitask_strategy == MultitaskStrategy.REJECT
         assert req.input == {"messages": []}
-        assert req.stream_mode == ["values"]
+        assert req.stream_mode == ["values", "messages-tuple"]
 
     def test_valid_disconnect_mode_cancel(self) -> None:
         req = RunCreateRequest(on_disconnect=DisconnectMode.CANCEL)
@@ -67,6 +67,10 @@ class TestRunCreateRequest:
 
     def test_valid_disconnect_mode_keep_alive(self) -> None:
         req = RunCreateRequest(on_disconnect="keep_alive")
+        assert req.on_disconnect == DisconnectMode.CONTINUE
+
+    def test_valid_disconnect_mode_continue_alias(self) -> None:
+        req = RunCreateRequest(on_disconnect="continue")
         assert req.on_disconnect == DisconnectMode.CONTINUE
 
     def test_rejects_invalid_disconnect_mode(self) -> None:

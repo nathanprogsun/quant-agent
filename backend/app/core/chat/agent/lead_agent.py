@@ -14,6 +14,7 @@ from app.core.chat.agent.prompt import apply_prompt_template
 from app.core.chat.agent.thread_state import ThreadState
 from app.core.chat.middlewares.base import AgentMiddleware
 from app.core.chat.middlewares.clarification_middleware import ClarificationMiddleware
+from app.core.chat.middlewares.dc42_context_middleware import DC42ContextMiddleware
 from app.core.chat.middlewares.dynamic_context_middleware import DynamicContextMiddleware
 from app.core.chat.middlewares.loop_detection_middleware import LoopDetectionMiddleware
 from app.core.chat.middlewares.memory_middleware import MemoryMiddleware
@@ -21,8 +22,8 @@ from app.core.chat.middlewares.subagent_limit_middleware import SubagentLimitMid
 from app.core.chat.middlewares.summarization_middleware import SummarizationMiddleware
 from app.core.chat.middlewares.title_middleware import TitleMiddleware
 from app.core.chat.middlewares.token_usage_middleware import TokenUsageMiddleware
-from app.core.chat.tools.builtin.lint_tool import lint_code
-from app.core.chat.tools.builtin.param_tool import validate_parameters
+from app.core.chat.tools.builtin.lint_tool import lint_code_tool
+from app.core.chat.tools.builtin.param_tool import make_validate_parameters_tool
 from app.settings import get_settings
 
 
@@ -54,7 +55,9 @@ def make_lead_agent(config: RunnableConfig) -> Any:
     )
 
     # Tools — Phase 2: backtest safety tools
-    tools: list[Any] = [lint_code, validate_parameters]
+    tools: list[Any] = [lint_code_tool, make_validate_parameters_tool()]
+    if tools:
+        model = model.bind_tools(tools)
 
     # System prompt
     system_prompt = apply_prompt_template()
@@ -95,18 +98,27 @@ def _make_agent_node(
             messages = [SystemMessage(content=system_prompt), *messages]
 
         # before_model hooks
+        state_patches: dict[str, Any] = {}
         for mw in middlewares:
             modified = await mw.before_model(dict(state), {})
             if modified:
                 messages = modified.get("messages", messages)
+                for key, value in modified.items():
+                    if key != "messages":
+                        state_patches[key] = value
 
         # LLM call
         response = await model.ainvoke(messages)
 
         # after_model hooks
-        state_update: dict[str, Any] = {"messages": [response]}
+        state_update: dict[str, Any] = {"messages": [response], **state_patches}
+        preview_state = {**dict(state), **state_update}
+        preview_state["messages"] = [
+            *list(state.get("messages", [])),
+            *state_update.get("messages", []),
+        ]
         for mw in middlewares:
-            modified = await mw.after_model({**dict(state), **state_update}, {})
+            modified = await mw.after_model(preview_state, {})
             if modified:
                 state_update.update(modified)
 
@@ -143,12 +155,14 @@ def _build_middlewares(config: RunnableConfig) -> list[AgentMiddleware]:
     # Summarization enabled flag
     summarization_enabled = configurable.get("summarization_enabled", True)
     max_messages = configurable.get("max_messages", 50)
+    dc42_retriever = configurable.get("dc42_retriever")
 
     return [
         TitleMiddleware(),
         TokenUsageMiddleware(),
         SummarizationMiddleware(max_messages=max_messages, enabled=summarization_enabled),
         DynamicContextMiddleware(),
+        DC42ContextMiddleware(retriever=dc42_retriever),
         ClarificationMiddleware(),
         LoopDetectionMiddleware(),
         SubagentLimitMiddleware(),

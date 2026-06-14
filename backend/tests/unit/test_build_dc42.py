@@ -135,6 +135,7 @@ def test_chunk_and_embed_creates_db(tmp_path: Path) -> None:
 def test_validate_passes_when_outputs_exist(tmp_path: Path) -> None:
     """08_validate should pass when all outputs are present."""
     (tmp_path / "dc42.db").touch()
+    (tmp_path / "chroma_db").mkdir()
 
     result = validate(output_dir=tmp_path)
     assert result is True

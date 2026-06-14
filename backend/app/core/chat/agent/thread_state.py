@@ -52,3 +52,4 @@ class ThreadState(TypedDict, total=False):
     uploaded_files: list[dict[str, Any]] | None  # P3
     code: str | None  # P0 (quant): strategy code
     session_status: str | None  # P0 (quant): session state machine
+    dc42_ranges: dict[str, dict[str, float]] | None  # P2: parameter validation bounds

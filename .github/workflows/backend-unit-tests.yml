@@ -20,6 +20,8 @@ jobs:
     if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6

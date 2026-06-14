@@ -40,6 +40,15 @@ test("keeps payloads without streamMode untouched", () => {
   expect(sanitizeRunStreamOptions(options)).toBe(options);
 });
 
+test("maps LangGraph continue disconnect mode to keep_alive", () => {
+  const sanitized = sanitizeRunStreamOptions({
+    onDisconnect: "continue",
+    streamMode: ["values"],
+  });
+
+  expect(sanitized.onDisconnect).toBe("keep_alive");
+});
+
 test("handles null payload", () => {
   expect(sanitizeRunStreamOptions(null)).toBeNull();
 });

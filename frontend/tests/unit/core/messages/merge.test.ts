@@ -1,10 +1,15 @@
 import type { Message } from "@langchain/langgraph-sdk";
 import { describe, expect, test } from "vitest";
 
-import { mergeIncremental, mergeMessages } from "@/core/messages/merge";
+import {
+  filterConfirmedOptimistic,
+  mergeIncremental,
+  mergeMessages,
+  normalizeCheckpointMessage,
+} from "@/core/messages/merge";
 
 describe("mergeMessages", () => {
-  test("merges history, stream, and optimistic messages", () => {
+  test("prefers stream over history when stream is hydrated", () => {
     const history = [
       { id: "h1", type: "human", content: "Hello" },
     ] as Message[];
@@ -17,64 +22,95 @@ describe("mergeMessages", () => {
 
     const result = mergeMessages(history, stream, optimistic);
 
-    expect(result).toHaveLength(3);
-    expect(result[0].id).toBe("h1");
-    expect(result[1].id).toBe("a1");
-    expect(result[2].id).toBe("opt1");
+    expect(result).toHaveLength(2);
+    expect(result[0].id).toBe("a1");
+    expect(result[1].id).toBe("opt1");
   });
 
-  test("stream messages override history with same id", () => {
+  test("uses normalized history before stream hydration", () => {
     const history = [
-      { id: "msg1", type: "ai", content: "old" },
-    ] as Message[];
+      {
+        type: "human",
+        data: { content: "Hello", id: "h1" },
+      },
+    ] as unknown as Message[];
+
+    const result = mergeMessages(history, [], []);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].content).toBe("Hello");
+    expect(result[0].id).toBe("h1");
+  });
+
+  test("does not duplicate the same conversation from history and stream", () => {
+    const history = [
+      { type: "human", data: { content: "hi", id: "hist-human" } },
+      { type: "ai", data: { content: "Hello there", id: "hist-ai" } },
+    ] as unknown as Message[];
     const stream = [
-      { id: "msg1", type: "ai", content: "new" },
+      { id: "stream-human", type: "human", content: "hi" },
+      { id: "stream-ai", type: "ai", content: "Hello there" },
     ] as Message[];
 
     const result = mergeMessages(history, stream, []);
 
-    expect(result).toHaveLength(1);
-    expect(result[0].content).toBe("new");
+    expect(result).toHaveLength(2);
+    expect(result[0].id).toBe("stream-human");
+    expect(result[1].id).toBe("stream-ai");
   });
 
-  test("optimistic messages override stream with same id", () => {
+  test("optimistic messages append on top of stream", () => {
     const stream = [
       { id: "msg1", type: "human", content: "from stream" },
     ] as Message[];
     const optimistic = [
-      { id: "msg1", type: "human", content: "from optimistic" },
+      { id: "opt1", type: "human", content: "pending" },
     ] as Message[];
 
     const result = mergeMessages([], stream, optimistic);
 
-    expect(result).toHaveLength(1);
-    expect(result[0].content).toBe("from optimistic");
-  });
-
-  test("deduplicates tool messages by tool_call_id when id is missing", () => {
-    const history = [
-      {
-        type: "tool",
-        tool_call_id: "call-1",
-        content: "old",
-      },
-    ] as Message[];
-    const stream = [
-      {
-        type: "tool",
-        tool_call_id: "call-1",
-        content: "new",
-      },
-    ] as Message[];
-
-    const result = mergeMessages(history, stream, []);
-
-    expect(result).toHaveLength(1);
-    expect(result[0].content).toBe("new");
+    expect(result).toHaveLength(2);
+    expect(result[1].content).toBe("pending");
   });
 
   test("returns empty array when all inputs empty", () => {
     expect(mergeMessages([], [], [])).toEqual([]);
+  });
+});
+
+describe("normalizeCheckpointMessage", () => {
+  test("promotes data.content to top-level content", () => {
+    const message = {
+      type: "human",
+      data: { content: "hello", id: "m1" },
+    } as unknown as Message;
+
+    const normalized = normalizeCheckpointMessage(message);
+
+    expect(normalized.content).toBe("hello");
+    expect(normalized.id).toBe("m1");
+  });
+});
+
+describe("filterConfirmedOptimistic", () => {
+  test("drops optimistic human when stream already has same content", () => {
+    const stream = [
+      { id: "real-1", type: "human", content: "hi" },
+    ] as Message[];
+    const optimistic = [
+      { id: "optimistic-1", type: "human", content: "hi" },
+    ] as Message[];
+
+    expect(filterConfirmedOptimistic(stream, optimistic)).toEqual([]);
+  });
+
+  test("keeps optimistic human until stream confirms", () => {
+    const stream = [{ id: "a1", type: "ai", content: "..." }] as Message[];
+    const optimistic = [
+      { id: "optimistic-1", type: "human", content: "hi" },
+    ] as Message[];
+
+    expect(filterConfirmedOptimistic(stream, optimistic)).toEqual(optimistic);
   });
 });
 
@@ -104,8 +140,8 @@ describe("mergeIncremental", () => {
     const result = mergeIncremental(existing, incoming);
 
     expect(result).toHaveLength(2);
-    expect(result[0].content).toBe("a"); // original kept
-    expect(result[1].content).toBe("b"); // new appended
+    expect(result[0].content).toBe("a");
+    expect(result[1].content).toBe("b");
   });
 
   test("returns existing when incoming is empty", () => {
