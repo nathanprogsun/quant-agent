@@ -212,6 +212,8 @@ async def start_run(
     # 9. Build agent and start background task
     agent = agent_factory(config=config)
 
+    stream_modes = list(getattr(body, "stream_mode", None) or ["values"])
+
     task = asyncio.create_task(
         run_agent(
             bridge=bridge,
@@ -220,6 +222,7 @@ async def start_run(
             agent=agent,
             graph_input=graph_input,
             config=config,
+            stream_modes=stream_modes,
         ),
         name=f"run-{record.run_id}",
     )

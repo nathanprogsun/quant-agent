@@ -22,6 +22,16 @@ class ThreadRepository(GenericRepository):
     async def create(self, thread: Thread) -> Thread:
         return await self.insert(thread)
 
+    async def find_by_id(self, thread_id: UUID) -> Thread | None:
+        """Find thread by ID without user filter (for stream authz)."""
+        stmt = text("""
+            SELECT * FROM threads
+            WHERE id = :id
+            AND (deleted_at IS NULL OR deleted_at > CURRENT_TIMESTAMP)
+        """).bindparams(id=thread_id)
+        row = await self.engine.at_most_one(stmt)
+        return Thread.from_row(row) if row else None
+
     async def find_by_id_and_user(self, thread_id: UUID, user_id: UUID) -> Thread | None:
         """Find thread by ID with user_id filter (resource-level auth)."""
         stmt = text("""
