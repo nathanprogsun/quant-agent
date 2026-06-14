@@ -40,9 +40,12 @@ node_modules/
 playwright-report/
 test-results/
 
-# Superpowers skill artifacts
-docs/superpowers/
+# Superpowers skill artifacts (local docs — not published to GitHub)
+docs/
 .gstack/
+
+# Test / type-check caches
+.pytest_cache/
 
 # continuous-claude runtime artifacts
 continuous-run-*.log

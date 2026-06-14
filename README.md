@@ -252,6 +252,10 @@ cd frontend && npx tsc --noEmit
 cd frontend && pnpm test
 ```
 
+## Documentation
+
+PRD、实施计划与 task spec 存放在本地 `docs/` 目录，**不纳入本 Git 仓库**（见 `.gitignore`）。在完整工作区中打开 `docs/README.md` 查看索引。
+
 ## Roadmap
 
 | Status | Focus |
