@@ -21,8 +21,8 @@ from app.core.chat.middlewares.subagent_limit_middleware import SubagentLimitMid
 from app.core.chat.middlewares.summarization_middleware import SummarizationMiddleware
 from app.core.chat.middlewares.title_middleware import TitleMiddleware
 from app.core.chat.middlewares.token_usage_middleware import TokenUsageMiddleware
-from app.core.chat.tools.builtin.lint_tool import lint_code
-from app.core.chat.tools.builtin.param_tool import validate_parameters
+from app.core.chat.tools.builtin.lint_tool import lint_code_tool
+from app.core.chat.tools.builtin.param_tool import make_validate_parameters_tool
 from app.settings import get_settings
 
 
@@ -54,7 +54,9 @@ def make_lead_agent(config: RunnableConfig) -> Any:
     )
 
     # Tools — Phase 2: backtest safety tools
-    tools: list[Any] = [lint_code, validate_parameters]
+    tools: list[Any] = [lint_code_tool, make_validate_parameters_tool()]
+    if tools:
+        model = model.bind_tools(tools)
 
     # System prompt
     system_prompt = apply_prompt_template()

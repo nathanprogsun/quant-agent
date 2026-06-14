@@ -4,6 +4,15 @@ from __future__ import annotations
 
 import ast
 from dataclasses import dataclass, field
+from typing import Any
+
+from langchain_core.tools import tool
+
+CRITICAL_IMPORTS = {"os", "subprocess", "shutil"}
+HIGH_IMPORTS = {"socket", "http", "urllib", "requests", "httpx"}
+MEDIUM_IMPORTS = {"pickle", "shelve", "ctypes"}
+CRITICAL_CALLS = {"eval", "exec", "__import__"}
+HIGH_ATTR_CALLS = {"importlib.import_module", "importlib.util.find_spec"}
 
 
 @dataclass(frozen=True)
@@ -14,11 +23,14 @@ class LintResult:
     medium_issues: list[str] = field(default_factory=list)
 
 
-CRITICAL_IMPORTS = {"os", "subprocess", "shutil"}
-HIGH_IMPORTS = {"socket", "http", "urllib", "requests", "httpx"}
-MEDIUM_IMPORTS = {"pickle", "shelve", "ctypes"}
-CRITICAL_CALLS = {"eval", "exec", "__import__"}
-HIGH_ATTR_CALLS = {"importlib.import_module", "importlib.util.find_spec"}
+def lint_result_to_dict(result: LintResult) -> dict[str, Any]:
+    """Convert LintResult to a JSON-serializable dict for tool responses."""
+    return {
+        "is_safe": result.is_safe,
+        "critical_issues": list(result.critical_issues),
+        "high_issues": list(result.high_issues),
+        "medium_issues": list(result.medium_issues),
+    }
 
 
 def lint_code(code: str) -> LintResult:
@@ -84,3 +96,9 @@ def lint_code(code: str) -> LintResult:
         high_issues=high,
         medium_issues=medium,
     )
+
+
+@tool
+def lint_code_tool(code: str) -> dict[str, Any]:
+    """Check generated Python strategy code for safety violations."""
+    return lint_result_to_dict(lint_code(code))
