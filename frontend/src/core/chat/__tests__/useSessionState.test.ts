@@ -30,6 +30,24 @@ describe('useSessionState', () => {
     expect(result.current.state).toBe('backtesting')
   })
 
+  it('stores lastMetrics on backtestComplete()', () => {
+    const { result } = renderHook(() => useSessionState())
+    act(() => result.current.generate())
+    act(() => result.current.codeComplete())
+    act(() => result.current.startBacktest())
+    act(() =>
+      result.current.backtestComplete({
+        annual_return: 0.2,
+        sharpe: 1.5,
+      }),
+    )
+    expect(result.current.state).toBe('code_ready')
+    expect(result.current.lastMetrics).toEqual({
+      annual_return: 0.2,
+      sharpe: 1.5,
+    })
+  })
+
   it('transitions backtesting → analyzed on analysisComplete()', () => {
     const { result } = renderHook(() => useSessionState())
     act(() => result.current.generate())

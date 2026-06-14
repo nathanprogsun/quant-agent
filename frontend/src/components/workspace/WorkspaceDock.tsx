@@ -1,22 +1,43 @@
 'use client'
 
+import { BacktestProgress } from '@/components/workspace/BacktestProgress'
+import type { BacktestMetrics } from '@/core/chat/types'
 import { cn } from '@/lib/utils'
+
+export type DockBacktestView =
+  | { kind: 'hidden' }
+  | {
+      kind: 'progress'
+      status: 'pending' | 'running' | 'done' | 'failed' | 'cancelled'
+      message?: string
+      metrics?: BacktestMetrics
+      error?: string
+    }
 
 interface WorkspaceDockProps {
   className?: string
+  backtest?: DockBacktestView
 }
 
-/** Bottom dock shell — BacktestProgress / AnalysisResult wired in P3. */
-export function WorkspaceDock({ className }: WorkspaceDockProps) {
+export function WorkspaceDock({ className, backtest }: WorkspaceDockProps) {
+  if (!backtest || backtest.kind === 'hidden') {
+    return null
+  }
+
   return (
     <section
       aria-label="工作区 Dock"
       className={cn(
-        'max-h-60 shrink-0 border-t bg-muted/30 px-4 py-3 text-sm text-muted-foreground',
+        'max-h-60 shrink-0 overflow-auto border-t bg-muted/30 px-4 py-3',
         className,
       )}
     >
-      回测进度与分析报告将显示在此处（P3 接线）
+      <BacktestProgress
+        status={backtest.status}
+        message={backtest.message}
+        metrics={backtest.metrics}
+        error={backtest.error}
+      />
     </section>
   )
 }

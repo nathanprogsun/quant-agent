@@ -9,15 +9,35 @@ describe('BacktestButton', () => {
     expect(screen.getByText('运行回测')).toBeTruthy()
   })
 
-  it('shows "中止回测" when backtesting', () => {
+  it('shows disabled label when backtesting', () => {
     render(<BacktestButton state="backtesting" onRun={vi.fn()} onAbort={vi.fn()} />)
-    expect(screen.getByText('中止回测')).toBeTruthy()
+    expect(screen.getByText('回测进行中')).toBeTruthy()
   })
 
   it('is disabled when generating', () => {
     render(<BacktestButton state="generating" onRun={vi.fn()} onAbort={vi.fn()} />)
     const button = screen.getByRole('button')
     expect(button.hasAttribute('disabled')).toBe(true)
+  })
+
+  it('is disabled when backtesting', () => {
+    render(<BacktestButton state="backtesting" onRun={vi.fn()} onAbort={vi.fn()} />)
+    const button = screen.getByRole('button')
+    expect(button.hasAttribute('disabled')).toBe(true)
+  })
+
+  it('is disabled when jqcli is not configured', () => {
+    render(
+      <BacktestButton
+        state="code_ready"
+        jqcliConfigured={false}
+        onRun={vi.fn()}
+        onAbort={vi.fn()}
+      />,
+    )
+    const button = screen.getByRole('button')
+    expect(button.hasAttribute('disabled')).toBe(true)
+    expect(button.getAttribute('title')).toContain('jqcli')
   })
 
   it('calls onRun when clicked in code_ready state', () => {
@@ -27,10 +47,10 @@ describe('BacktestButton', () => {
     expect(onRun).toHaveBeenCalled()
   })
 
-  it('calls onAbort when clicked in backtesting state', () => {
+  it('calls onAbort when clicked in backtesting state only if enabled', () => {
     const onAbort = vi.fn()
     render(<BacktestButton state="backtesting" onRun={vi.fn()} onAbort={onAbort} />)
     fireEvent.click(screen.getByRole('button'))
-    expect(onAbort).toHaveBeenCalled()
+    expect(onAbort).not.toHaveBeenCalled()
   })
 })
