@@ -215,6 +215,8 @@ async def stream_run(
     """Create a run and stream events via SSE."""
     app_context = request.app.state.app_context
 
+    await thread_service.assert_stream_access(thread_id, current_user.id)
+
     record = await start_run(
         bridge=app_context.stream_bridge,
         run_manager=app_context.run_manager,
@@ -238,6 +240,7 @@ async def stream_run(
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",
+            "Content-Location": f"/api/v1/threads/{thread_id}/runs/{record.run_id}",
         },
     )
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from uuid import UUID
 
+from app.common.exception import ResourceNotFoundError
 from app.db.dao.thread_repository import ThreadRepository
 from app.db.dbengine.core import DatabaseEngine
 from app.db.models.thread import Thread
@@ -41,6 +42,12 @@ class ThreadService:
     async def get(self, thread_id: UUID, user_id: UUID) -> Thread:
         """Get thread by ID with user_id authorization."""
         return await self._repo.find_by_id_and_user_or_fail(thread_id, user_id)
+
+    async def assert_stream_access(self, thread_id: UUID, user_id: UUID) -> None:
+        """Allow auto-create for new threads; deny cross-user access."""
+        thread = await self._repo.find_by_id(thread_id)
+        if thread is not None and thread.user_id != user_id:
+            raise ResourceNotFoundError(f"Thread {thread_id} not found for user {user_id}")
 
     async def list_by_user_id(
         self, user_id: UUID, *, limit: int = 50, offset: int = 0

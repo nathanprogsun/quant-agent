@@ -1,7 +1,7 @@
-from typing import Any, Literal, Self
+from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
 
 from app.common.runs.manager import MultitaskStrategy, RunRecord
 from app.common.runs.schemas import DisconnectMode
@@ -17,6 +17,12 @@ class ThreadResponse(BaseModel):
     model_name: str | None = None
     created_at: str | None = None
     updated_at: str | None = None
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def thread_id(self) -> UUID:
+        """LangGraph SDK expects ``thread_id`` alongside legacy ``id``."""
+        return self.id
 
 
 class ThreadListResponse(BaseModel):
@@ -41,7 +47,8 @@ class RunResponse(BaseModel):
     created_at: str
     updated_at: str
 
-    def from_run_record(record: RunRecord) -> Self:
+    @staticmethod
+    def from_run_record(record: RunRecord) -> "RunResponse":
         return RunResponse(
             run_id=record.run_id,
             thread_id=record.thread_id,
