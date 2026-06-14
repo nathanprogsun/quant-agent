@@ -9,12 +9,18 @@ interface ChatWorkspaceHeaderProps {
   threadId: string
   title: string | null
   sessionState: SessionState
+  jqcliConfigured: boolean
+  onRunBacktest: () => void
+  onAbortBacktest: () => void
 }
 
 export function ChatWorkspaceHeader({
   threadId,
   title,
   sessionState,
+  jqcliConfigured,
+  onRunBacktest,
+  onAbortBacktest,
 }: ChatWorkspaceHeaderProps) {
   return (
     <header className="flex items-center justify-between gap-4 border-b px-4 py-3">
@@ -25,10 +31,11 @@ export function ChatWorkspaceHeader({
         </span>
         <BacktestButton
           state={sessionState}
-          onRun={() => undefined}
-          onAbort={() => undefined}
+          jqcliConfigured={jqcliConfigured}
+          onRun={onRunBacktest}
+          onAbort={onAbortBacktest}
         />
-        <Button variant="outline" disabled title="P3 接线">
+        <Button variant="outline" disabled title="P4 接线">
           对比分析
         </Button>
       </div>

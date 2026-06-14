@@ -1,11 +1,11 @@
 import { useState, useCallback } from 'react'
-import type { SessionState } from './types'
+import type { BacktestMetrics, SessionState } from './types'
 
 interface SessionStateActions {
   generate: () => void
   codeComplete: () => void
   startBacktest: () => void
-  backtestComplete: () => void
+  backtestComplete: (metrics: BacktestMetrics) => void
   backtestFailed: () => void
   analysisComplete: () => void
   reset: () => void
@@ -19,8 +19,12 @@ const VALID_TRANSITIONS: Record<SessionState, SessionState[]> = {
   analyzed: ['idle', 'generating'],
 }
 
-export function useSessionState(): { state: SessionState } & SessionStateActions {
+export function useSessionState(): {
+  state: SessionState
+  lastMetrics: BacktestMetrics | null
+} & SessionStateActions {
   const [state, setState] = useState<SessionState>('idle')
+  const [lastMetrics, setLastMetrics] = useState<BacktestMetrics | null>(null)
 
   const transition = useCallback((target: SessionState) => {
     setState((current) => {
@@ -33,12 +37,22 @@ export function useSessionState(): { state: SessionState } & SessionStateActions
 
   return {
     state,
+    lastMetrics,
     generate: useCallback(() => transition('generating'), [transition]),
     codeComplete: useCallback(() => transition('code_ready'), [transition]),
     startBacktest: useCallback(() => transition('backtesting'), [transition]),
-    backtestComplete: useCallback(() => transition('code_ready'), [transition]),
+    backtestComplete: useCallback(
+      (metrics: BacktestMetrics) => {
+        setLastMetrics(metrics)
+        transition('code_ready')
+      },
+      [transition],
+    ),
     backtestFailed: useCallback(() => transition('code_ready'), [transition]),
     analysisComplete: useCallback(() => transition('analyzed'), [transition]),
-    reset: useCallback(() => transition('idle'), [transition]),
+    reset: useCallback(() => {
+      setLastMetrics(null)
+      transition('idle')
+    }, [transition]),
   }
 }
