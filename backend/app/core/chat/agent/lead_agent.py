@@ -14,6 +14,7 @@ from app.core.chat.agent.prompt import apply_prompt_template
 from app.core.chat.agent.thread_state import ThreadState
 from app.core.chat.middlewares.base import AgentMiddleware
 from app.core.chat.middlewares.clarification_middleware import ClarificationMiddleware
+from app.core.chat.middlewares.dc42_context_middleware import DC42ContextMiddleware
 from app.core.chat.middlewares.dynamic_context_middleware import DynamicContextMiddleware
 from app.core.chat.middlewares.loop_detection_middleware import LoopDetectionMiddleware
 from app.core.chat.middlewares.memory_middleware import MemoryMiddleware
@@ -145,12 +146,14 @@ def _build_middlewares(config: RunnableConfig) -> list[AgentMiddleware]:
     # Summarization enabled flag
     summarization_enabled = configurable.get("summarization_enabled", True)
     max_messages = configurable.get("max_messages", 50)
+    dc42_retriever = configurable.get("dc42_retriever")
 
     return [
         TitleMiddleware(),
         TokenUsageMiddleware(),
         SummarizationMiddleware(max_messages=max_messages, enabled=summarization_enabled),
         DynamicContextMiddleware(),
+        DC42ContextMiddleware(retriever=dc42_retriever),
         ClarificationMiddleware(),
         LoopDetectionMiddleware(),
         SubagentLimitMiddleware(),
