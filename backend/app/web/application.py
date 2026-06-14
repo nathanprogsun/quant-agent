@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.common.exception import ApplicationError
 from app.settings import get_settings
+from app.web.api.analyze.views import router as analyze_router
 from app.web.api.auth.views import router as auth_router
 from app.web.api.backtest.views import router as backtest_router
 from app.web.api.memory.route import router as memory_router
@@ -52,6 +53,7 @@ def create_app() -> FastAPI:
     # Include routers
     app.include_router(auth_router)
     app.include_router(backtest_router)
+    app.include_router(analyze_router)
     app.include_router(thread_router)
     app.include_router(memory_router)
     app.include_router(skills_router)

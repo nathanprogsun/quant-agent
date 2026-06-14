@@ -1,17 +1,20 @@
 'use client'
 
+import { AnalyzeButton } from '@/components/workspace/AnalyzeButton'
 import { BacktestButton } from '@/components/workspace/BacktestButton'
 import { ThreadTitle } from '@/components/workspace/ThreadTitle'
-import { Button } from '@/components/ui/button'
-import type { SessionState } from '@/core/chat/types'
+import type { BacktestMetrics, SessionState } from '@/core/chat/types'
 
 interface ChatWorkspaceHeaderProps {
   threadId: string
   title: string | null
   sessionState: SessionState
   jqcliConfigured: boolean
+  lastMetrics: BacktestMetrics | null
+  isAnalyzing: boolean
   onRunBacktest: () => void
   onAbortBacktest: () => void
+  onAnalyze: () => void
 }
 
 export function ChatWorkspaceHeader({
@@ -19,8 +22,11 @@ export function ChatWorkspaceHeader({
   title,
   sessionState,
   jqcliConfigured,
+  lastMetrics,
+  isAnalyzing,
   onRunBacktest,
   onAbortBacktest,
+  onAnalyze,
 }: ChatWorkspaceHeaderProps) {
   return (
     <header className="flex items-center justify-between gap-4 border-b px-4 py-3">
@@ -35,9 +41,12 @@ export function ChatWorkspaceHeader({
           onRun={onRunBacktest}
           onAbort={onAbortBacktest}
         />
-        <Button variant="outline" disabled title="P4 接线">
-          对比分析
-        </Button>
+        <AnalyzeButton
+          state={sessionState}
+          lastMetricsAvailable={lastMetrics != null}
+          isAnalyzing={isAnalyzing}
+          onAnalyze={onAnalyze}
+        />
       </div>
     </header>
   )

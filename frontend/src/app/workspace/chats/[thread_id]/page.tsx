@@ -10,15 +10,17 @@ import { MessageList } from "@/components/workspace/MessageList";
 import { StrategyEditor } from "@/components/workspace/StrategyEditor";
 import {
   WorkspaceDock,
+  type DockAnalyzeView,
   type DockBacktestView,
 } from "@/components/workspace/WorkspaceDock";
+import { useAnalyzeStream } from "@/core/chat/useAnalyzeStream";
+import { useBacktestStream } from "@/core/chat/useBacktestStream";
+import { useSessionState } from "@/core/chat/useSessionState";
+import type { BacktestMetrics } from "@/core/chat/types";
 import {
   extractLatestPythonBlock,
   shouldSyncEditorCode,
 } from "@/core/messages/pythonBlocks";
-import { useBacktestStream } from "@/core/chat/useBacktestStream";
-import { useSessionState } from "@/core/chat/useSessionState";
-import type { BacktestMetrics } from "@/core/chat/types";
 import { useThread } from "@/hooks/useThreads";
 import { NEW_THREAD_ID, useThreadStream } from "@/core/threads/hooks";
 
@@ -42,21 +44,28 @@ export default function ChatPage({
 
   const {
     state: sessionState,
+    lastMetrics,
     generate,
     codeComplete,
     startBacktest,
     backtestComplete,
     backtestFailed,
+    analysisComplete,
     reset,
   } = useSessionState();
 
   const [editorCode, setEditorCode] = useState("");
   const [jqcliConfigured, setJqcliConfigured] = useState(false);
   const [backtestId, setBacktestId] = useState<string | null>(null);
+  const [lastBacktestId, setLastBacktestId] = useState<string | null>(null);
   const [streamUrl, setStreamUrl] = useState<string | null>(null);
   const [dockBacktest, setDockBacktest] = useState<DockBacktestView>({
     kind: "hidden",
   });
+  const [dockAnalyze, setDockAnalyze] = useState<DockAnalyzeView>({
+    kind: "hidden",
+  });
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const lastSyncedBlockRef = useRef<string | null>(null);
   const wasLoadingRef = useRef(false);
@@ -113,32 +122,36 @@ export default function ChatPage({
   const { connect, disconnect } = useBacktestStream(streamUrl ?? "", {
     onStarted: (id) => {
       setBacktestId(id);
+      setDockAnalyze({ kind: "hidden" });
       setDockBacktest({
-        kind: "progress",
+        kind: "backtest",
         status: "running",
         message: "回测已开始...",
       });
     },
     onProgress: (message) => {
       setDockBacktest({
-        kind: "progress",
+        kind: "backtest",
         status: "running",
         message,
       });
     },
     onComplete: (metrics: BacktestMetrics) => {
       setDockBacktest({
-        kind: "progress",
+        kind: "backtest",
         status: "done",
         metrics,
       });
+      if (backtestId) {
+        setLastBacktestId(backtestId);
+      }
       backtestComplete(metrics);
       setStreamUrl(null);
       setBacktestId(null);
     },
     onFailed: (error) => {
       setDockBacktest({
-        kind: "progress",
+        kind: "backtest",
         status: "failed",
         error,
       });
@@ -154,6 +167,8 @@ export default function ChatPage({
     },
   });
 
+  const { startAnalyze, cancelAnalyze } = useAnalyzeStream();
+
   useEffect(() => {
     if (!streamUrl) return;
     connect();
@@ -163,7 +178,7 @@ export default function ChatPage({
   }, [streamUrl, connect, disconnect]);
 
   useEffect(() => {
-    if (sessionState !== "backtesting" && dockBacktest.kind === "progress") {
+    if (sessionState !== "backtesting" && dockBacktest.kind === "backtest") {
       if (dockBacktest.status === "running") {
         setDockBacktest({ kind: "hidden" });
       }
@@ -202,10 +217,12 @@ export default function ChatPage({
       return;
     }
 
+    cancelAnalyze();
+    setDockAnalyze({ kind: "hidden" });
     setSubmitError(null);
     startBacktest();
     setDockBacktest({
-      kind: "progress",
+      kind: "backtest",
       status: "pending",
       message: "正在提交回测...",
     });
@@ -228,18 +245,26 @@ export default function ChatPage({
       }
 
       setBacktestId(data.backtest_id);
+      setLastBacktestId(data.backtest_id);
       setStreamUrl(`/api/v1/backtest/${data.backtest_id}/stream`);
     } catch (error) {
       const message = error instanceof Error ? error.message : "回测提交失败";
       setSubmitError(message);
       setDockBacktest({
-        kind: "progress",
+        kind: "backtest",
         status: "failed",
         error: message,
       });
       backtestFailed();
     }
-  }, [editorCode, isNewThread, sessionState, startBacktest, thread_id]);
+  }, [
+    cancelAnalyze,
+    editorCode,
+    isNewThread,
+    sessionState,
+    startBacktest,
+    thread_id,
+  ]);
 
   const handleAbortBacktest = useCallback(() => {
     disconnect();
@@ -248,6 +273,72 @@ export default function ChatPage({
     setDockBacktest({ kind: "hidden" });
     backtestFailed();
   }, [backtestFailed, disconnect]);
+
+  const handleRunAnalyze = useCallback(async () => {
+    if (
+      isNewThread ||
+      !lastMetrics ||
+      !lastBacktestId ||
+      isAnalyzing ||
+      !editorCode.trim()
+    ) {
+      return;
+    }
+
+    setDockBacktest({ kind: "hidden" });
+    setSubmitError(null);
+    setIsAnalyzing(true);
+    setDockAnalyze({ kind: "analyze", content: "", isStreaming: true });
+
+    let content = "";
+
+    try {
+      await startAnalyze(
+        {
+          thread_id,
+          backtest_id: lastBacktestId,
+          code: editorCode,
+          metrics: lastMetrics as Record<string, unknown>,
+        },
+        {
+          onDelta: (delta) => {
+            content += delta;
+            setDockAnalyze({ kind: "analyze", content, isStreaming: true });
+          },
+          onDone: () => {
+            setDockAnalyze({ kind: "analyze", content, isStreaming: false });
+            analysisComplete();
+            setIsAnalyzing(false);
+          },
+          onError: (error) => {
+            setDockAnalyze({
+              kind: "analyze",
+              content: content || error,
+              isStreaming: false,
+            });
+            setIsAnalyzing(false);
+          },
+        },
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "分析失败";
+      setDockAnalyze({
+        kind: "analyze",
+        content: content || message,
+        isStreaming: false,
+      });
+      setIsAnalyzing(false);
+    }
+  }, [
+    analysisComplete,
+    editorCode,
+    isAnalyzing,
+    isNewThread,
+    lastBacktestId,
+    lastMetrics,
+    startAnalyze,
+    thread_id,
+  ]);
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -259,8 +350,11 @@ export default function ChatPage({
         }
         sessionState={sessionState}
         jqcliConfigured={jqcliConfigured}
+        lastMetrics={lastMetrics}
+        isAnalyzing={isAnalyzing}
         onRunBacktest={() => void handleRunBacktest()}
         onAbortBacktest={handleAbortBacktest}
+        onAnalyze={() => void handleRunAnalyze()}
       />
 
       {submitError ? (
@@ -299,6 +393,7 @@ export default function ChatPage({
         <WorkspaceDock
           className={showStrategyEditor ? "col-span-2" : undefined}
           backtest={dockBacktest}
+          analyze={dockAnalyze}
         />
 
         <div className={showStrategyEditor ? "border-r" : undefined}>

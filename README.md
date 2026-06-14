@@ -39,7 +39,7 @@ uv sync
 
 # Configure environment
 cp .env.example .env
-# Edit .env: set JWT_SECRET_KEY, LLM_API_KEY, LLM_API_BASE, etc.
+# Edit .env: set JWT_SECRET_KEY, OPENAI_API_KEY, OPENAI_BASE_URL, MODEL, etc.
 
 # Run database migrations
 uv run alembic upgrade head
@@ -84,7 +84,8 @@ Two debug configurations are provided in `.vscode/launch.json`:
 │  API Gateway (FastAPI)                                   │
 │  /api/v1/auth/*          Authentication endpoints        │
 │  /api/v1/threads/*       Conversation CRUD               │
-│  /api/v1/chat/*          Chat + SSE streaming            │
+│  /api/v1/backtest/*      Backtest submit + SSE streaming   │
+│  /api/v1/analyze/*       DC42 comparative analysis SSE     │
 ├──────────────────────────────────────────────────────────┤
 │  Core (Business Logic)                                   │
 │  auth/                   User authentication             │
@@ -178,12 +179,21 @@ quant-agent/
 | PATCH | `/api/v1/threads/{id}` | Update thread |
 | DELETE | `/api/v1/threads/{id}` | Delete thread |
 
+### Backtest & Analyze
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/v1/backtest` | Submit strategy backtest (requires jqcli env) |
+| GET | `/api/v1/backtest/auth-check` | Check jqcli configuration (read-only) |
+| GET | `/api/v1/backtest/{id}/stream` | Backtest progress SSE |
+| POST | `/api/v1/analyze/stream` | Stream DC42 comparative analysis (SSE) |
+
 ### Chat
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/api/v1/chat/{thread_id}/runs/stream` | Create run + SSE stream |
-| POST | `/api/v1/chat/{thread_id}/runs/{run_id}/cancel` | Cancel run |
+| POST | `/api/v1/threads/{id}/runs/stream` | Create run + SSE stream |
+| POST | `/api/v1/threads/{id}/runs/{run_id}/cancel` | Cancel run |
 
 ### SSE Event Format
 
@@ -210,23 +220,40 @@ data: null
 
 ### Backend (`.env`)
 
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `JWT_SECRET_KEY` | Yes (prod) | JWT signing secret |
+| `SESSION_SECRET_KEY` | Yes (prod) | Session encryption key |
+| `OPENAI_API_KEY` | Yes (chat/analyze) | LLM provider API key |
+| `OPENAI_BASE_URL` | No | LLM API base URL (default OpenAI) |
+| `MODEL` | No | Default chat/analyze model (default `gpt-4o-mini`) |
+| `DATABASE_URL` | No | SQLAlchemy async URL (default SQLite) |
+| `CHECKPOINTER_BACKEND` | No | LangGraph checkpointer (`sqlite` default) |
+| `CHECKPOINTER_CONNECTION_STRING` | No | Checkpointer DB path |
+| `JQCLI_TOKEN` | No | JoinQuant API token (server-only, for backtest) |
+| `JQCLI_COOKIE` | No | JoinQuant session cookie (server-only) |
+| `JQCLI_API_BASE` | No | JoinQuant API base URL |
+
+DC42 knowledge artifacts live under `backend/data/dc42/` (Chroma index + source docs). Rebuild via the DC42 ingestion scripts in that directory after updating source material.
+
 ```bash
 # Authentication
 JWT_SECRET_KEY=your-secret-key
-JWT_ALGORITHM=HS256
-JWT_EXPIRE_MINUTES=10080
 
 # LLM
-LLM_API_KEY=your-api-key
-LLM_API_BASE=https://api.openai.com/v1
-DEFAULT_MODEL=gpt-4o
+OPENAI_API_KEY=your-api-key
+OPENAI_BASE_URL=https://api.openai.com/v1
+MODEL=gpt-4o-mini
 
 # Database
-DATABASE_URL=sqlite+aiosqlite:///./quant_agent.db
+DATABASE_URL=sqlite+aiosqlite:///./data.db
 
 # Checkpointer
 CHECKPOINTER_BACKEND=sqlite
 CHECKPOINTER_CONNECTION_STRING=checkpoints.db
+
+# JoinQuant (optional — enables backtest)
+# JQCLI_TOKEN=...
 ```
 
 ### Frontend (`.env.local`)
@@ -250,7 +277,19 @@ cd frontend && npx tsc --noEmit
 
 # Frontend unit tests
 cd frontend && pnpm test
+
+# Frontend E2E (starts backend + frontend via Playwright webServer)
+cd frontend && pnpm exec playwright test
 ```
+
+### CI Secrets
+
+Configure these in GitHub repository secrets for full CI coverage:
+
+| Secret | Used by | Notes |
+|--------|---------|-------|
+| `OPENAI_API_KEY` | Backend integration | Required for live LLM contract tests; mocked analyze/backtest tests run without it |
+| `JQCLI_TOKEN` | Backend integration | Optional; enables jqcli-related integration when set |
 
 ## Documentation
 

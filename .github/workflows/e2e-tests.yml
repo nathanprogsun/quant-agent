@@ -38,11 +38,21 @@ jobs:
           else
             echo "has_tests=false" >> $GITHUB_OUTPUT
           fi
+      - uses: actions/setup-python@v6
+        if: steps.has-tests.outputs.has_tests == 'true'
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v7
+        if: steps.has-tests.outputs.has_tests == 'true'
+      - run: uv sync --all-extras
+        if: steps.has-tests.outputs.has_tests == 'true'
+        working-directory: backend
       - run: pnpm exec playwright test
         if: steps.has-tests.outputs.has_tests == 'true'
         working-directory: frontend
         env:
           SKIP_ENV_VALIDATION: "1"
+          CI: "true"
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
