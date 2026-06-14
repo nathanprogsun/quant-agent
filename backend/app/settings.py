@@ -198,6 +198,23 @@ class Settings(BaseSettings):
     run_manager_max_runs: int = 1000
     run_manager_ttl_seconds: int = 3600
 
+    # ==================== JoinQuant / jqcli ====================
+    jqcli_token: SecretStr | None = Field(
+        default=None,
+        validation_alias="JQCLI_TOKEN",
+        description="JoinQuant API token (server env only)",
+    )
+    jqcli_cookie: SecretStr | None = Field(
+        default=None,
+        validation_alias="JQCLI_COOKIE",
+        description="JoinQuant session cookie (server env only)",
+    )
+    jqcli_api_base: str = Field(
+        default="https://www.joinquant.com",
+        validation_alias="JQCLI_API_BASE",
+        description="JoinQuant API base URL",
+    )
+
 
 # Global settings instance
 _settings: Settings | None = None
