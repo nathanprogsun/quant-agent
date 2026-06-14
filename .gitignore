@@ -21,6 +21,11 @@ wheels/
 *.db
 *.sqlite3
 
+# Committed DC42 knowledge base artifacts
+!backend/data/
+!backend/data/dc42/
+!backend/data/dc42/**
+
 # IDE
 .idea/
 .vscode/

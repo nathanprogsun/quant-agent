@@ -8,6 +8,12 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
+from app.core.dc42.paths import (
+    DC42_CHROMA_COLLECTION_NAME,
+    DEFAULT_CHROMA_PATH,
+    DEFAULT_DC42_DB_PATH,
+    DEFAULT_PARAMETER_LIMITS_PATH,
+)
 from app.core.dc42.types import (
     Diagnosis,
     ParameterAnalysis,
@@ -158,3 +164,25 @@ class DC42Retriever:
             dc42_examples=examples,
             fix_suggestions=[f"参考 DC42 经验: {ex[:100]}" for ex in examples[:2]],
         )
+
+
+def create_default_retriever(
+    parameter_stats: dict[str, dict[str, float]] | None = None,
+) -> DC42Retriever:
+    """Build a retriever using committed artifacts under ``backend/data/dc42/``."""
+    import chromadb
+
+    stats = parameter_stats
+    if stats is None and DEFAULT_PARAMETER_LIMITS_PATH.is_file():
+        stats = json.loads(DEFAULT_PARAMETER_LIMITS_PATH.read_text(encoding="utf-8"))
+
+    client = chromadb.PersistentClient(path=str(DEFAULT_CHROMA_PATH))
+    collection = client.get_or_create_collection(
+        name=DC42_CHROMA_COLLECTION_NAME,
+        metadata={"hnsw:space": "cosine"},
+    )
+    return DC42Retriever(
+        collection=collection,
+        db_path=DEFAULT_DC42_DB_PATH,
+        parameter_stats=stats,
+    )
