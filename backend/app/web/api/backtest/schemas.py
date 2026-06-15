@@ -36,13 +36,59 @@ class BacktestMetricsResponse(BaseModel):
     max_drawdown: float | None = None
     volatility: float | None = None
     win_rate: float | None = None
+    total_return: float | None = None
     raw: dict[str, Any] = Field(default_factory=dict)
+
+
+class PerformancePointResponse(BaseModel):
+    date: str
+    strategy: float = 0
+    relative: float = 0
+    benchmark: float = 0
+    position_pct: float | None = None
+
+
+class TradeRecordResponse(BaseModel):
+    symbol: str = ""
+    name: str = ""
+    side: str = ""
+    quantity: float = 0
+    price: float = 0
+
+
+class TradeDayGroupResponse(BaseModel):
+    date: str
+    trades: list[TradeRecordResponse] = Field(default_factory=list)
+
+
+class HoldingRecordResponse(BaseModel):
+    symbol: str = ""
+    name: str = ""
+    quantity: float = 0
+    avg_cost: float = 0
+    close: float = 0
+    market_value: float = 0
+
+
+class HoldingDaySummaryResponse(BaseModel):
+    total_assets: float = 0
+    cash: float = 0
+    total_market_value: float = 0
+
+
+class HoldingDayGroupResponse(BaseModel):
+    date: str
+    holdings: list[HoldingRecordResponse] = Field(default_factory=list)
+    summary: HoldingDaySummaryResponse = Field(default_factory=HoldingDaySummaryResponse)
 
 
 class BacktestResultResponse(BaseModel):
     backtest_id: str
     status: str
     metrics: BacktestMetricsResponse | None = None
+    performance: list[PerformancePointResponse] = Field(default_factory=list)
+    trades: list[TradeDayGroupResponse] = Field(default_factory=list)
+    holdings: list[HoldingDayGroupResponse] = Field(default_factory=list)
     error: str | None = None
 
 

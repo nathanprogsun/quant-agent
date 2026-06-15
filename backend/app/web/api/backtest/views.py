@@ -23,6 +23,12 @@ from app.web.api.backtest.schemas import (
     BacktestResultResponse,
     BacktestSubmitRequest,
     BacktestSubmitResponse,
+    HoldingDayGroupResponse,
+    HoldingDaySummaryResponse,
+    HoldingRecordResponse,
+    PerformancePointResponse,
+    TradeDayGroupResponse,
+    TradeRecordResponse,
 )
 from app.web.api.backtest.stream import backtest_sse_consumer, backtest_stream_run_id
 from app.web.api.deps import get_current_user
@@ -186,19 +192,50 @@ async def get_backtest_result(
 
     metrics_resp = None
     if result.metrics:
+        raw = result.metrics.raw or {}
         metrics_resp = BacktestMetricsResponse(
             annual_return=result.metrics.annual_return,
             sharpe=result.metrics.sharpe,
             max_drawdown=result.metrics.max_drawdown,
             volatility=result.metrics.volatility,
             win_rate=result.metrics.win_rate,
-            raw=result.metrics.raw,
+            total_return=raw.get("total_return") or raw.get("algorithm_return"),
+            raw=raw,
         )
+
+    performance: list[PerformancePointResponse] = []
+    trades: list[TradeDayGroupResponse] = []
+    holdings: list[HoldingDayGroupResponse] = []
+
+    if result.status.value == "done":
+        detail = await service.get_result_detail(backtest_id)
+        performance = [
+            PerformancePointResponse(**point)
+            for point in detail.get("performance", [])
+        ]
+        trades = [
+            TradeDayGroupResponse(
+                date=group["date"],
+                trades=[TradeRecordResponse(**t) for t in group.get("trades", [])],
+            )
+            for group in detail.get("trades", [])
+        ]
+        holdings = [
+            HoldingDayGroupResponse(
+                date=group["date"],
+                holdings=[HoldingRecordResponse(**h) for h in group.get("holdings", [])],
+                summary=HoldingDaySummaryResponse(**group.get("summary", {})),
+            )
+            for group in detail.get("holdings", [])
+        ]
 
     return BacktestResultResponse(
         backtest_id=result.backtest_id,
         status=result.status.value,
         metrics=metrics_resp,
+        performance=performance,
+        trades=trades,
+        holdings=holdings,
         error=result.error,
     )
 
@@ -222,6 +259,16 @@ async def stream_backtest(
             "X-Accel-Buffering": "no",
         },
     )
+
+
+@router.post("/{backtest_id}/simulation")
+async def submit_simulation(
+    backtest_id: str,
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> dict[str, str]:
+    """Submit simulation stub — jqcli simulation wiring deferred."""
+    _assert_owner(backtest_id, current_user.id)
+    return {"task_id": f"sim_{backtest_id}", "status": "submitted"}
 
 
 @router.post("/{backtest_id}/abort", response_model=BacktestAbortResponse)
