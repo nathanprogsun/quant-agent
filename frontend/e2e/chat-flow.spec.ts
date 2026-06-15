@@ -22,7 +22,7 @@ function buildMockChatStream(threadId: string, runId: string): string {
 async function loginViaUi(page: Page) {
   const testEmail = `e2e-${Date.now()}@example.com`;
 
-  await page.goto("/workspace");
+  await page.goto("/setup");
 
   if (await page.getByRole("heading", { name: "System Setup" }).isVisible()) {
     await page.getByLabel("Full Name").fill("E2E User");
