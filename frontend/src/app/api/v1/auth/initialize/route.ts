@@ -21,7 +21,8 @@ export async function POST(request: Request) {
         const nextResponse = NextResponse.json(data);
         const setCookie = response.headers.get("set-cookie");
         if (setCookie) {
-            nextResponse.headers.set("set-cookie", setCookie);
+            const rewritten = setCookie.replace(/;\s*Secure/gi, "");
+            nextResponse.headers.set("set-cookie", rewritten);
         }
 
         return nextResponse;

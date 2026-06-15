@@ -17,8 +17,7 @@ export default async function AuthLayout({
             break;
 
         case "needs_setup":
-            // 未初始化系统 → 只允许访问 setup page
-            redirect("/setup");
+            // Fresh install: allow setup (and login) pages to render.
             break;
 
         case "unauthenticated":

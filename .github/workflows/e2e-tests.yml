@@ -38,11 +38,62 @@ jobs:
           else
             echo "has_tests=false" >> $GITHUB_OUTPUT
           fi
+      - uses: actions/setup-python@v6
+        if: steps.has-tests.outputs.has_tests == 'true'
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v7
+        if: steps.has-tests.outputs.has_tests == 'true'
+      - run: uv sync --all-extras
+        if: steps.has-tests.outputs.has_tests == 'true'
+        working-directory: backend
+      - name: Start backend for E2E
+        if: steps.has-tests.outputs.has_tests == 'true'
+        working-directory: backend
+        env:
+          DATABASE_URL: sqlite+aiosqlite:///./e2e-data.db
+          CHECKPOINTER_CONNECTION_STRING: e2e-checkpoints.db
+          OPENAI_API_KEY: test-key-for-e2e
+          JWT_SECRET_KEY: e2e-jwt-secret
+          SESSION_SECRET_KEY: e2e-session-secret
+        run: |
+          uv run alembic upgrade head
+          nohup uv run uvicorn app.web.application:app --host 127.0.0.1 --port 8000 > /tmp/e2e-backend.log 2>&1 &
+          for i in $(seq 1 60); do
+            if curl -sf http://127.0.0.1:8000/health > /dev/null; then
+              echo "Backend ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Backend failed to start"
+          cat /tmp/e2e-backend.log
+          exit 1
+      - name: Start frontend for E2E
+        if: steps.has-tests.outputs.has_tests == 'true'
+        working-directory: frontend
+        env:
+          BACKEND_URL: http://127.0.0.1:8000
+          SKIP_ENV_VALIDATION: "1"
+        run: |
+          nohup pnpm dev --hostname 127.0.0.1 --port 3000 > /tmp/e2e-frontend.log 2>&1 &
+          for i in $(seq 1 60); do
+            if curl -sf http://127.0.0.1:3000 > /dev/null; then
+              echo "Frontend ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Frontend failed to start"
+          cat /tmp/e2e-frontend.log
+          exit 1
       - run: pnpm exec playwright test
         if: steps.has-tests.outputs.has_tests == 'true'
         working-directory: frontend
         env:
           SKIP_ENV_VALIDATION: "1"
+          CI: "true"
+          BACKEND_URL: http://127.0.0.1:8000
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:

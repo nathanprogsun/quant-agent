@@ -1,5 +1,8 @@
 'use client'
 
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+
 interface AnalysisResultProps {
   content: string
   isStreaming: boolean
@@ -16,14 +19,12 @@ export function AnalysisResult({ content, isStreaming }: AnalysisResultProps) {
 
   return (
     <div className="rounded-md border border-gray-200 p-4">
-      <div className="prose prose-sm max-w-none">
-        {content.split('\n').map((line, i) => (
-          <p key={i}>{line}</p>
-        ))}
+      <div className="prose prose-sm max-w-none dark:prose-invert">
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
       </div>
-      {isStreaming && (
-        <span className="inline-block mt-2 h-2 w-2 animate-pulse rounded-full bg-blue-500" />
-      )}
+      {isStreaming ? (
+        <span className="mt-2 inline-block h-2 w-2 animate-pulse rounded-full bg-blue-500" />
+      ) : null}
     </div>
   )
 }
