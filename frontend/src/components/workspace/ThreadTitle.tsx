@@ -61,7 +61,7 @@ export function ThreadTitle({ threadId, title }: ThreadTitleProps) {
       className="cursor-pointer truncate text-lg font-semibold hover:text-blue-600"
       title="Click to edit"
     >
-      {title ?? "Untitled Chat"}
+      {title ?? "未命名对话"}
     </h1>
   );
 }

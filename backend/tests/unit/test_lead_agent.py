@@ -146,8 +146,8 @@ async def test_agent_node_injects_system_prompt() -> None:
 
 
 @pytest.mark.asyncio
-async def test_agent_node_skips_system_prompt_if_present() -> None:
-    """agent_node does not duplicate SystemMessage if already first."""
+async def test_agent_node_refreshes_stale_system_prompt() -> None:
+    """Stale checkpoint SystemMessage is replaced with the current system prompt."""
     mock_model = AsyncMock()
     mock_model.ainvoke = AsyncMock(return_value=AIMessage(content="ok"))
 
@@ -166,5 +166,26 @@ async def test_agent_node_skips_system_prompt_if_present() -> None:
     await node(state)
 
     call_args = mock_model.ainvoke.call_args[0][0]
-    assert call_args[0].content == "custom prompt"
-    assert len(call_args) == 2  # SystemMessage + HumanMessage, no duplicate
+    assert call_args[0].content == "system instructions"
+    assert len(call_args) == 2
+
+
+@pytest.mark.asyncio
+async def test_agent_node_passes_system_prompt_to_before_model() -> None:
+    """before_model hooks receive the injected system prompt in state."""
+    mw = RecordingMiddleware()
+    mock_model = AsyncMock()
+    mock_model.ainvoke = AsyncMock(return_value=AIMessage(content="response"))
+
+    node = _make_agent_node(
+        model=mock_model,
+        system_prompt="system instructions",
+        middlewares=[mw],
+    )
+
+    state: ThreadState = {"messages": [HumanMessage(content="hi")]}
+    await node(state)
+
+    before_state = mw.before_model_calls[0]
+    assert isinstance(before_state["messages"][0], SystemMessage)
+    assert before_state["messages"][0].content == "system instructions"

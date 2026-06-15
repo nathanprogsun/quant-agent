@@ -2,9 +2,9 @@ export default function WorkspacePage() {
   return (
     <div className="flex h-full items-center justify-center">
       <div className="text-center">
-        <h1 className="text-2xl font-bold">Welcome to Quant Agent</h1>
+        <h1 className="text-2xl font-bold">欢迎使用 Quant Agent</h1>
         <p className="mt-2 text-gray-500">
-          Select a chat from the sidebar or start a new one.
+          从侧边栏选择对话，或点击「新对话」开始。
         </p>
       </div>
     </div>

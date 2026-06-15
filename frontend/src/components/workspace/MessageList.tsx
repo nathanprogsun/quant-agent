@@ -1,6 +1,7 @@
 "use client";
 
 import type { Message } from "@langchain/langgraph-sdk";
+import { Fragment } from "react";
 
 import {
   extractContentFromMessage,
@@ -11,6 +12,24 @@ import {
 interface MessageListProps {
   messages: Message[];
   isLoading?: boolean;
+}
+
+function getMessageGroupKey(
+  group: { type: string; id?: string; messages: Message[] },
+  index: number,
+): string {
+  if (group.id) return group.id;
+
+  const messageIds = group.messages
+    .map((message) => message.id)
+    .filter((id): id is string => Boolean(id))
+    .join("-");
+
+  return messageIds || `${group.type}-${index}`;
+}
+
+function getMessageKey(message: Message, fallback: string): string {
+  return message.id ?? fallback;
 }
 
 export function MessageList({ messages, isLoading }: MessageListProps) {
@@ -24,30 +43,50 @@ export function MessageList({ messages, isLoading }: MessageListProps) {
   if (groups.length === 0) {
     return (
       <div className="flex h-full items-center justify-center text-gray-400">
-        {showThinkingIndicator ? "Thinking..." : "Start a conversation"}
+        {showThinkingIndicator ? "思考中..." : "开始对话吧"}
       </div>
     );
   }
 
   return (
     <div className="space-y-6 p-4">
-      {groups.map((group) => {
+      {groups.map((group, index) => {
+        const groupKey = getMessageGroupKey(group, index);
+
         if (group.type === "human") {
-          return group.messages.map((msg) => (
-            <HumanMessage key={msg.id} message={msg} />
-          ));
+          return (
+            <Fragment key={groupKey}>
+              {group.messages.map((msg, messageIndex) => (
+                <HumanMessage
+                  key={getMessageKey(msg, `${groupKey}-human-${messageIndex}`)}
+                  message={msg}
+                />
+              ))}
+            </Fragment>
+          );
         }
 
         if (group.type === "assistant") {
           return (
-            <AssistantGroup key={group.id} messages={group.messages} />
+            <AssistantGroup
+              key={groupKey}
+              groupKey={groupKey}
+              messages={group.messages}
+            />
           );
         }
 
         if (group.type === "tool") {
-          return group.messages.map((msg) => (
-            <ToolMessage key={msg.id} message={msg} />
-          ));
+          return (
+            <Fragment key={groupKey}>
+              {group.messages.map((msg, messageIndex) => (
+                <ToolMessage
+                  key={getMessageKey(msg, `${groupKey}-tool-${messageIndex}`)}
+                  message={msg}
+                />
+              ))}
+            </Fragment>
+          );
         }
 
         return null;
@@ -56,7 +95,7 @@ export function MessageList({ messages, isLoading }: MessageListProps) {
       {showThinkingIndicator && (
         <div className="flex justify-start">
           <div className="rounded-lg bg-gray-100 px-4 py-2">
-            <span className="animate-pulse">Thinking...</span>
+            <span className="animate-pulse">思考中...</span>
           </div>
         </div>
       )}
@@ -81,22 +120,30 @@ function HumanMessage({ message }: { message: Message }) {
 
 // ── Assistant Group (AI + optional ToolMessages) ────────────────────────────
 
-function AssistantGroup({ messages }: { messages: Message[] }) {
+function AssistantGroup({
+  groupKey,
+  messages,
+}: {
+  groupKey: string;
+  messages: Message[];
+}) {
   const aiMessages = messages.filter((m) => m.type === "ai");
   const toolMessages = messages.filter((m) => m.type === "tool");
 
   return (
     <div className="space-y-2">
       {/* Tool calls display */}
-      {aiMessages.map((msg) => {
+      {aiMessages.map((msg, messageIndex) => {
         const toolCalls = extractToolCallsFromMessage(msg);
         if (toolCalls.length === 0) return null;
 
+        const messageKey = getMessageKey(msg, `${groupKey}-ai-${messageIndex}`);
+
         return (
-          <div key={`tc-${msg.id}`} className="space-y-1">
-            {toolCalls.map((tc) => (
+          <div key={`tc-${messageKey}`} className="space-y-1">
+            {toolCalls.map((tc, toolCallIndex) => (
               <div
-                key={tc.id}
+                key={tc.id || `${messageKey}-tc-${toolCallIndex}`}
                 className="flex items-center gap-2 rounded bg-gray-50 px-3 py-1.5 text-sm text-gray-600"
               >
                 <span className="inline-block h-2 w-2 rounded-full bg-yellow-400" />
@@ -111,8 +158,11 @@ function AssistantGroup({ messages }: { messages: Message[] }) {
       })}
 
       {/* Tool results display */}
-      {toolMessages.map((msg) => (
-        <ToolMessage key={msg.id} message={msg} />
+      {toolMessages.map((msg, messageIndex) => (
+        <ToolMessage
+          key={getMessageKey(msg, `${groupKey}-tool-result-${messageIndex}`)}
+          message={msg}
+        />
       ))}
 
       {/* Final AI response */}
@@ -121,8 +171,11 @@ function AssistantGroup({ messages }: { messages: Message[] }) {
           const content = extractContentFromMessage(msg);
           return content.length > 0;
         })
-        .map((msg) => (
-          <div key={msg.id} className="flex justify-start">
+        .map((msg, messageIndex) => (
+          <div
+            key={getMessageKey(msg, `${groupKey}-response-${messageIndex}`)}
+            className="flex justify-start"
+          >
             <div className="max-w-[80%] rounded-lg bg-gray-100 px-4 py-2 text-gray-900">
               <p className="whitespace-pre-wrap">
                 {extractContentFromMessage(msg)}

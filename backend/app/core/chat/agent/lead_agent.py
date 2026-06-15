@@ -26,6 +26,33 @@ from app.core.chat.tools.builtin.lint_tool import lint_code_tool
 from app.core.chat.tools.builtin.param_tool import make_validate_parameters_tool
 from app.settings import get_settings
 
+_SYSTEM_SUFFIX_MARKERS = ("[系统上下文]", "[DC42 Knowledge]", "<dc42_knowledge>", "<memory>")
+
+
+def _system_suffix(text: str) -> str:
+    """Preserve middleware-appended blocks when refreshing the base system prompt."""
+    for marker in _SYSTEM_SUFFIX_MARKERS:
+        idx = text.find(marker)
+        if idx != -1:
+            return text[idx:]
+    return ""
+
+
+def _ensure_system_message(messages: list[Any], system_prompt: str) -> list[Any]:
+    """Ensure the latest base system prompt is first, keeping injected context suffixes."""
+    if not messages:
+        return [SystemMessage(content=system_prompt)]
+
+    if isinstance(messages[0], SystemMessage):
+        content = messages[0].content
+        text = content if isinstance(content, str) else str(content)
+        suffix = _system_suffix(text)
+        refreshed = list(messages)
+        refreshed[0] = SystemMessage(content=system_prompt + suffix)
+        return refreshed
+
+    return [SystemMessage(content=system_prompt), *messages]
+
 
 def make_lead_agent(config: RunnableConfig) -> Any:
     """Agent graph factory.
@@ -91,21 +118,22 @@ def _make_agent_node(
     """
 
     async def agent_node(state: ThreadState) -> dict[str, Any]:
-        messages = list(state.get("messages", []))
+        messages = _ensure_system_message(list(state.get("messages", [])), system_prompt)
+        working_state: dict[str, Any] = {**dict(state), "messages": messages}
 
-        # Inject system prompt if not present
-        if not messages or not isinstance(messages[0], SystemMessage):
-            messages = [SystemMessage(content=system_prompt), *messages]
-
-        # before_model hooks
+        # before_model hooks — must see the system prompt so middlewares do not drop it
         state_patches: dict[str, Any] = {}
         for mw in middlewares:
-            modified = await mw.before_model(dict(state), {})
+            modified = await mw.before_model(working_state, {})
             if modified:
-                messages = modified.get("messages", messages)
                 for key, value in modified.items():
-                    if key != "messages":
+                    if key == "messages":
+                        messages = value
+                        working_state["messages"] = messages
+                    else:
                         state_patches[key] = value
+
+        messages = _ensure_system_message(messages, system_prompt)
 
         # LLM call
         response = await model.ainvoke(messages)

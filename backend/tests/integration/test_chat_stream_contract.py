@@ -121,4 +121,6 @@ async def test_chat_stream_contract(
     assert len(message_events) >= 2, "expected multiple incremental messages events"
 
     thread = await authed_api_client.get(f"/api/v1/threads/{thread_id}")
-    assert thread["title"] == "Reply with the single word: hello"
+    title = thread.get("title")
+    assert isinstance(title, str) and title.strip()
+    assert title != "Reply with the single word: hello"

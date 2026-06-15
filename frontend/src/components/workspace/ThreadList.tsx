@@ -1,24 +1,46 @@
 "use client";
 
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+
 import { useCreateThread, useDeleteThread, useThreads } from "@/hooks/useThreads";
 
 export function ThreadList() {
+  const router = useRouter();
   const { data: threads, isLoading } = useThreads();
   const createThread = useCreateThread();
   const deleteThread = useDeleteThread();
+  const [createError, setCreateError] = useState<string | null>(null);
+
+  const handleNewChat = () => {
+    setCreateError(null);
+    createThread.mutate(undefined, {
+      onSuccess: (thread) => {
+        router.push(`/workspace/chats/${thread.id}`);
+      },
+      onError: () => {
+        setCreateError("创建对话失败，请稍后重试");
+      },
+    });
+  };
 
   if (isLoading) {
-    return <div className="p-4 text-gray-500">Loading...</div>;
+    return <div className="p-4 text-gray-500">加载中...</div>;
   }
 
   return (
     <div className="space-y-2">
       <button
-        onClick={() => createThread.mutate(undefined)}
-        className="w-full rounded border border-dashed p-2 text-sm hover:bg-gray-100"
+        onClick={handleNewChat}
+        disabled={createThread.isPending}
+        className="w-full rounded border border-dashed p-2 text-sm hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-60"
       >
-        + New Chat
+        {createThread.isPending ? "创建中..." : "+ 新对话"}
       </button>
+
+      {createError ? (
+        <p className="px-2 text-xs text-red-600">{createError}</p>
+      ) : null}
 
       {threads?.map((thread) => (
         <div
@@ -29,7 +51,7 @@ export function ThreadList() {
             href={`/workspace/chats/${thread.id}`}
             className="flex-1 truncate text-sm"
           >
-            {thread.title ?? "Untitled Chat"}
+            {thread.title ?? "未命名对话"}
           </a>
           <button
             onClick={() => deleteThread.mutate(thread.id)}
@@ -41,7 +63,7 @@ export function ThreadList() {
       ))}
 
       {threads?.length === 0 && (
-        <p className="p-2 text-sm text-gray-400">No chats yet</p>
+        <p className="p-2 text-sm text-gray-400">暂无对话</p>
       )}
     </div>
   );

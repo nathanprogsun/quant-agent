@@ -9,13 +9,13 @@ describe("MessageList", () => {
   test("shows empty state when no messages", () => {
     render(<MessageList messages={[]} />);
 
-    expect(screen.getByText("Start a conversation")).toBeInTheDocument();
+    expect(screen.getByText("开始对话吧")).toBeInTheDocument();
   });
 
   test("shows loading state when isLoading and empty", () => {
     render(<MessageList messages={[]} isLoading />);
 
-    expect(screen.getByText("Thinking...")).toBeInTheDocument();
+    expect(screen.getByText("思考中...")).toBeInTheDocument();
   });
 
   test("renders human message", () => {
@@ -100,7 +100,7 @@ describe("MessageList", () => {
     render(<MessageList messages={messages} isLoading />);
 
     // Multiple "Thinking..." texts: one from empty state logic won't show, but the loading indicator will
-    const thinkingElements = screen.getAllByText("Thinking...");
+    const thinkingElements = screen.getAllByText("思考中...");
     expect(thinkingElements.length).toBeGreaterThanOrEqual(1);
   });
 });
