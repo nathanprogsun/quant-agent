@@ -13,7 +13,11 @@ import { useAuth } from "@/core/auth/AuthProvider";
 import { useAnalyzeStream } from "@/core/chat/useAnalyzeStream";
 import { useBacktestStream } from "@/core/chat/useBacktestStream";
 import { useSessionState } from "@/core/chat/useSessionState";
-import type { BacktestMetrics } from "@/core/chat/types";
+import { ShareModal } from "@/components/workspace/ShareModal";
+import type { PerformancePoint } from "@/components/workspace/PerformanceChart";
+import type { TradeDayGroup } from "@/components/workspace/TradeDetailsPanel";
+import type { HoldingDayGroup } from "@/components/workspace/HoldingDetailsPanel";
+import type { BacktestMetrics, BacktestResultDetail } from "@/core/chat/types";
 import {
   extractLatestPythonBlock,
   shouldSyncEditorCode,
@@ -72,10 +76,19 @@ function ChatPageContent({
   const [editorCode, setEditorCode] = useState("");
   const [jqcliConfigured, setJqcliConfigured] = useState(false);
   const [backtestId, setBacktestId] = useState<string | null>(null);
+  const backtestIdRef = useRef<string | null>(null);
   const [lastBacktestId, setLastBacktestId] = useState<string | null>(null);
   const [streamUrl, setStreamUrl] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [logLines, setLogLines] = useState<string[]>([]);
+  const [performanceSeries, setPerformanceSeries] = useState<PerformancePoint[]>([]);
+  const [tradeGroups, setTradeGroups] = useState<TradeDayGroup[]>([]);
+  const [holdingGroups, setHoldingGroups] = useState<HoldingDayGroup[]>([]);
+  const [inputPrefill, setInputPrefill] = useState<string | null>(null);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [shareCreating, setShareCreating] = useState(false);
   const lastSyncedBlockRef = useRef<string | null>(null);
   const wasLoadingRef = useRef(false);
   const editorVersionRef = useRef(1);
@@ -131,15 +144,38 @@ function ChatPageContent({
     };
   }, []);
 
+  useEffect(() => {
+    backtestIdRef.current = backtestId;
+  }, [backtestId]);
+
+  const fetchBacktestDetail = useCallback(async (id: string) => {
+    const res = await fetch(`/api/v1/backtest/${id}`, { credentials: "include" });
+    if (!res.ok) return;
+    const data = (await res.json()) as BacktestResultDetail & {
+      performance?: PerformancePoint[];
+      trades?: TradeDayGroup[];
+      holdings?: HoldingDayGroup[];
+    };
+    setPerformanceSeries(data.performance ?? []);
+    setTradeGroups(data.trades ?? []);
+    setHoldingGroups(data.holdings ?? []);
+  }, []);
+
   const { connect, disconnect } = useBacktestStream(streamUrl ?? "", {
     onStarted: (id) => {
       setBacktestId(id);
+      setLogLines([]);
       workspace.onRunStarted();
     },
     onProgress: () => {},
+    onLogLine: (line) => {
+      setLogLines((prev) => [...prev, line]);
+    },
     onComplete: (metrics: BacktestMetrics) => {
-      if (backtestId) {
-        setLastBacktestId(backtestId);
+      const id = backtestIdRef.current;
+      if (id) {
+        setLastBacktestId(id);
+        void fetchBacktestDetail(id);
       }
       backtestComplete(metrics);
       workspace.onRunComplete();
@@ -243,6 +279,7 @@ function ChatPageContent({
 
     cancelAnalyze();
     setSubmitError(null);
+    setLogLines([]);
     startBacktest();
     workspace.onRunStarted();
 
@@ -347,9 +384,93 @@ function ChatPageContent({
     thread_id,
   ]);
 
+  const handleAiFix = useCallback(() => {
+    const recentErrors = logLines.slice(-8).join("\n");
+    setInputPrefill(
+      `请根据以下回测日志修复策略代码中的问题：\n\n${recentErrors}\n\n请给出修复后的完整 Python 策略代码。`,
+    );
+  }, [logLines]);
+
+  const handleShare = useCallback(async () => {
+    if (!isAuthenticated || isNewThread) {
+      openLoginModal();
+      return;
+    }
+
+    setShareOpen(true);
+    setShareCreating(true);
+    setShareUrl(null);
+
+    try {
+      const res = await fetch("/api/v1/share", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          thread_id,
+          title: threadTitle,
+          code: editorCode,
+          messages: messages.map((m) => ({
+            role: m.type,
+            content: typeof m.content === "string" ? m.content : JSON.stringify(m.content),
+          })),
+          metrics: lastMetrics,
+        }),
+      });
+      const data = (await res.json()) as { url?: string };
+      if (!res.ok || !data.url) throw new Error("分享失败");
+      setShareUrl(data.url);
+    } catch {
+      setShareUrl(null);
+    } finally {
+      setShareCreating(false);
+    }
+  }, [
+    editorCode,
+    isAuthenticated,
+    isNewThread,
+    lastMetrics,
+    messages,
+    openLoginModal,
+    thread_id,
+    threadTitle,
+  ]);
+
+  const handleSubmitSimulation = useCallback(async () => {
+    if (!lastBacktestId || workspace.runStatus !== "done") return;
+    try {
+      const res = await fetch(`/api/v1/backtest/${lastBacktestId}/simulation`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("提交模拟失败");
+      setSubmitError(null);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "提交模拟失败";
+      setSubmitError(message);
+    }
+  }, [lastBacktestId, workspace.runStatus]);
+
+  const handleNewChat = useCallback(() => {
+    if (!isAuthenticated) {
+      openLoginModal();
+      return;
+    }
+    router.push(`/workspace/chats/${NEW_THREAD_ID}`);
+  }, [isAuthenticated, openLoginModal, router]);
+
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <ChatWorkspaceHeader threadId={thread_id} title={threadTitle} />
+      <div className="flex items-center justify-between border-b px-4 py-2">
+        <ChatWorkspaceHeader threadId={thread_id} title={threadTitle} />
+        <button
+          type="button"
+          onClick={handleNewChat}
+          className="rounded-md border px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+        >
+          开启新对话
+        </button>
+      </div>
 
       {submitError ? (
         <p className="border-b bg-red-50 px-4 py-2 text-sm text-red-700">
@@ -373,13 +494,19 @@ function ChatPageContent({
               onOpenCode={workspace.openCodeTab}
             />
           </div>
-          <InputBox onSend={handleSend} disabled={isLoading} />
+          <InputBox
+            onSend={handleSend}
+            disabled={isLoading}
+            prefill={inputPrefill}
+            onPrefillApplied={() => setInputPrefill(null)}
+          />
         </div>
 
         {showStrategyWorkspace ? (
           <StrategyWorkspace
             activeTab={workspace.activeTab}
             onTabChange={workspace.setActiveTab}
+            runStatus={workspace.runStatus}
             editorCode={editorCode}
             onEditorChange={setEditorCode}
             isGenerating={isLoading}
@@ -388,12 +515,26 @@ function ChatPageContent({
             jqcliConfigured={jqcliConfigured}
             lastMetrics={lastMetrics}
             isAnalyzing={isAnalyzing}
+            logLines={logLines}
+            performanceSeries={performanceSeries}
+            tradeGroups={tradeGroups}
+            holdingGroups={holdingGroups}
             onRunBacktest={() => void handleRunBacktest()}
             onAbortBacktest={handleAbortBacktest}
             onAnalyze={() => void handleRunAnalyze()}
+            onAiFix={handleAiFix}
+            onSubmitSimulation={() => void handleSubmitSimulation()}
+            onShare={() => void handleShare()}
           />
         ) : null}
       </div>
+
+      <ShareModal
+        open={shareOpen}
+        onClose={() => setShareOpen(false)}
+        shareUrl={shareUrl}
+        isCreating={shareCreating}
+      />
     </div>
   );
 }

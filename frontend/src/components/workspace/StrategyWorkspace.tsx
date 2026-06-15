@@ -1,13 +1,22 @@
 "use client";
 
+import { RunLogPanel } from "@/components/workspace/RunLogPanel";
+import { PerformancePanel } from "@/components/workspace/PerformancePanel";
+import { TradeDetailsPanel, type TradeDayGroup } from "@/components/workspace/TradeDetailsPanel";
+import {
+  HoldingDetailsPanel,
+  type HoldingDayGroup,
+} from "@/components/workspace/HoldingDetailsPanel";
 import { WorkspaceHeader } from "@/components/workspace/WorkspaceHeader";
 import { StrategyEditor } from "@/components/workspace/StrategyEditor";
 import type { BacktestMetrics, SessionState } from "@/core/chat/types";
-import type { StrategyTab } from "@/hooks/useStrategyWorkspace";
+import type { PerformancePoint } from "@/components/workspace/PerformanceChart";
+import type { StrategyTab, RunStatus } from "@/hooks/useStrategyWorkspace";
 
 interface StrategyWorkspaceProps {
   activeTab: StrategyTab;
   onTabChange: (tab: StrategyTab) => void;
+  runStatus: RunStatus;
   editorCode: string;
   onEditorChange: (code: string) => void;
   isGenerating: boolean;
@@ -16,22 +25,22 @@ interface StrategyWorkspaceProps {
   jqcliConfigured: boolean;
   lastMetrics: BacktestMetrics | null;
   isAnalyzing: boolean;
+  logLines: string[];
+  performanceSeries: PerformancePoint[];
+  tradeGroups: TradeDayGroup[];
+  holdingGroups: HoldingDayGroup[];
   onRunBacktest: () => void;
   onAbortBacktest: () => void;
   onAnalyze: () => void;
-}
-
-function TabPlaceholder({ title }: { title: string }) {
-  return (
-    <div className="flex h-full min-h-[320px] items-center justify-center text-sm text-gray-400">
-      {title}（即将上线）
-    </div>
-  );
+  onAiFix?: () => void;
+  onSubmitSimulation?: () => void;
+  onShare?: () => void;
 }
 
 export function StrategyWorkspace({
   activeTab,
   onTabChange,
+  runStatus,
   editorCode,
   onEditorChange,
   isGenerating,
@@ -40,9 +49,16 @@ export function StrategyWorkspace({
   jqcliConfigured,
   lastMetrics,
   isAnalyzing,
+  logLines,
+  performanceSeries,
+  tradeGroups,
+  holdingGroups,
   onRunBacktest,
   onAbortBacktest,
   onAnalyze,
+  onAiFix,
+  onSubmitSimulation,
+  onShare,
 }: StrategyWorkspaceProps) {
   return (
     <div className="flex min-h-0 min-w-[480px] flex-1 flex-col bg-white">
@@ -53,9 +69,12 @@ export function StrategyWorkspace({
         jqcliConfigured={jqcliConfigured}
         lastMetrics={lastMetrics}
         isAnalyzing={isAnalyzing}
+        runStatus={runStatus}
         onRunBacktest={onRunBacktest}
         onAbortBacktest={onAbortBacktest}
         onAnalyze={onAnalyze}
+        onSubmitSimulation={onSubmitSimulation}
+        onShare={onShare}
       />
       <div className="min-h-0 flex-1">
         {activeTab === "code" ? (
@@ -68,16 +87,20 @@ export function StrategyWorkspace({
           />
         ) : null}
         {activeTab === "performance" ? (
-          <TabPlaceholder title="收益概况" />
+          <PerformancePanel metrics={lastMetrics} series={performanceSeries} />
         ) : null}
         {activeTab === "trades" ? (
-          <TabPlaceholder title="交易详情" />
+          <TradeDetailsPanel groups={tradeGroups} />
         ) : null}
         {activeTab === "holdings" ? (
-          <TabPlaceholder title="持仓详情" />
+          <HoldingDetailsPanel groups={holdingGroups} />
         ) : null}
         {activeTab === "logs" ? (
-          <TabPlaceholder title="运行日志" />
+          <RunLogPanel
+            lines={logLines}
+            isRunning={runStatus === "running"}
+            onAiFix={onAiFix}
+          />
         ) : null}
       </div>
     </div>
