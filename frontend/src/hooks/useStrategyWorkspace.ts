@@ -16,14 +16,17 @@ export function useStrategyWorkspace() {
 
   const onRunStarted = useCallback(() => {
     setRunStatus("running");
+    setActiveTab("logs");
   }, []);
 
   const onRunComplete = useCallback(() => {
     setRunStatus("done");
+    setActiveTab("performance");
   }, []);
 
   const onRunFailed = useCallback(() => {
     setRunStatus("failed");
+    setActiveTab("logs");
   }, []);
 
   const resetRunStatus = useCallback(() => {

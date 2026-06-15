@@ -29,6 +29,7 @@ async def run_backtest_worker(
 ) -> None:
     """Poll jqcli until terminal state and publish SSE events every 3s."""
     elapsed = 0.0
+    log_offset = 0
     try:
         await _publish_event(
             bridge,
@@ -40,6 +41,26 @@ async def run_backtest_worker(
             result = await service.poll(backtest_id)
 
             if result.status == BacktestStatus.RUNNING:
+                try:
+                    logs_payload = await service.fetch_logs_incremental(
+                        backtest_id, log_offset
+                    )
+                    for line in logs_payload.get("logs", []):
+                        await _publish_event(
+                            bridge,
+                            run_id,
+                            {
+                                "type": "backtest_log_line",
+                                "backtest_id": backtest_id,
+                                "line": str(line),
+                            },
+                        )
+                    next_offset = logs_payload.get("next_offset")
+                    if isinstance(next_offset, int):
+                        log_offset = next_offset
+                except Exception:
+                    logger.debug("Log fetch skipped for %s", backtest_id)
+
                 await _publish_event(
                     bridge,
                     run_id,
@@ -56,12 +77,14 @@ async def run_backtest_worker(
             if result.status == BacktestStatus.DONE:
                 metrics_payload = None
                 if result.metrics:
+                    raw = result.metrics.raw or {}
                     metrics_payload = {
                         "annual_return": result.metrics.annual_return,
                         "sharpe": result.metrics.sharpe,
                         "max_drawdown": result.metrics.max_drawdown,
                         "volatility": result.metrics.volatility,
                         "win_rate": result.metrics.win_rate,
+                        "total_return": raw.get("total_return") or raw.get("algorithm_return"),
                     }
                 await _publish_event(
                     bridge,

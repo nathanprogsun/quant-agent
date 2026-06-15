@@ -90,6 +90,128 @@ def _poll_sync(backtest_id: str, token: str, cookie: str, api_base: str) -> dict
         client.close()
 
 
+def _get_logs_sync(
+    backtest_id: str,
+    offset: int,
+    token: str,
+    cookie: str,
+    api_base: str,
+) -> dict[str, Any]:
+    """Sync jqcli fetch backtest logs — runs in thread pool."""
+    from jqcli.api.backtest import get_backtest_logs
+    from jqcli.api.client import ApiClient
+
+    client = ApiClient(api_base, token=token, cookie=cookie)
+    try:
+        return get_backtest_logs(client, backtest_id, offset=offset, all_items=False)
+    finally:
+        client.close()
+
+
+def _parse_performance_series(result_payload: dict[str, Any]) -> list[dict[str, Any]]:
+    data = result_payload.get("data", result_payload)
+    if isinstance(data, dict) and isinstance(data.get("data"), dict):
+        data = data["data"]
+    result = data.get("result") if isinstance(data, dict) else {}
+    if not isinstance(result, dict):
+        return []
+
+    series = result.get("series") or result.get("chart_series") or result.get("charts")
+    if not isinstance(series, list):
+        return []
+
+    points: list[dict[str, Any]] = []
+    for item in series:
+        if not isinstance(item, dict):
+            continue
+        date = item.get("date") or item.get("time") or item.get("trade_date")
+        if not date:
+            continue
+        points.append(
+            {
+                "date": str(date),
+                "strategy": float(item.get("strategy") or item.get("strategy_return") or 0),
+                "relative": float(item.get("relative") or item.get("relative_return") or 0),
+                "benchmark": float(item.get("benchmark") or item.get("benchmark_return") or 0),
+                "position_pct": item.get("position_pct"),
+            }
+        )
+    return points
+
+
+def _parse_trade_groups(result_payload: dict[str, Any]) -> list[dict[str, Any]]:
+    data = result_payload.get("data", result_payload)
+    if isinstance(data, dict) and isinstance(data.get("data"), dict):
+        data = data["data"]
+    result = data.get("result") if isinstance(data, dict) else {}
+    trades = result.get("trades") if isinstance(result, dict) else None
+    if not isinstance(trades, list):
+        return []
+
+    by_date: dict[str, list[dict[str, Any]]] = {}
+    for item in trades:
+        if not isinstance(item, dict):
+            continue
+        date = str(item.get("date") or item.get("trade_date") or "")
+        if not date:
+            continue
+        by_date.setdefault(date, []).append(
+            {
+                "symbol": str(item.get("symbol") or item.get("security") or ""),
+                "name": str(item.get("name") or item.get("security_name") or ""),
+                "side": str(item.get("side") or item.get("action") or ""),
+                "quantity": float(item.get("quantity") or item.get("amount") or 0),
+                "price": float(item.get("price") or 0),
+            }
+        )
+
+    return [{"date": date, "trades": rows} for date, rows in sorted(by_date.items())]
+
+
+def _parse_holding_groups(result_payload: dict[str, Any]) -> list[dict[str, Any]]:
+    data = result_payload.get("data", result_payload)
+    if isinstance(data, dict) and isinstance(data.get("data"), dict):
+        data = data["data"]
+    result = data.get("result") if isinstance(data, dict) else {}
+    holdings = result.get("holdings") or result.get("positions")
+    if not isinstance(holdings, list):
+        return []
+
+    by_date: dict[str, list[dict[str, Any]]] = {}
+    for item in holdings:
+        if not isinstance(item, dict):
+            continue
+        date = str(item.get("date") or item.get("trade_date") or "")
+        if not date:
+            continue
+        by_date.setdefault(date, []).append(
+            {
+                "symbol": str(item.get("symbol") or item.get("security") or ""),
+                "name": str(item.get("name") or item.get("security_name") or ""),
+                "quantity": float(item.get("quantity") or item.get("amount") or 0),
+                "avg_cost": float(item.get("avg_cost") or item.get("cost") or 0),
+                "close": float(item.get("close") or item.get("price") or 0),
+                "market_value": float(item.get("market_value") or item.get("value") or 0),
+            }
+        )
+
+    groups: list[dict[str, Any]] = []
+    for date, rows in sorted(by_date.items()):
+        total_market_value = sum(r["market_value"] for r in rows)
+        groups.append(
+            {
+                "date": date,
+                "holdings": rows,
+                "summary": {
+                    "total_market_value": total_market_value,
+                    "cash": 0.0,
+                    "total_assets": total_market_value,
+                },
+            }
+        )
+    return groups
+
+
 def _get_result_sync(backtest_id: str, token: str, cookie: str, api_base: str) -> dict[str, Any]:
     """Sync jqcli get backtest result — runs in thread pool."""
     from jqcli.api.backtest import get_backtest_result
@@ -209,3 +331,40 @@ class BacktestService:
         if result.metrics:
             return result.metrics
         raise BacktestError(message="回测结果不可用", code="backtest_no_metrics")
+
+    async def fetch_logs_incremental(self, backtest_id: str, offset: int = 0) -> dict[str, Any]:
+        """Fetch incremental backtest logs from jqcli."""
+        try:
+            loop = asyncio.get_running_loop()
+            return await loop.run_in_executor(
+                _executor,
+                functools.partial(
+                    _get_logs_sync,
+                    backtest_id,
+                    offset,
+                    self._token,
+                    self._cookie,
+                    self._api_base,
+                ),
+            )
+        except Exception as e:
+            raise map_jqcli_error(e)
+
+    async def get_result_detail(self, backtest_id: str) -> dict[str, Any]:
+        """Fetch full jqcli result and parse performance/trades/holdings."""
+        try:
+            loop = asyncio.get_running_loop()
+            payload = await loop.run_in_executor(
+                _executor,
+                functools.partial(
+                    _get_result_sync, backtest_id, self._token, self._cookie, self._api_base
+                ),
+            )
+            return {
+                "performance": _parse_performance_series(payload),
+                "trades": _parse_trade_groups(payload),
+                "holdings": _parse_holding_groups(payload),
+                "raw": payload,
+            }
+        except Exception as e:
+            raise map_jqcli_error(e)

@@ -7,6 +7,7 @@ interface BacktestStreamOptions {
   onProgress?: (message: string) => void
   onStarted?: (backtestId: string) => void
   onAborted?: () => void
+  onLogLine?: (line: string) => void
 }
 
 export function useBacktestStream(url: string, options: BacktestStreamOptions = {}) {
@@ -41,6 +42,9 @@ export function useBacktestStream(url: string, options: BacktestStreamOptions = 
             break
           case 'backtest_aborted':
             opts.onAborted?.()
+            break
+          case 'backtest_log_line':
+            opts.onLogLine?.(data.line ?? '')
             break
         }
       } catch {
