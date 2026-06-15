@@ -9,7 +9,7 @@ describe("InputBox", () => {
   test("renders textarea and send button", () => {
     render(<InputBox onSend={vi.fn()} />);
 
-    expect(screen.getByPlaceholderText(/Type a message/)).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/输入消息/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Send" })).toBeInTheDocument();
   });
 
@@ -17,7 +17,7 @@ describe("InputBox", () => {
     const onSend = vi.fn();
     render(<InputBox onSend={onSend} />);
 
-    const textarea = screen.getByPlaceholderText(/Type a message/);
+    const textarea = screen.getByPlaceholderText(/输入消息/);
     await userEvent.type(textarea, "Hello world{Enter}");
 
     expect(onSend).toHaveBeenCalledWith("Hello world");
@@ -27,7 +27,7 @@ describe("InputBox", () => {
     const onSend = vi.fn();
     render(<InputBox onSend={onSend} />);
 
-    const textarea = screen.getByPlaceholderText(/Type a message/) as HTMLTextAreaElement;
+    const textarea = screen.getByPlaceholderText(/输入消息/) as HTMLTextAreaElement;
     await userEvent.type(textarea, "Hello{Enter}");
 
     expect(textarea.value).toBe("");
@@ -37,7 +37,7 @@ describe("InputBox", () => {
     const onSend = vi.fn();
     render(<InputBox onSend={onSend} />);
 
-    const textarea = screen.getByPlaceholderText(/Type a message/);
+    const textarea = screen.getByPlaceholderText(/输入消息/);
     await userEvent.type(textarea, "   {Enter}");
 
     expect(onSend).not.toHaveBeenCalled();
@@ -46,7 +46,7 @@ describe("InputBox", () => {
   test("disables input and button when disabled prop is true", () => {
     render(<InputBox onSend={vi.fn()} disabled />);
 
-    expect(screen.getByPlaceholderText(/Type a message/)).toBeDisabled();
+    expect(screen.getByPlaceholderText(/输入消息/)).toBeDisabled();
     expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
   });
 
@@ -54,7 +54,7 @@ describe("InputBox", () => {
     const onSend = vi.fn();
     render(<InputBox onSend={onSend} />);
 
-    const textarea = screen.getByPlaceholderText(/Type a message/);
+    const textarea = screen.getByPlaceholderText(/输入消息/);
     await userEvent.type(textarea, "Hello{Shift>}{Enter}");
 
     expect(onSend).not.toHaveBeenCalled();
@@ -64,7 +64,7 @@ describe("InputBox", () => {
     const onSend = vi.fn();
     render(<InputBox onSend={onSend} />);
 
-    const textarea = screen.getByPlaceholderText(/Type a message/);
+    const textarea = screen.getByPlaceholderText(/输入消息/);
     await userEvent.type(textarea, "Click test");
 
     await userEvent.click(screen.getByRole("button", { name: "Send" }));

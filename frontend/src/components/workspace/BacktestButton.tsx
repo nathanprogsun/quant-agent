@@ -8,6 +8,7 @@ interface BacktestButtonProps {
   jqcliConfigured?: boolean
   onRun: () => void
   onAbort: () => void
+  runLabel?: string
 }
 
 export function BacktestButton({
@@ -15,6 +16,7 @@ export function BacktestButton({
   jqcliConfigured = true,
   onRun,
   onAbort,
+  runLabel = '运行策略',
 }: BacktestButtonProps) {
   const isBacktesting = state === 'backtesting'
   const isDisabled =
@@ -35,7 +37,7 @@ export function BacktestButton({
       variant={isBacktesting ? 'destructive' : 'default'}
       title={tooltip}
     >
-      {isBacktesting ? '回测进行中' : '运行回测'}
+      {isBacktesting ? '回测进行中' : runLabel}
     </Button>
   )
 }

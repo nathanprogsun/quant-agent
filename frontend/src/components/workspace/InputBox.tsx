@@ -5,9 +5,16 @@ import { useCallback, useRef, useState } from "react";
 interface InputBoxProps {
   onSend: (content: string) => void;
   disabled?: boolean;
+  placeholder?: string;
+  className?: string;
 }
 
-export function InputBox({ onSend, disabled }: InputBoxProps) {
+export function InputBox({
+  onSend,
+  disabled,
+  placeholder = "输入消息… (Shift+Enter 换行)",
+  className,
+}: InputBoxProps) {
   const [input, setInput] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -42,7 +49,7 @@ export function InputBox({ onSend, disabled }: InputBoxProps) {
         e.preventDefault();
         handleSubmit();
       }}
-      className="border-t p-4"
+      className={`border-t p-4 ${className ?? ""}`}
     >
       <div className="flex gap-2">
         <textarea
@@ -50,7 +57,7 @@ export function InputBox({ onSend, disabled }: InputBoxProps) {
           value={input}
           onChange={handleChange}
           onKeyDown={handleKeyDown}
-          placeholder="Type a message... (Shift+Enter for new line)"
+          placeholder={placeholder}
           disabled={disabled}
           rows={1}
           className="flex-1 resize-none rounded border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"

@@ -3,10 +3,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { threadApi } from "@/core/threads";
 import type { ThreadCreateParams, ThreadUpdateParams } from "@/core/threads";
 
-export function useThreads() {
+export function useThreads(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ["threads"],
     queryFn: () => threadApi.listThreads(),
+    enabled: options?.enabled ?? true,
   });
 }
 

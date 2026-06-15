@@ -1,18 +1,15 @@
 "use client";
 
 import type { Message } from "@langchain/langgraph-sdk";
-import { useRouter } from "next/navigation";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ChatWorkspaceHeader } from "@/components/workspace/ChatWorkspaceHeader";
 import { InputBox } from "@/components/workspace/InputBox";
 import { MessageList } from "@/components/workspace/MessageList";
-import { StrategyEditor } from "@/components/workspace/StrategyEditor";
-import {
-  WorkspaceDock,
-  type DockAnalyzeView,
-  type DockBacktestView,
-} from "@/components/workspace/WorkspaceDock";
+import { StrategyWorkspace } from "@/components/workspace/StrategyWorkspace";
+import { useLoginModal } from "@/contexts/LoginModalContext";
+import { useAuth } from "@/core/auth/AuthProvider";
 import { useAnalyzeStream } from "@/core/chat/useAnalyzeStream";
 import { useBacktestStream } from "@/core/chat/useBacktestStream";
 import { useSessionState } from "@/core/chat/useSessionState";
@@ -21,6 +18,7 @@ import {
   extractLatestPythonBlock,
   shouldSyncEditorCode,
 } from "@/core/messages/pythonBlocks";
+import { useStrategyWorkspace } from "@/hooks/useStrategyWorkspace";
 import { useThread } from "@/hooks/useThreads";
 import { NEW_THREAD_ID, useThreadStream } from "@/core/threads/hooks";
 
@@ -37,10 +35,27 @@ export default function ChatPage({
 }: {
   params: Promise<{ thread_id: string }>;
 }) {
+  return (
+    <Suspense fallback={<div className="p-4 text-gray-500">加载中…</div>}>
+      <ChatPageContent params={params} />
+    </Suspense>
+  );
+}
+
+function ChatPageContent({
+  params,
+}: {
+  params: Promise<{ thread_id: string }>;
+}) {
   const { thread_id } = React.use(params);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const { isAuthenticated } = useAuth();
+  const { openLoginModal } = useLoginModal();
   const isNewThread = thread_id === NEW_THREAD_ID;
   const { data: thread } = useThread(isNewThread ? null : thread_id);
+
+  const workspace = useStrategyWorkspace();
 
   const {
     state: sessionState,
@@ -59,24 +74,17 @@ export default function ChatPage({
   const [backtestId, setBacktestId] = useState<string | null>(null);
   const [lastBacktestId, setLastBacktestId] = useState<string | null>(null);
   const [streamUrl, setStreamUrl] = useState<string | null>(null);
-  const [dockBacktest, setDockBacktest] = useState<DockBacktestView>({
-    kind: "hidden",
-  });
-  const [dockAnalyze, setDockAnalyze] = useState<DockAnalyzeView>({
-    kind: "hidden",
-  });
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const lastSyncedBlockRef = useRef<string | null>(null);
   const wasLoadingRef = useRef(false);
   const editorVersionRef = useRef(1);
+  const initialMessageSentRef = useRef(false);
 
   const { messages, isLoading, sendMessage, pendingNavigationThreadId, values } =
     useThreadStream({
       threadId: isNewThread ? null : thread_id,
-      onCreated: () => {
-        // Defer URL update until the run finishes so history/checkpoint stay in sync.
-      },
+      onCreated: () => {},
       onFinish: () => {
         const nextThreadId = pendingNavigationThreadId.current;
         if (isNewThread && nextThreadId) {
@@ -90,13 +98,17 @@ export default function ChatPage({
     [messages],
   );
 
-  const showStrategyEditor = Boolean(
+  const showStrategyWorkspace = Boolean(
     editorCode.trim() ||
       latestPythonBlock ||
       sessionState === "code_ready" ||
       sessionState === "backtesting" ||
       sessionState === "analyzed",
   );
+
+  const threadTitle =
+    thread?.title ??
+    (typeof values?.title === "string" ? values.title : null);
 
   useEffect(() => {
     let cancelled = false;
@@ -122,46 +134,27 @@ export default function ChatPage({
   const { connect, disconnect } = useBacktestStream(streamUrl ?? "", {
     onStarted: (id) => {
       setBacktestId(id);
-      setDockAnalyze({ kind: "hidden" });
-      setDockBacktest({
-        kind: "backtest",
-        status: "running",
-        message: "回测已开始...",
-      });
+      workspace.onRunStarted();
     },
-    onProgress: (message) => {
-      setDockBacktest({
-        kind: "backtest",
-        status: "running",
-        message,
-      });
-    },
+    onProgress: () => {},
     onComplete: (metrics: BacktestMetrics) => {
-      setDockBacktest({
-        kind: "backtest",
-        status: "done",
-        metrics,
-      });
       if (backtestId) {
         setLastBacktestId(backtestId);
       }
       backtestComplete(metrics);
+      workspace.onRunComplete();
       setStreamUrl(null);
       setBacktestId(null);
     },
-    onFailed: (error) => {
-      setDockBacktest({
-        kind: "backtest",
-        status: "failed",
-        error,
-      });
+    onFailed: () => {
       backtestFailed();
+      workspace.onRunFailed();
       setStreamUrl(null);
       setBacktestId(null);
     },
     onAborted: () => {
-      setDockBacktest({ kind: "hidden" });
       backtestFailed();
+      workspace.resetRunStatus();
       setStreamUrl(null);
       setBacktestId(null);
     },
@@ -176,14 +169,6 @@ export default function ChatPage({
       disconnect();
     };
   }, [streamUrl, connect, disconnect]);
-
-  useEffect(() => {
-    if (sessionState !== "backtesting" && dockBacktest.kind === "backtest") {
-      if (dockBacktest.status === "running") {
-        setDockBacktest({ kind: "hidden" });
-      }
-    }
-  }, [sessionState, dockBacktest]);
 
   useEffect(() => {
     if (isLoading && !wasLoadingRef.current) {
@@ -212,20 +197,54 @@ export default function ChatPage({
     }
   }, [latestPythonBlock]);
 
+  useEffect(() => {
+    const initialMessage = searchParams.get("initialMessage");
+    if (
+      !initialMessage ||
+      initialMessageSentRef.current ||
+      isNewThread ||
+      !isAuthenticated
+    ) {
+      return;
+    }
+
+    initialMessageSentRef.current = true;
+    sendMessage(initialMessage);
+    router.replace(`/workspace/chats/${thread_id}`);
+  }, [
+    isAuthenticated,
+    isNewThread,
+    router,
+    searchParams,
+    sendMessage,
+    thread_id,
+  ]);
+
+  const handleSend = useCallback(
+    (content: string) => {
+      if (!isAuthenticated) {
+        openLoginModal();
+        return;
+      }
+      sendMessage(content);
+    },
+    [isAuthenticated, openLoginModal, sendMessage],
+  );
+
   const handleRunBacktest = useCallback(async () => {
+    if (!isAuthenticated) {
+      openLoginModal();
+      return;
+    }
+
     if (isNewThread || sessionState !== "code_ready" || !editorCode.trim()) {
       return;
     }
 
     cancelAnalyze();
-    setDockAnalyze({ kind: "hidden" });
     setSubmitError(null);
     startBacktest();
-    setDockBacktest({
-      kind: "backtest",
-      status: "pending",
-      message: "正在提交回测...",
-    });
+    workspace.onRunStarted();
 
     try {
       const res = await fetch("/api/v1/backtest", {
@@ -250,31 +269,36 @@ export default function ChatPage({
     } catch (error) {
       const message = error instanceof Error ? error.message : "回测提交失败";
       setSubmitError(message);
-      setDockBacktest({
-        kind: "backtest",
-        status: "failed",
-        error: message,
-      });
       backtestFailed();
+      workspace.onRunFailed();
     }
   }, [
     cancelAnalyze,
     editorCode,
+    isAuthenticated,
     isNewThread,
+    openLoginModal,
     sessionState,
     startBacktest,
     thread_id,
+    workspace,
+    backtestFailed,
   ]);
 
   const handleAbortBacktest = useCallback(() => {
     disconnect();
     setStreamUrl(null);
     setBacktestId(null);
-    setDockBacktest({ kind: "hidden" });
+    workspace.resetRunStatus();
     backtestFailed();
-  }, [backtestFailed, disconnect]);
+  }, [backtestFailed, disconnect, workspace]);
 
   const handleRunAnalyze = useCallback(async () => {
+    if (!isAuthenticated) {
+      openLoginModal();
+      return;
+    }
+
     if (
       isNewThread ||
       !lastMetrics ||
@@ -285,12 +309,8 @@ export default function ChatPage({
       return;
     }
 
-    setDockBacktest({ kind: "hidden" });
     setSubmitError(null);
     setIsAnalyzing(true);
-    setDockAnalyze({ kind: "analyze", content: "", isStreaming: true });
-
-    let content = "";
 
     try {
       await startAnalyze(
@@ -301,106 +321,77 @@ export default function ChatPage({
           metrics: lastMetrics as Record<string, unknown>,
         },
         {
-          onDelta: (delta) => {
-            content += delta;
-            setDockAnalyze({ kind: "analyze", content, isStreaming: true });
-          },
+          onDelta: () => {},
           onDone: () => {
-            setDockAnalyze({ kind: "analyze", content, isStreaming: false });
             analysisComplete();
             setIsAnalyzing(false);
           },
-          onError: (error) => {
-            setDockAnalyze({
-              kind: "analyze",
-              content: content || error,
-              isStreaming: false,
-            });
+          onError: () => {
             setIsAnalyzing(false);
           },
         },
       );
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "分析失败";
-      setDockAnalyze({
-        kind: "analyze",
-        content: content || message,
-        isStreaming: false,
-      });
+    } catch {
       setIsAnalyzing(false);
     }
   }, [
     analysisComplete,
     editorCode,
     isAnalyzing,
+    isAuthenticated,
     isNewThread,
     lastBacktestId,
     lastMetrics,
+    openLoginModal,
     startAnalyze,
     thread_id,
   ]);
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <ChatWorkspaceHeader
-        threadId={thread_id}
-        title={
-          thread?.title ??
-          (typeof values?.title === "string" ? values.title : null)
-        }
-        sessionState={sessionState}
-        jqcliConfigured={jqcliConfigured}
-        lastMetrics={lastMetrics}
-        isAnalyzing={isAnalyzing}
-        onRunBacktest={() => void handleRunBacktest()}
-        onAbortBacktest={handleAbortBacktest}
-        onAnalyze={() => void handleRunAnalyze()}
-      />
+      <ChatWorkspaceHeader threadId={thread_id} title={threadTitle} />
 
       {submitError ? (
-        <p className="border-b bg-red-50 px-4 py-2 text-sm text-red-700">{submitError}</p>
+        <p className="border-b bg-red-50 px-4 py-2 text-sm text-red-700">
+          {submitError}
+        </p>
       ) : null}
 
-      <div
-        className={
-          showStrategyEditor
-            ? "grid min-h-0 flex-1 grid-cols-[42fr_58fr] grid-rows-[minmax(0,1fr)_auto_auto]"
-            : "grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_auto_auto]"
-        }
-      >
+      <div className="flex min-h-0 flex-1">
         <div
           className={
-            showStrategyEditor
-              ? "flex min-h-0 flex-col border-r"
-              : "flex min-h-0 flex-col"
+            showStrategyWorkspace
+              ? "flex min-w-0 flex-1 flex-col border-r"
+              : "flex min-w-0 flex-1 flex-col"
           }
         >
           <div className="min-h-0 flex-1 overflow-auto">
-            <MessageList messages={messages} isLoading={isLoading} />
+            <MessageList
+              messages={messages}
+              isLoading={isLoading}
+              threadTitle={threadTitle}
+              onOpenCode={workspace.openCodeTab}
+            />
           </div>
+          <InputBox onSend={handleSend} disabled={isLoading} />
         </div>
 
-        {showStrategyEditor ? (
-          <StrategyEditor
-            className="min-h-[360px]"
-            code={editorCode}
-            onChange={setEditorCode}
+        {showStrategyWorkspace ? (
+          <StrategyWorkspace
+            activeTab={workspace.activeTab}
+            onTabChange={workspace.setActiveTab}
+            editorCode={editorCode}
+            onEditorChange={setEditorCode}
             isGenerating={isLoading}
-            readOnly={isLoading || sessionState === "backtesting"}
+            editorReadOnly={isLoading || sessionState === "backtesting"}
+            sessionState={sessionState}
+            jqcliConfigured={jqcliConfigured}
+            lastMetrics={lastMetrics}
+            isAnalyzing={isAnalyzing}
+            onRunBacktest={() => void handleRunBacktest()}
+            onAbortBacktest={handleAbortBacktest}
+            onAnalyze={() => void handleRunAnalyze()}
           />
-        ) : null}
-
-        <WorkspaceDock
-          className={showStrategyEditor ? "col-span-2" : undefined}
-          backtest={dockBacktest}
-          analyze={dockAnalyze}
-        />
-
-        <div className={showStrategyEditor ? "border-r" : undefined}>
-          <InputBox onSend={sendMessage} disabled={isLoading} />
-        </div>
-        {showStrategyEditor ? (
-          <div aria-hidden className="bg-[#1e1e1e]" />
         ) : null}
       </div>
     </div>

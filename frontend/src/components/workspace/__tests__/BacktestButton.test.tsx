@@ -4,9 +4,9 @@ import { render, screen, fireEvent } from '@testing-library/react'
 import { BacktestButton } from '../BacktestButton'
 
 describe('BacktestButton', () => {
-  it('shows "运行回测" when idle', () => {
+  it('shows "运行策略" when idle', () => {
     render(<BacktestButton state="code_ready" onRun={vi.fn()} onAbort={vi.fn()} />)
-    expect(screen.getByText('运行回测')).toBeTruthy()
+    expect(screen.getByText('运行策略')).toBeTruthy()
   })
 
   it('shows disabled label when backtesting', () => {

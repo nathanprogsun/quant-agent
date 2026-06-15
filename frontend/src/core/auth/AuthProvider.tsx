@@ -18,6 +18,8 @@
     isLoading: boolean;
     logout: () => void;
     refresh: () => Promise<void>;
+    /** Fetch /me immediately (e.g. after login modal success). */
+    syncAuth: () => Promise<void>;
   }
 
   const AuthContext = createContext<AuthContextValue | null>(null);
@@ -38,10 +40,7 @@
     const [isLoading, setIsLoading] = useState(false);
     const [lastRefresh, setLastRefresh] = useState(() => Date.now());
 
-    const refresh = useCallback(async () => {
-      const now = Date.now();
-      if (now - lastRefresh < REFRESH_THROTTLE_MS) return;
-
+    const syncAuth = useCallback(async () => {
       setIsLoading(true);
       try {
         const response = await fetch("/api/v1/auth/me", {
@@ -60,7 +59,13 @@
         setLastRefresh(Date.now());
         setIsLoading(false);
       }
-    }, [lastRefresh]);
+    }, []);
+
+    const refresh = useCallback(async () => {
+      const now = Date.now();
+      if (now - lastRefresh < REFRESH_THROTTLE_MS) return;
+      await syncAuth();
+    }, [lastRefresh, syncAuth]);
 
     const logout = useCallback(() => {
       setUser(null);
@@ -91,6 +96,7 @@
           isLoading,
           logout,
           refresh,
+          syncAuth,
         }}
       >
         {children}

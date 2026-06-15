@@ -2,16 +2,21 @@
 
 import type { Message } from "@langchain/langgraph-sdk";
 import { Fragment } from "react";
+import { Streamdown } from "streamdown";
 
+import { StrategyCodeCard } from "@/components/workspace/StrategyCodeCard";
 import {
   extractContentFromMessage,
   extractToolCallsFromMessage,
   getMessageGroups,
 } from "@/core/messages/utils";
+import { streamdownPlugins } from "@/core/streamdown/plugins";
 
 interface MessageListProps {
   messages: Message[];
   isLoading?: boolean;
+  threadTitle?: string | null;
+  onOpenCode?: () => void;
 }
 
 function getMessageGroupKey(
@@ -32,7 +37,47 @@ function getMessageKey(message: Message, fallback: string): string {
   return message.id ?? fallback;
 }
 
-export function MessageList({ messages, isLoading }: MessageListProps) {
+function strategyNameFromCode(code: string, title?: string | null): string {
+  if (title?.trim()) return title.trim();
+  const comment = code.match(/^#\s*(.+)/m)?.[1]?.trim();
+  return comment || "未命名策略";
+}
+
+type ContentPart =
+  | { type: "text"; text: string }
+  | { type: "python"; code: string };
+
+function splitMarkdownWithPythonBlocks(content: string): ContentPart[] {
+  const parts: ContentPart[] = [];
+  const regex = /```python\s*\n([\s\S]*?)```/gi;
+  let lastIndex = 0;
+
+  for (const match of content.matchAll(regex)) {
+    const index = match.index ?? 0;
+    if (index > lastIndex) {
+      parts.push({ type: "text", text: content.slice(lastIndex, index) });
+    }
+    parts.push({ type: "python", code: (match[1] ?? "").trim() });
+    lastIndex = index + match[0].length;
+  }
+
+  if (lastIndex < content.length) {
+    parts.push({ type: "text", text: content.slice(lastIndex) });
+  }
+
+  if (parts.length === 0 && content.trim()) {
+    parts.push({ type: "text", text: content });
+  }
+
+  return parts;
+}
+
+export function MessageList({
+  messages,
+  isLoading,
+  threadTitle,
+  onOpenCode,
+}: MessageListProps) {
   const groups = getMessageGroups(messages);
   const hasAssistantContent = messages.some(
     (message) =>
@@ -72,6 +117,8 @@ export function MessageList({ messages, isLoading }: MessageListProps) {
               key={groupKey}
               groupKey={groupKey}
               messages={group.messages}
+              threadTitle={threadTitle}
+              onOpenCode={onOpenCode}
             />
           );
         }
@@ -92,18 +139,16 @@ export function MessageList({ messages, isLoading }: MessageListProps) {
         return null;
       })}
 
-      {showThinkingIndicator && (
+      {showThinkingIndicator ? (
         <div className="flex justify-start">
           <div className="rounded-lg bg-gray-100 px-4 py-2">
             <span className="animate-pulse">思考中...</span>
           </div>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
-
-// ── Human Message ───────────────────────────────────────────────────────────
 
 function HumanMessage({ message }: { message: Message }) {
   const content = extractContentFromMessage(message);
@@ -118,21 +163,22 @@ function HumanMessage({ message }: { message: Message }) {
   );
 }
 
-// ── Assistant Group (AI + optional ToolMessages) ────────────────────────────
-
 function AssistantGroup({
   groupKey,
   messages,
+  threadTitle,
+  onOpenCode,
 }: {
   groupKey: string;
   messages: Message[];
+  threadTitle?: string | null;
+  onOpenCode?: () => void;
 }) {
   const aiMessages = messages.filter((m) => m.type === "ai");
   const toolMessages = messages.filter((m) => m.type === "tool");
 
   return (
     <div className="space-y-2">
-      {/* Tool calls display */}
       {aiMessages.map((msg, messageIndex) => {
         const toolCalls = extractToolCallsFromMessage(msg);
         if (toolCalls.length === 0) return null;
@@ -157,7 +203,6 @@ function AssistantGroup({
         );
       })}
 
-      {/* Tool results display */}
       {toolMessages.map((msg, messageIndex) => (
         <ToolMessage
           key={getMessageKey(msg, `${groupKey}-tool-result-${messageIndex}`)}
@@ -165,29 +210,51 @@ function AssistantGroup({
         />
       ))}
 
-      {/* Final AI response */}
       {aiMessages
-        .filter((msg) => {
+        .filter((msg) => extractContentFromMessage(msg).length > 0)
+        .map((msg, messageIndex) => {
           const content = extractContentFromMessage(msg);
-          return content.length > 0;
-        })
-        .map((msg, messageIndex) => (
-          <div
-            key={getMessageKey(msg, `${groupKey}-response-${messageIndex}`)}
-            className="flex justify-start"
-          >
-            <div className="max-w-[80%] rounded-lg bg-gray-100 px-4 py-2 text-gray-900">
-              <p className="whitespace-pre-wrap">
-                {extractContentFromMessage(msg)}
-              </p>
+          const parts = splitMarkdownWithPythonBlocks(content);
+          const messageKey = getMessageKey(
+            msg,
+            `${groupKey}-response-${messageIndex}`,
+          );
+
+          return (
+            <div key={messageKey} className="flex justify-start">
+              <div className="max-w-[90%] rounded-lg bg-gray-100 px-4 py-2 text-gray-900">
+                {parts.map((part, partIndex) => {
+                  if (part.type === "text" && part.text.trim()) {
+                    return (
+                      <Streamdown
+                        key={`${messageKey}-text-${partIndex}`}
+                        className="prose prose-sm max-w-none"
+                        {...streamdownPlugins}
+                      >
+                        {part.text}
+                      </Streamdown>
+                    );
+                  }
+
+                  if (part.type === "python" && part.code) {
+                    return (
+                      <StrategyCodeCard
+                        key={`${messageKey}-code-${partIndex}`}
+                        strategyName={strategyNameFromCode(part.code, threadTitle)}
+                        onOpenCode={onOpenCode}
+                      />
+                    );
+                  }
+
+                  return null;
+                })}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
     </div>
   );
 }
-
-// ── Tool Message (standalone) ───────────────────────────────────────────────
 
 function ToolMessage({ message }: { message: Message }) {
   const content = extractContentFromMessage(message);
