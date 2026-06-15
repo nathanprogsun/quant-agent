@@ -3,7 +3,7 @@
 import { BacktestButton } from "@/components/workspace/BacktestButton";
 import { AnalyzeButton } from "@/components/workspace/AnalyzeButton";
 import type { BacktestMetrics, SessionState } from "@/core/chat/types";
-import type { StrategyTab } from "@/hooks/useStrategyWorkspace";
+import type { StrategyTab, RunStatus } from "@/hooks/useStrategyWorkspace";
 
 const TABS: { id: StrategyTab; label: string }[] = [
   { id: "code", label: "策略代码" },
@@ -20,9 +20,12 @@ interface WorkspaceHeaderProps {
   jqcliConfigured: boolean;
   lastMetrics: BacktestMetrics | null;
   isAnalyzing: boolean;
+  runStatus: RunStatus;
   onRunBacktest: () => void;
   onAbortBacktest: () => void;
   onAnalyze: () => void;
+  onSubmitSimulation?: () => void;
+  onShare?: () => void;
 }
 
 export function WorkspaceHeader({
@@ -32,9 +35,12 @@ export function WorkspaceHeader({
   jqcliConfigured,
   lastMetrics,
   isAnalyzing,
+  runStatus,
   onRunBacktest,
   onAbortBacktest,
   onAnalyze,
+  onSubmitSimulation,
+  onShare,
 }: WorkspaceHeaderProps) {
   return (
     <div className="flex flex-col border-b bg-white">
@@ -56,6 +62,25 @@ export function WorkspaceHeader({
           ))}
         </nav>
         <div className="flex shrink-0 items-center gap-2">
+          {onShare ? (
+            <button
+              type="button"
+              onClick={onShare}
+              className="rounded-md border px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+            >
+              分享
+            </button>
+          ) : null}
+          {onSubmitSimulation ? (
+            <button
+              type="button"
+              onClick={onSubmitSimulation}
+              disabled={runStatus !== "done"}
+              className="rounded-md border px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            >
+              提交模拟
+            </button>
+          ) : null}
           <BacktestButton
             state={sessionState}
             jqcliConfigured={jqcliConfigured}

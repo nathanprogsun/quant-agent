@@ -1,12 +1,14 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useRef, useState, useEffect } from "react";
 
 interface InputBoxProps {
   onSend: (content: string) => void;
   disabled?: boolean;
   placeholder?: string;
   className?: string;
+  prefill?: string | null;
+  onPrefillApplied?: () => void;
 }
 
 export function InputBox({
@@ -14,9 +16,18 @@ export function InputBox({
   disabled,
   placeholder = "输入消息… (Shift+Enter 换行)",
   className,
+  prefill,
+  onPrefillApplied,
 }: InputBoxProps) {
   const [input, setInput] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (!prefill) return;
+    setInput(prefill);
+    textareaRef.current?.focus();
+    onPrefillApplied?.();
+  }, [prefill, onPrefillApplied]);
 
   const handleSubmit = useCallback(() => {
     const trimmed = input.trim();

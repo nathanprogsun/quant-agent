@@ -11,6 +11,7 @@ from app.web.api.analyze.views import router as analyze_router
 from app.web.api.auth.views import router as auth_router
 from app.web.api.backtest.views import router as backtest_router
 from app.web.api.memory.route import router as memory_router
+from app.web.api.share.views import router as share_router
 from app.web.api.skills.route import router as skills_router
 from app.web.api.thread.views import router as thread_router
 from app.web.lifespan import lifespan
@@ -55,6 +56,7 @@ def create_app() -> FastAPI:
     app.include_router(backtest_router)
     app.include_router(analyze_router)
     app.include_router(thread_router)
+    app.include_router(share_router)
     app.include_router(memory_router)
     app.include_router(skills_router)
 
