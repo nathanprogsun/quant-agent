@@ -30,9 +30,9 @@ export function StrategyCodeCard({
     <button
       type="button"
       onClick={onOpenCode}
-      className="mt-3 flex w-full max-w-xs items-center gap-3 rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-left transition hover:border-gray-300 hover:shadow-sm"
+      className="mt-3 flex w-full max-w-xs items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-left transition hover:border-gray-300 hover:shadow-sm"
     >
-      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-gray-100 bg-gray-50 text-red-500">
+      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-gray-100 bg-white text-red-500">
         <StrategyCubeIcon />
       </span>
       <span className="min-w-0 flex-1">

@@ -206,8 +206,8 @@ function HumanMessage({ message }: { message: Message }) {
 
   return (
     <div className="flex justify-end">
-      <div className="max-w-[85%] rounded-full bg-[#f2f2f2] px-5 py-2.5 text-gray-900">
-        <p className="whitespace-pre-wrap text-sm leading-relaxed">{content}</p>
+      <div className="max-w-[85%] rounded-2xl bg-gray-100 px-4 py-2 text-sm text-gray-900">
+        <p className="whitespace-pre-wrap leading-relaxed">{content}</p>
       </div>
     </div>
   );
@@ -235,72 +235,80 @@ function AssistantGroup({
   const aiMessages = messages.filter((m) => m.type === "ai");
 
   return (
-    <div className="space-y-3">
-      {showCollapsedThinking ? (
-        <ThinkingChain
-          isStreaming
-          reasoning={streamingReasoning}
-          toolSteps={toolSteps}
-          defaultOpen={false}
-        />
-      ) : null}
-      {aiMessages
-        .filter((msg) => {
-          if (aiMessageHasToolCalls(msg)) return false;
-          const hasContent = extractContentFromMessage(msg).length > 0;
-          const hasReasoning = extractReasoningFromMessage(msg).length > 0;
-          return hasContent || hasReasoning;
-        })
-        .map((msg, messageIndex) => {
-          const rawContent = extractContentFromMessage(msg);
-          const blockReasoning = extractReasoningFromMessage(msg);
-          const { thinking, text: visibleText } = splitThinkingFromText(rawContent);
-          const reasoningText = [blockReasoning, thinking]
-            .filter(Boolean)
-            .join("\n\n");
-          const content = visibleText;
-          if (!content && !reasoningText && !streamPlainText) return null;
+    <div className="flex items-start gap-2">
+      <div
+        className="flex size-6 shrink-0 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white"
+        aria-hidden="true"
+      >
+        <span>Q</span>
+      </div>
+      <div className="min-w-0 flex-1 space-y-3">
+        {showCollapsedThinking ? (
+          <ThinkingChain
+            isStreaming
+            reasoning={streamingReasoning}
+            toolSteps={toolSteps}
+            defaultOpen={false}
+          />
+        ) : null}
+        {aiMessages
+          .filter((msg) => {
+            if (aiMessageHasToolCalls(msg)) return false;
+            const hasContent = extractContentFromMessage(msg).length > 0;
+            const hasReasoning = extractReasoningFromMessage(msg).length > 0;
+            return hasContent || hasReasoning;
+          })
+          .map((msg, messageIndex) => {
+            const rawContent = extractContentFromMessage(msg);
+            const blockReasoning = extractReasoningFromMessage(msg);
+            const { thinking, text: visibleText } = splitThinkingFromText(rawContent);
+            const reasoningText = [blockReasoning, thinking]
+              .filter(Boolean)
+              .join("\n\n");
+            const content = visibleText;
+            if (!content && !reasoningText && !streamPlainText) return null;
 
-          const parts = splitMarkdownWithPythonBlocks(content);
-          const messageKey = getMessageKey(
-            msg,
-            `${groupKey}-response-${messageIndex}`,
-          );
+            const parts = splitMarkdownWithPythonBlocks(content);
+            const messageKey = getMessageKey(
+              msg,
+              `${groupKey}-response-${messageIndex}`,
+            );
 
-          return (
-            <div key={messageKey} className="max-w-full text-sm text-gray-900">
-              {reasoningText && !streamPlainText ? (
-                <Reasoning isStreaming={false} defaultOpen={false}>
-                  <ReasoningTrigger />
-                  <ReasoningContent>{reasoningText}</ReasoningContent>
-                </Reasoning>
-              ) : null}
-              {parts.map((part, partIndex) => {
-                if (part.type === "text" && part.text.trim()) {
-                  return (
-                    <MarkdownText
-                      key={`${messageKey}-text-${partIndex}`}
-                      text={part.text}
-                      plainText={streamPlainText}
-                    />
-                  );
-                }
+            return (
+              <div key={messageKey} className="max-w-full text-sm text-gray-900">
+                {reasoningText && !streamPlainText ? (
+                  <Reasoning isStreaming={false} defaultOpen={false}>
+                    <ReasoningTrigger />
+                    <ReasoningContent>{reasoningText}</ReasoningContent>
+                  </Reasoning>
+                ) : null}
+                {parts.map((part, partIndex) => {
+                  if (part.type === "text" && part.text.trim()) {
+                    return (
+                      <MarkdownText
+                        key={`${messageKey}-text-${partIndex}`}
+                        text={part.text}
+                        plainText={streamPlainText}
+                      />
+                    );
+                  }
 
-                if (part.type === "python" && part.code) {
-                  return (
-                    <StrategyCodeCard
-                      key={`${messageKey}-code-${partIndex}`}
-                      strategyName={strategyNameFromCode(part.code, threadTitle)}
-                      onOpenCode={onOpenCode}
-                    />
-                  );
-                }
+                  if (part.type === "python" && part.code) {
+                    return (
+                      <StrategyCodeCard
+                        key={`${messageKey}-code-${partIndex}`}
+                        strategyName={strategyNameFromCode(part.code, threadTitle)}
+                        onOpenCode={onOpenCode}
+                      />
+                    );
+                  }
 
-                return null;
-              })}
-            </div>
-          );
-        })}
+                  return null;
+                })}
+              </div>
+            );
+          })}
+      </div>
     </div>
   );
 }

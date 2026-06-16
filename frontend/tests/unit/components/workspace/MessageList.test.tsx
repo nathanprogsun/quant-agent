@@ -128,4 +128,28 @@ describe("MessageList", () => {
       "分析小市值筛选条件",
     );
   });
+
+  test("AI message shows BigQuant avatar", () => {
+    const messages = [
+      { id: "a1", type: "ai", content: "AI reply" },
+    ] as Message[];
+
+    render(<MessageList messages={messages} />);
+
+    const avatar = screen.getByText("Q");
+    expect(avatar).toBeInTheDocument();
+    expect(avatar.parentElement).toHaveClass("rounded-full");
+    expect(avatar.parentElement).toHaveClass("bg-red-500");
+  });
+
+  test("human message rendered as right-aligned bubble", () => {
+    const messages = [
+      { id: "h1", type: "human", content: "user question" },
+    ] as Message[];
+
+    render(<MessageList messages={messages} />);
+
+    const bubble = screen.getByText("user question").closest("div");
+    expect(bubble).toHaveClass("bg-gray-100");
+  });
 });
