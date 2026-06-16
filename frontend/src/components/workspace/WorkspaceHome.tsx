@@ -45,7 +45,7 @@ export function WorkspaceHome() {
 
   return (
     <div className="flex h-full flex-col items-center justify-center px-6 py-8">
-      <h1 className="text-2xl font-semibold tracking-tight text-gray-900">
+      <h1 className="text-3xl font-medium tracking-tight text-gray-900">
         JoinQuant人工智能投研平台
       </h1>
       <p className="mt-1 text-gray-500">智能投研 Quant Agent</p>
@@ -56,7 +56,7 @@ export function WorkspaceHome() {
           disabled={createThread.isPending}
           prefill={chipPrefill}
           onPrefillApplied={() => setChipPrefill(null)}
-          className="w-full max-w-2xl"
+          className="w-full max-w-3xl"
         />
 
         <div className="mt-4 flex max-w-2xl flex-wrap justify-center gap-2">
