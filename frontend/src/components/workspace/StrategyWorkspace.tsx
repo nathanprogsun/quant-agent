@@ -37,7 +37,6 @@ interface StrategyWorkspaceProps {
   onAnalyze: () => void;
   onAiFix?: () => void;
   onSubmitSimulation?: () => void;
-  onShare?: () => void;
 }
 
 export function StrategyWorkspace({
@@ -64,7 +63,6 @@ export function StrategyWorkspace({
   onAnalyze,
   onAiFix,
   onSubmitSimulation,
-  onShare,
 }: StrategyWorkspaceProps) {
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-white">
@@ -83,7 +81,6 @@ export function StrategyWorkspace({
         onAbortBacktest={onAbortBacktest}
         onAnalyze={onAnalyze}
         onSubmitSimulation={onSubmitSimulation}
-        onShare={onShare}
       />
       <div className="min-h-0 flex-1">
         {activeTab === "code" ? (

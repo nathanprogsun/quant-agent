@@ -35,7 +35,6 @@ interface WorkspaceHeaderProps {
   onAbortBacktest: () => void;
   onAnalyze: () => void;
   onSubmitSimulation?: () => void;
-  onShare?: () => void;
 }
 
 export function WorkspaceHeader({
@@ -53,7 +52,6 @@ export function WorkspaceHeader({
   onAbortBacktest,
   onAnalyze,
   onSubmitSimulation,
-  onShare,
 }: WorkspaceHeaderProps) {
   const visibleTabs = hasRunResults
     ? ALL_TABS
@@ -107,15 +105,6 @@ export function WorkspaceHeader({
           ))}
         </nav>
         <div className="flex shrink-0 items-center gap-2 py-2">
-          {onShare ? (
-            <button
-              type="button"
-              onClick={onShare}
-              className="rounded-md border px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
-            >
-              分享
-            </button>
-          ) : null}
           {onSubmitSimulation ? (
             <button
               type="button"

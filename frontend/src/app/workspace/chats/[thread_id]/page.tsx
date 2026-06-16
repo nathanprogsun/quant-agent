@@ -14,7 +14,6 @@ import { useAuth } from "@/core/auth/AuthProvider";
 import { useAnalyzeStream } from "@/core/chat/useAnalyzeStream";
 import { useBacktestStream } from "@/core/chat/useBacktestStream";
 import { useSessionState } from "@/core/chat/useSessionState";
-import { ShareModal } from "@/components/workspace/ShareModal";
 import type { PerformancePoint } from "@/components/workspace/PerformanceChart";
 import type { TradeDayGroup } from "@/components/workspace/TradeDetailsPanel";
 import type { HoldingDayGroup } from "@/components/workspace/HoldingDetailsPanel";
@@ -108,9 +107,6 @@ function ChatThreadPage({ thread_id }: { thread_id: string }) {
   const [tradeGroups, setTradeGroups] = useState<TradeDayGroup[]>([]);
   const [holdingGroups, setHoldingGroups] = useState<HoldingDayGroup[]>([]);
   const [inputPrefill, setInputPrefill] = useState<string | null>(null);
-  const [shareOpen, setShareOpen] = useState(false);
-  const [shareUrl, setShareUrl] = useState<string | null>(null);
-  const [shareCreating, setShareCreating] = useState(false);
   const lastSyncedBlockRef = useRef<string | null>(null);
   const wasLoadingRef = useRef(false);
   const editorVersionRef = useRef(1);
@@ -430,50 +426,6 @@ function ChatThreadPage({ thread_id }: { thread_id: string }) {
     );
   }, [logLines]);
 
-  const handleShare = useCallback(async () => {
-    if (!isAuthenticated) {
-      openLoginModal();
-      return;
-    }
-
-    setShareOpen(true);
-    setShareCreating(true);
-    setShareUrl(null);
-
-    try {
-      const res = await fetch("/api/v1/share", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          thread_id,
-          title: threadTitle,
-          code: editorCode,
-          messages: messages.map((m) => ({
-            role: m.type,
-            content: typeof m.content === "string" ? m.content : JSON.stringify(m.content),
-          })),
-          metrics: lastMetrics,
-        }),
-      });
-      const data = (await res.json()) as { url?: string };
-      if (!res.ok || !data.url) throw new Error("分享失败");
-      setShareUrl(data.url);
-    } catch {
-      setShareUrl(null);
-    } finally {
-      setShareCreating(false);
-    }
-  }, [
-    editorCode,
-    isAuthenticated,
-    lastMetrics,
-    messages,
-    openLoginModal,
-    thread_id,
-    threadTitle,
-  ]);
-
   const handleSubmitSimulation = useCallback(async () => {
     if (!lastBacktestId || workspace.runStatus !== "done") return;
     try {
@@ -577,17 +529,9 @@ function ChatThreadPage({ thread_id }: { thread_id: string }) {
             onAnalyze={() => void handleRunAnalyze()}
             onAiFix={handleAiFix}
             onSubmitSimulation={() => void handleSubmitSimulation()}
-            onShare={() => void handleShare()}
           />
         ) : null}
       </div>
-
-      <ShareModal
-        open={shareOpen}
-        onClose={() => setShareOpen(false)}
-        shareUrl={shareUrl}
-        isCreating={shareCreating}
-      />
     </div>
   );
 }
