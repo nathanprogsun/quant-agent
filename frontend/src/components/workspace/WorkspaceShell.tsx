@@ -39,7 +39,7 @@ function WorkspaceShellInner({ children }: WorkspaceShellProps) {
   const router = useRouter();
   const pathname = usePathname();
   const { user } = useAuth();
-  const [sidebarExpanded, setSidebarExpanded] = useState(false);
+  const [sidebarExpanded, setSidebarExpanded] = useState(true);
 
   const isGuestView = !user;
   const isChatPage = pathname.startsWith("/workspace/chats/");

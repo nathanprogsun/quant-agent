@@ -14,10 +14,10 @@ interface ThreadListProps {
   showHistory?: boolean;
 }
 
-type ThreadGroupKey = "today" | "within30" | "earlier";
+type ThreadGroupKey = "yesterday" | "within30" | "earlier";
 
 const GROUP_LABELS: Record<ThreadGroupKey, string> = {
-  today: "今天",
+  yesterday: "昨天",
   within30: "30天内",
   earlier: "更早",
 };
@@ -25,20 +25,22 @@ const GROUP_LABELS: Record<ThreadGroupKey, string> = {
 function groupThreads(threads: Thread[]): Record<ThreadGroupKey, Thread[]> {
   const now = new Date();
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const thirtyDaysAgo = new Date(startOfToday);
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  const startOfYesterday = new Date(startOfToday);
+  startOfYesterday.setDate(startOfYesterday.getDate() - 1);
+  const thirtyDaysAgoStart = new Date(startOfToday);
+  thirtyDaysAgoStart.setDate(thirtyDaysAgoStart.getDate() - 30);
 
   const groups: Record<ThreadGroupKey, Thread[]> = {
-    today: [],
+    yesterday: [],
     within30: [],
     earlier: [],
   };
 
   for (const thread of threads) {
-    const updated = new Date(thread.updated_at);
-    if (updated >= startOfToday) {
-      groups.today.push(thread);
-    } else if (updated >= thirtyDaysAgo) {
+    const created = new Date(thread.created_at);
+    if (created >= startOfYesterday) {
+      groups.yesterday.push(thread);
+    } else if (created >= thirtyDaysAgoStart) {
       groups.within30.push(thread);
     } else {
       groups.earlier.push(thread);
