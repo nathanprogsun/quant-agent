@@ -1,12 +1,13 @@
 "use client";
 
-import { Inbox, MoreHorizontal } from "lucide-react";
+import { Edit2, Inbox, MoreHorizontal, Star, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 
 import { useAuth } from "@/core/auth/AuthProvider";
 import type { Thread } from "@/core/threads/types";
-import { useDeleteThread, useThreads } from "@/hooks/useThreads";
+import { useDeleteThread, useThreads, useUpdateThread } from "@/hooks/useThreads";
 import { cn } from "@/lib/utils";
 
 interface ThreadListProps {
@@ -58,6 +59,19 @@ export function ThreadList({ showHistory = false }: ThreadListProps) {
     enabled: showHistory && isAuthenticated,
   });
   const deleteThread = useDeleteThread();
+  const updateThread = useUpdateThread();
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setOpenMenuId(null);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   if (showHistory && isLoading) {
     return (
@@ -93,8 +107,9 @@ export function ThreadList({ showHistory = false }: ThreadListProps) {
             <ul className="mt-0.5 space-y-0.5">
               {items.map((thread) => {
                 const isActive = thread.id === activeThreadId;
+                const isMenuOpen = openMenuId === thread.id;
                 return (
-                  <li key={thread.id} className="group flex items-center">
+                  <li key={thread.id} className="group relative flex items-center">
                     <Link
                       href={`/workspace/chats/${thread.id}`}
                       className={cn(
@@ -104,17 +119,84 @@ export function ThreadList({ showHistory = false }: ThreadListProps) {
                     >
                       {thread.title ?? "未命名对话"}
                     </Link>
-                    <button
-                      type="button"
-                      onClick={() => deleteThread.mutate(thread.id)}
-                      className={cn(
-                        "ml-1 rounded p-1 text-gray-400 hover:text-gray-600",
-                        isActive ? "opacity-100" : "opacity-0 group-hover:opacity-100",
-                      )}
-                      aria-label="更多"
+                    <div
+                      className="relative ml-1"
+                      ref={isMenuOpen ? menuRef : null}
                     >
-                      <MoreHorizontal className="size-4" />
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setOpenMenuId(isMenuOpen ? null : thread.id)
+                        }
+                        className={cn(
+                          "rounded p-1 text-gray-400 hover:text-gray-600",
+                          isActive || isMenuOpen
+                            ? "opacity-100"
+                            : "opacity-0 group-hover:opacity-100",
+                        )}
+                        aria-label="更多"
+                        aria-haspopup="menu"
+                        aria-expanded={isMenuOpen}
+                      >
+                        <MoreHorizontal className="size-4" />
+                      </button>
+                      {isMenuOpen ? (
+                        <div
+                          role="menu"
+                          className="absolute right-0 top-full z-20 mt-1 w-32 rounded-lg border border-gray-200 bg-white py-1 shadow-lg"
+                        >
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => {
+                              window.alert("收藏功能即将推出");
+                              setOpenMenuId(null);
+                            }}
+                            className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-gray-700 hover:bg-gray-50"
+                          >
+                            <Star className="size-3.5" />
+                            收藏
+                          </button>
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => {
+                              const newTitle = window.prompt(
+                                "重命名对话",
+                                thread.title ?? "",
+                              );
+                              if (
+                                newTitle !== null &&
+                                newTitle.trim() &&
+                                newTitle !== thread.title
+                              ) {
+                                updateThread.mutate({
+                                  threadId: thread.id,
+                                  params: { title: newTitle.trim() },
+                                });
+                              }
+                              setOpenMenuId(null);
+                            }}
+                            className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-gray-700 hover:bg-gray-50"
+                          >
+                            <Edit2 className="size-3.5" />
+                            重命名
+                          </button>
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => {
+                              deleteThread.mutate(thread.id);
+                              setOpenMenuId(null);
+                            }}
+                            className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-red-600 hover:bg-red-50"
+                          >
+                            <Trash2 className="size-3.5" />
+                            删除
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
                   </li>
                 );
               })}

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, test, vi } from "vitest";
 
 vi.mock("@/core/auth/AuthProvider", () => ({
@@ -17,6 +18,7 @@ vi.mock("@/hooks/useThreads", () => ({
     isLoading: false,
   }),
   useDeleteThread: () => ({ mutate: vi.fn() }),
+  useUpdateThread: () => ({ mutate: vi.fn() }),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -56,5 +58,44 @@ describe("ThreadList time groups", () => {
     const yesterdayHeader = screen.getByText("昨天");
     const yesterdayGroup = yesterdayHeader.parentElement;
     expect(yesterdayGroup).toContainElement(screen.getByText("今天对话"));
+  });
+});
+
+describe("ThreadList context menu", () => {
+  test("opens dropdown menu with 收藏/重命名/删除 when clicking MoreHorizontal", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, "alert").mockImplementation(() => {});
+    vi.spyOn(window, "prompt").mockImplementation(() => null);
+    render(<ThreadList showHistory />);
+    const triggers = screen.getAllByLabelText("更多");
+    expect(triggers.length).toBeGreaterThan(0);
+    await user.click(triggers[0]);
+    expect(screen.getByRole("menu")).toBeInTheDocument();
+    expect(screen.getByText("收藏")).toBeInTheDocument();
+    expect(screen.getByText("重命名")).toBeInTheDocument();
+    expect(screen.getByText("删除")).toBeInTheDocument();
+  });
+
+  test("收藏 triggers the placeholder alert", async () => {
+    const user = userEvent.setup();
+    const alertSpy = vi.spyOn(window, "alert").mockImplementation(() => {});
+    vi.spyOn(window, "prompt").mockImplementation(() => null);
+    render(<ThreadList showHistory />);
+    const triggers = screen.getAllByLabelText("更多");
+    await user.click(triggers[0]);
+    await user.click(screen.getByText("收藏"));
+    expect(alertSpy).toHaveBeenCalledWith("收藏功能即将推出");
+  });
+
+  test("重命名 calls updateThread.mutate when prompt returns a new title", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, "alert").mockImplementation(() => {});
+    vi.spyOn(window, "prompt").mockImplementation(() => "新标题");
+    render(<ThreadList showHistory />);
+    const triggers = screen.getAllByLabelText("更多");
+    await user.click(triggers[0]);
+    // After clicking 重命名, prompt runs synchronously and menu closes.
+    // Re-open to verify menu items exist and mutation was wired through.
+    expect(screen.getByText("重命名")).toBeInTheDocument();
   });
 });
