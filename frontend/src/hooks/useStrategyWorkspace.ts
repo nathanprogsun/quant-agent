@@ -7,14 +7,21 @@ export type StrategyTab = "code" | "performance" | "trades" | "holdings" | "logs
 export type RunStatus = "idle" | "running" | "done" | "failed";
 
 export function useStrategyWorkspace() {
+  const [isOpen, setIsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<StrategyTab>("code");
   const [runStatus, setRunStatus] = useState<RunStatus>("idle");
 
-  const openCodeTab = useCallback(() => {
+  const openWorkspace = useCallback(() => {
+    setIsOpen(true);
     setActiveTab("code");
   }, []);
 
+  const closeWorkspace = useCallback(() => {
+    setIsOpen(false);
+  }, []);
+
   const onRunStarted = useCallback(() => {
+    setIsOpen(true);
     setRunStatus("running");
     setActiveTab("logs");
   }, []);
@@ -34,11 +41,13 @@ export function useStrategyWorkspace() {
   }, []);
 
   return {
+    isOpen,
     activeTab,
     setActiveTab,
     runStatus,
     setRunStatus,
-    openCodeTab,
+    openWorkspace,
+    closeWorkspace,
     onRunStarted,
     onRunComplete,
     onRunFailed,

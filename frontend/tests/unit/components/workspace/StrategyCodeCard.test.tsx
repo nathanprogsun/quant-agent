@@ -10,6 +10,7 @@ describe("StrategyCodeCard", () => {
     render(<StrategyCodeCard strategyName="小市值策略" />);
 
     expect(screen.getByText("小市值策略")).toBeInTheDocument();
+    expect(screen.getByText("点击查看")).toBeInTheDocument();
   });
 
   test("calls onOpenCode when clicked", async () => {

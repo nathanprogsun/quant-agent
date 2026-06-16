@@ -4,6 +4,10 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, test } from "vitest";
 
 import { MessageList } from "@/components/workspace/MessageList";
+import {
+  extractReasoningFromMessage,
+  getLastAiMessage,
+} from "@/core/messages/utils";
 
 describe("MessageList", () => {
   test("shows empty state when no messages", () => {
@@ -15,7 +19,8 @@ describe("MessageList", () => {
   test("shows loading state when isLoading and empty", () => {
     render(<MessageList messages={[]} isLoading />);
 
-    expect(screen.getByText("思考中...")).toBeInTheDocument();
+    expect(screen.getByText("思考..")).toBeInTheDocument();
+    expect(screen.getByText("@StrategyBot")).toBeInTheDocument();
   });
 
   test("renders human message", () => {
@@ -38,42 +43,43 @@ describe("MessageList", () => {
     expect(screen.getByText("Hi there")).toBeInTheDocument();
   });
 
-  test("renders tool call indicators", () => {
+  test("does not surface internal tool calls to the user", () => {
     const messages = [
       {
         id: "a1",
         type: "ai",
-        content: "",
+        content: "让我先搜索策略库",
         tool_calls: [{ id: "tc1", name: "search", args: { query: "test" } }],
       },
     ] as Message[];
 
     render(<MessageList messages={messages} />);
 
-    expect(screen.getByText("search")).toBeInTheDocument();
+    expect(screen.queryByText("search")).not.toBeInTheDocument();
+    expect(screen.queryByText("让我先搜索策略库")).not.toBeInTheDocument();
   });
 
-  test("renders tool message", () => {
+  test("does not surface tool error payloads", () => {
     const messages = [
       {
         id: "t1",
         type: "tool",
         tool_call_id: "tc1",
-        content: "search result data",
+        content: "Error: search is not a valid tool",
       },
     ] as Message[];
 
     render(<MessageList messages={messages} />);
 
-    expect(screen.getByText("search result data")).toBeInTheDocument();
+    expect(screen.queryByText(/not a valid tool/)).not.toBeInTheDocument();
   });
 
-  test("renders AI message with tool calls and tool results together", () => {
+  test("renders final assistant reply after tool round", () => {
     const messages = [
       {
         id: "a1",
         type: "ai",
-        content: "",
+        content: "让我先搜索策略库",
         tool_calls: [{ id: "tc1", name: "bash", args: { command: "ls" } }],
       },
       {
@@ -87,8 +93,8 @@ describe("MessageList", () => {
 
     render(<MessageList messages={messages} />);
 
-    expect(screen.getByText("bash")).toBeInTheDocument();
-    expect(screen.getByText(/file1\.txt/)).toBeInTheDocument();
+    expect(screen.queryByText("bash")).not.toBeInTheDocument();
+    expect(screen.queryByText(/file1\.txt/)).not.toBeInTheDocument();
     expect(screen.getByText("Here are the files")).toBeInTheDocument();
   });
 
@@ -99,8 +105,27 @@ describe("MessageList", () => {
 
     render(<MessageList messages={messages} isLoading />);
 
-    // Multiple "Thinking..." texts: one from empty state logic won't show, but the loading indicator will
-    const thinkingElements = screen.getAllByText("思考中...");
-    expect(thinkingElements.length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("思考..")).toBeInTheDocument();
+  });
+
+  test("shows streaming reasoning inside thinking block", () => {
+    const messages = [
+      { id: "h1", type: "human", content: "Hello" },
+      {
+        id: "a1",
+        type: "ai",
+        content: "",
+        additional_kwargs: { reasoning_content: "分析小市值筛选条件" },
+      },
+    ] as unknown as Message[];
+
+    const lastAi = getLastAiMessage(messages);
+    expect(extractReasoningFromMessage(lastAi!)).toBe("分析小市值筛选条件");
+
+    render(<MessageList messages={messages} isLoading />);
+
+    expect(screen.getByTestId("thinking-reasoning-content")).toHaveTextContent(
+      "分析小市值筛选条件",
+    );
   });
 });

@@ -4,9 +4,10 @@ import type { Message } from "@langchain/langgraph-sdk";
 import { useRouter, useSearchParams } from "next/navigation";
 import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { ChatWorkspaceHeader } from "@/components/workspace/ChatWorkspaceHeader";
-import { InputBox } from "@/components/workspace/InputBox";
+import { ChatColumnHeader } from "@/components/workspace/ChatColumnHeader";
+import { HomePromptInput } from "@/components/workspace/HomePromptInput";
 import { MessageList } from "@/components/workspace/MessageList";
+import { MessageQueueBar } from "@/components/workspace/MessageQueueBar";
 import { StrategyWorkspace } from "@/components/workspace/StrategyWorkspace";
 import { useLoginModal } from "@/contexts/LoginModalContext";
 import { useAuth } from "@/core/auth/AuthProvider";
@@ -46,19 +47,40 @@ export default function ChatPage({
   );
 }
 
+function NewChatRedirect() {
+  const router = useRouter();
+
+  useEffect(() => {
+    router.replace("/workspace");
+  }, [router]);
+
+  return (
+    <div className="flex h-full items-center justify-center text-sm text-gray-400">
+      跳转中…
+    </div>
+  );
+}
+
 function ChatPageContent({
   params,
 }: {
   params: Promise<{ thread_id: string }>;
 }) {
   const { thread_id } = React.use(params);
+
+  if (thread_id === NEW_THREAD_ID) {
+    return <NewChatRedirect />;
+  }
+
+  return <ChatThreadPage thread_id={thread_id} />;
+}
+
+function ChatThreadPage({ thread_id }: { thread_id: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { isAuthenticated } = useAuth();
   const { openLoginModal } = useLoginModal();
-  const isNewThread = thread_id === NEW_THREAD_ID;
-  const { data: thread } = useThread(isNewThread ? null : thread_id);
-
+  const { data: thread } = useThread(thread_id);
   const workspace = useStrategyWorkspace();
 
   const {
@@ -94,16 +116,24 @@ function ChatPageContent({
   const editorVersionRef = useRef(1);
   const initialMessageSentRef = useRef(false);
 
-  const { messages, isLoading, sendMessage, pendingNavigationThreadId, values } =
-    useThreadStream({
-      threadId: isNewThread ? null : thread_id,
+  const {
+    messages,
+    isLoading,
+    sendMessage,
+    values,
+    error: streamError,
+    stopStream,
+    queuePaused,
+    queuedMessages,
+    removeQueuedMessage,
+    updateQueuedMessage,
+    moveQueuedMessageUp,
+    moveQueuedMessageDown,
+    sendQueuedMessageNow,
+  } = useThreadStream({
+      threadId: thread_id,
       onCreated: () => {},
-      onFinish: () => {
-        const nextThreadId = pendingNavigationThreadId.current;
-        if (isNewThread && nextThreadId) {
-          router.replace(`/workspace/chats/${nextThreadId}`);
-        }
-      },
+      onFinish: () => {},
     });
 
   const latestPythonBlock = useMemo(
@@ -111,17 +141,31 @@ function ChatPageContent({
     [messages],
   );
 
-  const showStrategyWorkspace = Boolean(
-    editorCode.trim() ||
-      latestPythonBlock ||
-      sessionState === "code_ready" ||
-      sessionState === "backtesting" ||
-      sessionState === "analyzed",
-  );
-
   const threadTitle =
     thread?.title ??
     (typeof values?.title === "string" ? values.title : null);
+
+  const showStrategyWorkspace = workspace.isOpen;
+  const hasRunResults =
+    workspace.runStatus !== "idle" || lastMetrics != null || lastBacktestId != null;
+
+  const strategyPanelTitle =
+    threadTitle?.trim() ||
+    editorCode.match(/^#\s*(.+)/m)?.[1]?.trim() ||
+    "未命名策略";
+
+  const handleOpenStrategyCode = useCallback(() => {
+    if (latestPythonBlock) {
+      setEditorCode(latestPythonBlock);
+      lastSyncedBlockRef.current = latestPythonBlock;
+      editorVersionRef.current += 1;
+    }
+    workspace.openWorkspace();
+  }, [latestPythonBlock, workspace]);
+
+  useEffect(() => {
+    workspace.closeWorkspace();
+  }, [thread_id, workspace.closeWorkspace]);
 
   useEffect(() => {
     let cancelled = false;
@@ -238,7 +282,6 @@ function ChatPageContent({
     if (
       !initialMessage ||
       initialMessageSentRef.current ||
-      isNewThread ||
       !isAuthenticated
     ) {
       return;
@@ -249,7 +292,6 @@ function ChatPageContent({
     router.replace(`/workspace/chats/${thread_id}`);
   }, [
     isAuthenticated,
-    isNewThread,
     router,
     searchParams,
     sendMessage,
@@ -273,7 +315,7 @@ function ChatPageContent({
       return;
     }
 
-    if (isNewThread || sessionState !== "code_ready" || !editorCode.trim()) {
+    if (sessionState !== "code_ready" || !editorCode.trim()) {
       return;
     }
 
@@ -313,7 +355,6 @@ function ChatPageContent({
     cancelAnalyze,
     editorCode,
     isAuthenticated,
-    isNewThread,
     openLoginModal,
     sessionState,
     startBacktest,
@@ -337,7 +378,6 @@ function ChatPageContent({
     }
 
     if (
-      isNewThread ||
       !lastMetrics ||
       !lastBacktestId ||
       isAnalyzing ||
@@ -376,7 +416,6 @@ function ChatPageContent({
     editorCode,
     isAnalyzing,
     isAuthenticated,
-    isNewThread,
     lastBacktestId,
     lastMetrics,
     openLoginModal,
@@ -392,7 +431,7 @@ function ChatPageContent({
   }, [logLines]);
 
   const handleShare = useCallback(async () => {
-    if (!isAuthenticated || isNewThread) {
+    if (!isAuthenticated) {
       openLoginModal();
       return;
     }
@@ -428,7 +467,6 @@ function ChatPageContent({
   }, [
     editorCode,
     isAuthenticated,
-    isNewThread,
     lastMetrics,
     messages,
     openLoginModal,
@@ -451,26 +489,9 @@ function ChatPageContent({
     }
   }, [lastBacktestId, workspace.runStatus]);
 
-  const handleNewChat = useCallback(() => {
-    if (!isAuthenticated) {
-      openLoginModal();
-      return;
-    }
-    router.push(`/workspace/chats/${NEW_THREAD_ID}`);
-  }, [isAuthenticated, openLoginModal, router]);
-
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="flex items-center justify-between border-b px-4 py-2">
-        <ChatWorkspaceHeader threadId={thread_id} title={threadTitle} />
-        <button
-          type="button"
-          onClick={handleNewChat}
-          className="rounded-md border px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
-        >
-          开启新对话
-        </button>
-      </div>
+    <div className="flex h-full min-h-0 flex-col bg-white">
+      <ChatColumnHeader title={threadTitle} />
 
       {submitError ? (
         <p className="border-b bg-red-50 px-4 py-2 text-sm text-red-700">
@@ -478,35 +499,67 @@ function ChatPageContent({
         </p>
       ) : null}
 
+      {streamError ? (
+        <p className="border-b bg-amber-50 px-4 py-2 text-sm text-amber-800">
+          对话流异常，队列已暂停。修复后可继续发送，或取消队列中的消息。
+        </p>
+      ) : null}
+
       <div className="flex min-h-0 flex-1">
         <div
           className={
             showStrategyWorkspace
-              ? "flex min-w-0 flex-1 flex-col border-r"
-              : "flex min-w-0 flex-1 flex-col"
+              ? "flex min-h-0 min-w-0 w-1/2 shrink-0 flex-col border-r bg-white"
+              : "flex min-h-0 min-w-0 flex-1 flex-col bg-white"
           }
         >
-          <div className="min-h-0 flex-1 overflow-auto">
-            <MessageList
-              messages={messages}
-              isLoading={isLoading}
-              threadTitle={threadTitle}
-              onOpenCode={workspace.openCodeTab}
-            />
+          <div className="min-h-0 flex-1 overflow-auto px-[25px]">
+            <div className="mx-auto w-full max-w-[420px]">
+              <MessageList
+                messages={messages}
+                isLoading={isLoading}
+                threadTitle={threadTitle}
+                onOpenCode={handleOpenStrategyCode}
+              />
+            </div>
           </div>
-          <InputBox
-            onSend={handleSend}
-            disabled={isLoading}
-            prefill={inputPrefill}
-            onPrefillApplied={() => setInputPrefill(null)}
-          />
+          <div className="bg-white px-[25px] pb-8 pt-2">
+            <div
+              className={
+                showStrategyWorkspace ? "w-full" : "mx-auto w-full max-w-[720px]"
+              }
+            >
+              <MessageQueueBar
+                items={queuedMessages}
+                paused={queuePaused}
+                onRemove={removeQueuedMessage}
+                onMoveUp={moveQueuedMessageUp}
+                onMoveDown={moveQueuedMessageDown}
+                onEdit={updateQueuedMessage}
+                onSendNow={sendQueuedMessageNow}
+              />
+              <HomePromptInput
+                onSend={handleSend}
+                onStop={() => void stopStream()}
+                prefill={inputPrefill}
+                onPrefillApplied={() => setInputPrefill(null)}
+                showDisclaimer
+                variant="chat"
+                isStreaming={isLoading}
+                placeholder="请输入您的策略想法 (Shift + Enter换行)"
+              />
+            </div>
+          </div>
         </div>
 
         {showStrategyWorkspace ? (
           <StrategyWorkspace
+            title={strategyPanelTitle}
+            onClose={workspace.closeWorkspace}
             activeTab={workspace.activeTab}
             onTabChange={workspace.setActiveTab}
             runStatus={workspace.runStatus}
+            hasRunResults={hasRunResults}
             editorCode={editorCode}
             onEditorChange={setEditorCode}
             isGenerating={isLoading}

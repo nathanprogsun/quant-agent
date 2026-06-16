@@ -75,6 +75,34 @@ describe("AuthProvider", () => {
     expect(screen.getByTestId("user")).toHaveTextContent("null");
   });
 
+  test("syncAuth accepts raw user JSON from /me proxy", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify(mockUser), { status: 200 }),
+    );
+
+    function SyncConsumer() {
+      const { isAuthenticated, syncAuth } = useAuth();
+      return (
+        <div>
+          <span data-testid="isAuthenticated">{String(isAuthenticated)}</span>
+          <button onClick={() => void syncAuth()}>Sync</button>
+        </div>
+      );
+    }
+
+    render(
+      <AuthProvider initialUser={null}>
+        <SyncConsumer />
+      </AuthProvider>,
+    );
+
+    await userEvent.click(screen.getByText("Sync"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("isAuthenticated")).toHaveTextContent("true");
+    });
+  });
+
   test("refresh updates user from API", async () => {
     // Advance time to bypass throttle
     vi.useFakeTimers({ shouldAdvanceTime: true });

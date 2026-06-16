@@ -14,9 +14,12 @@ import type { PerformancePoint } from "@/components/workspace/PerformanceChart";
 import type { StrategyTab, RunStatus } from "@/hooks/useStrategyWorkspace";
 
 interface StrategyWorkspaceProps {
+  title?: string | null;
+  onClose?: () => void;
   activeTab: StrategyTab;
   onTabChange: (tab: StrategyTab) => void;
   runStatus: RunStatus;
+  hasRunResults?: boolean;
   editorCode: string;
   onEditorChange: (code: string) => void;
   isGenerating: boolean;
@@ -38,9 +41,12 @@ interface StrategyWorkspaceProps {
 }
 
 export function StrategyWorkspace({
+  title,
+  onClose,
   activeTab,
   onTabChange,
   runStatus,
+  hasRunResults = false,
   editorCode,
   onEditorChange,
   isGenerating,
@@ -61,10 +67,13 @@ export function StrategyWorkspace({
   onShare,
 }: StrategyWorkspaceProps) {
   return (
-    <div className="flex min-h-0 min-w-[480px] flex-1 flex-col bg-white">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-white">
       <WorkspaceHeader
+        title={title}
+        onClose={onClose}
         activeTab={activeTab}
         onTabChange={onTabChange}
+        hasRunResults={hasRunResults}
         sessionState={sessionState}
         jqcliConfigured={jqcliConfigured}
         lastMetrics={lastMetrics}

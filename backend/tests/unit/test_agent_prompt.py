@@ -9,6 +9,13 @@ def test_system_prompt_requires_simplified_chinese() -> None:
     assert "强制" in SYSTEM_PROMPT
 
 
+def test_system_prompt_lists_only_builtin_tools() -> None:
+    assert "lint_code_tool" in SYSTEM_PROMPT
+    assert "validate_strategy_parameters" in SYSTEM_PROMPT
+    assert "search_dc42" in SYSTEM_PROMPT
+    assert "禁止编造" in SYSTEM_PROMPT or "禁止" in SYSTEM_PROMPT
+
+
 def test_apply_prompt_template_appends_optional_sections() -> None:
     prompt = apply_prompt_template(
         dc42_context="策略片段",

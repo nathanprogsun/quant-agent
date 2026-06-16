@@ -40,7 +40,7 @@ export default async function WorkspaceLayout({
   return (
     <Providers>
       <AuthProvider initialUser={user}>
-        <WorkspaceShell isGuest={!user}>{children}</WorkspaceShell>
+        <WorkspaceShell>{children}</WorkspaceShell>
       </AuthProvider>
     </Providers>
   );

@@ -5,9 +5,21 @@ import { Fragment } from "react";
 import { Streamdown } from "streamdown";
 
 import { StrategyCodeCard } from "@/components/workspace/StrategyCodeCard";
+import { ThinkingChain } from "@/components/workspace/ThinkingChain";
+import {
+  Reasoning,
+  ReasoningContent,
+  ReasoningTrigger,
+} from "@/components/workspace/Reasoning";
 import {
   extractContentFromMessage,
-  extractToolCallsFromMessage,
+  extractReasoningFromMessage,
+  extractThinkingToolStepsFromMessages,
+  getLastAiMessage,
+  getLastAssistantGroupMessages,
+  getLastVisibleAiMessage,
+  aiMessageHasToolCalls,
+  splitThinkingFromText,
   getMessageGroups,
 } from "@/core/messages/utils";
 import { streamdownPlugins } from "@/core/streamdown/plugins";
@@ -72,6 +84,31 @@ function splitMarkdownWithPythonBlocks(content: string): ContentPart[] {
   return parts;
 }
 
+function MarkdownText({
+  text,
+  plainText,
+}: {
+  text: string;
+  plainText?: boolean;
+}) {
+  const safeText = splitThinkingFromText(text).text;
+
+  if (plainText) {
+    return <p className="whitespace-pre-wrap text-sm">{safeText}</p>;
+  }
+
+  if (!safeText.trim()) return null;
+
+  return (
+    <Streamdown
+      className="prose prose-sm max-w-none prose-headings:font-semibold prose-p:leading-relaxed prose-code:rounded prose-code:bg-gray-100 prose-code:px-1 prose-code:py-0.5 prose-code:before:content-none prose-code:after:content-none prose-pre:bg-gray-50"
+      {...streamdownPlugins}
+    >
+      {safeText}
+    </Streamdown>
+  );
+}
+
 export function MessageList({
   messages,
   isLoading,
@@ -79,22 +116,42 @@ export function MessageList({
   onOpenCode,
 }: MessageListProps) {
   const groups = getMessageGroups(messages);
-  const hasAssistantContent = messages.some(
-    (message) =>
-      message.type === "ai" && extractContentFromMessage(message).length > 0,
+  const lastAiMessage = getLastAiMessage(messages);
+  const lastVisibleAiMessage = getLastVisibleAiMessage(messages);
+  const lastAssistantMessages = getLastAssistantGroupMessages(messages);
+  const streamingReasoning = lastAiMessage
+    ? extractReasoningFromMessage(lastAiMessage)
+    : "";
+  const streamingResponseText = lastVisibleAiMessage
+    ? extractContentFromMessage(lastVisibleAiMessage)
+    : "";
+  const visibleStreamingText = streamingResponseText
+    ? splitThinkingFromText(streamingResponseText).text
+    : "";
+  const toolSteps = extractThinkingToolStepsFromMessages(lastAssistantMessages);
+  const showThinkingOnly = Boolean(isLoading && !visibleStreamingText.trim());
+  const showCollapsedThinking = Boolean(
+    isLoading &&
+      visibleStreamingText.trim() &&
+      (streamingReasoning || toolSteps.length > 0),
   );
-  const showThinkingIndicator = Boolean(isLoading && !hasAssistantContent);
 
   if (groups.length === 0) {
     return (
-      <div className="flex h-full items-center justify-center text-gray-400">
-        {showThinkingIndicator ? "思考中..." : "开始对话吧"}
+      <div className="flex h-full flex-col py-4">
+        {isLoading ? (
+          <ThinkingChain isStreaming reasoning={streamingReasoning} toolSteps={toolSteps} />
+        ) : (
+          <div className="flex flex-1 items-center justify-center text-gray-400">
+            开始对话吧
+          </div>
+        )}
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 p-4">
+    <div className="w-full space-y-6 py-4">
       {groups.map((group, index) => {
         const groupKey = getMessageGroupKey(group, index);
 
@@ -112,6 +169,7 @@ export function MessageList({
         }
 
         if (group.type === "assistant") {
+          const isStreamingGroup = Boolean(isLoading && index === groups.length - 1);
           return (
             <AssistantGroup
               key={groupKey}
@@ -119,32 +177,24 @@ export function MessageList({
               messages={group.messages}
               threadTitle={threadTitle}
               onOpenCode={onOpenCode}
+              streamPlainText={isStreamingGroup}
+              streamingReasoning={isStreamingGroup ? streamingReasoning : ""}
+              toolSteps={isStreamingGroup ? toolSteps : []}
+              showCollapsedThinking={isStreamingGroup && showCollapsedThinking}
             />
-          );
-        }
-
-        if (group.type === "tool") {
-          return (
-            <Fragment key={groupKey}>
-              {group.messages.map((msg, messageIndex) => (
-                <ToolMessage
-                  key={getMessageKey(msg, `${groupKey}-tool-${messageIndex}`)}
-                  message={msg}
-                />
-              ))}
-            </Fragment>
           );
         }
 
         return null;
       })}
 
-      {showThinkingIndicator ? (
-        <div className="flex justify-start">
-          <div className="rounded-lg bg-gray-100 px-4 py-2">
-            <span className="animate-pulse">思考中...</span>
-          </div>
-        </div>
+      {showThinkingOnly ? (
+        <ThinkingChain
+          isStreaming
+          reasoning={streamingReasoning}
+          toolSteps={toolSteps}
+          defaultOpen
+        />
       ) : null}
     </div>
   );
@@ -156,8 +206,8 @@ function HumanMessage({ message }: { message: Message }) {
 
   return (
     <div className="flex justify-end">
-      <div className="max-w-[80%] rounded-lg bg-blue-600 px-4 py-2 text-white">
-        <p className="whitespace-pre-wrap">{content}</p>
+      <div className="max-w-[85%] rounded-full bg-[#f2f2f2] px-5 py-2.5 text-gray-900">
+        <p className="whitespace-pre-wrap text-sm leading-relaxed">{content}</p>
       </div>
     </div>
   );
@@ -168,52 +218,49 @@ function AssistantGroup({
   messages,
   threadTitle,
   onOpenCode,
+  streamPlainText = false,
+  streamingReasoning = "",
+  toolSteps = [],
+  showCollapsedThinking = false,
 }: {
   groupKey: string;
   messages: Message[];
   threadTitle?: string | null;
   onOpenCode?: () => void;
+  streamPlainText?: boolean;
+  streamingReasoning?: string;
+  toolSteps?: ReturnType<typeof extractThinkingToolStepsFromMessages>;
+  showCollapsedThinking?: boolean;
 }) {
   const aiMessages = messages.filter((m) => m.type === "ai");
-  const toolMessages = messages.filter((m) => m.type === "tool");
 
   return (
-    <div className="space-y-2">
-      {aiMessages.map((msg, messageIndex) => {
-        const toolCalls = extractToolCallsFromMessage(msg);
-        if (toolCalls.length === 0) return null;
-
-        const messageKey = getMessageKey(msg, `${groupKey}-ai-${messageIndex}`);
-
-        return (
-          <div key={`tc-${messageKey}`} className="space-y-1">
-            {toolCalls.map((tc, toolCallIndex) => (
-              <div
-                key={tc.id || `${messageKey}-tc-${toolCallIndex}`}
-                className="flex items-center gap-2 rounded bg-gray-50 px-3 py-1.5 text-sm text-gray-600"
-              >
-                <span className="inline-block h-2 w-2 rounded-full bg-yellow-400" />
-                <span className="font-mono">{tc.name}</span>
-                <span className="text-gray-400">
-                  {JSON.stringify(tc.args).slice(0, 80)}
-                </span>
-              </div>
-            ))}
-          </div>
-        );
-      })}
-
-      {toolMessages.map((msg, messageIndex) => (
-        <ToolMessage
-          key={getMessageKey(msg, `${groupKey}-tool-result-${messageIndex}`)}
-          message={msg}
+    <div className="space-y-3">
+      {showCollapsedThinking ? (
+        <ThinkingChain
+          isStreaming
+          reasoning={streamingReasoning}
+          toolSteps={toolSteps}
+          defaultOpen={false}
         />
-      ))}
-
+      ) : null}
       {aiMessages
-        .filter((msg) => extractContentFromMessage(msg).length > 0)
+        .filter((msg) => {
+          if (aiMessageHasToolCalls(msg)) return false;
+          const hasContent = extractContentFromMessage(msg).length > 0;
+          const hasReasoning = extractReasoningFromMessage(msg).length > 0;
+          return hasContent || hasReasoning;
+        })
         .map((msg, messageIndex) => {
-          const content = extractContentFromMessage(msg);
+          const rawContent = extractContentFromMessage(msg);
+          const blockReasoning = extractReasoningFromMessage(msg);
+          const { thinking, text: visibleText } = splitThinkingFromText(rawContent);
+          const reasoningText = [blockReasoning, thinking]
+            .filter(Boolean)
+            .join("\n\n");
+          const content = visibleText;
+          if (!content && !reasoningText && !streamPlainText) return null;
+
           const parts = splitMarkdownWithPythonBlocks(content);
           const messageKey = getMessageKey(
             msg,
@@ -221,50 +268,39 @@ function AssistantGroup({
           );
 
           return (
-            <div key={messageKey} className="flex justify-start">
-              <div className="max-w-[90%] rounded-lg bg-gray-100 px-4 py-2 text-gray-900">
-                {parts.map((part, partIndex) => {
-                  if (part.type === "text" && part.text.trim()) {
-                    return (
-                      <Streamdown
-                        key={`${messageKey}-text-${partIndex}`}
-                        className="prose prose-sm max-w-none"
-                        {...streamdownPlugins}
-                      >
-                        {part.text}
-                      </Streamdown>
-                    );
-                  }
+            <div key={messageKey} className="max-w-full text-sm text-gray-900">
+              {reasoningText && !streamPlainText ? (
+                <Reasoning isStreaming={false} defaultOpen={false}>
+                  <ReasoningTrigger />
+                  <ReasoningContent>{reasoningText}</ReasoningContent>
+                </Reasoning>
+              ) : null}
+              {parts.map((part, partIndex) => {
+                if (part.type === "text" && part.text.trim()) {
+                  return (
+                    <MarkdownText
+                      key={`${messageKey}-text-${partIndex}`}
+                      text={part.text}
+                      plainText={streamPlainText}
+                    />
+                  );
+                }
 
-                  if (part.type === "python" && part.code) {
-                    return (
-                      <StrategyCodeCard
-                        key={`${messageKey}-code-${partIndex}`}
-                        strategyName={strategyNameFromCode(part.code, threadTitle)}
-                        onOpenCode={onOpenCode}
-                      />
-                    );
-                  }
+                if (part.type === "python" && part.code) {
+                  return (
+                    <StrategyCodeCard
+                      key={`${messageKey}-code-${partIndex}`}
+                      strategyName={strategyNameFromCode(part.code, threadTitle)}
+                      onOpenCode={onOpenCode}
+                    />
+                  );
+                }
 
-                  return null;
-                })}
-              </div>
+                return null;
+              })}
             </div>
           );
         })}
-    </div>
-  );
-}
-
-function ToolMessage({ message }: { message: Message }) {
-  const content = extractContentFromMessage(message);
-  if (!content) return null;
-
-  return (
-    <div className="flex justify-start pl-8">
-      <div className="max-w-[70%] rounded border-l-2 border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-600">
-        <p className="whitespace-pre-wrap font-mono text-xs">{content}</p>
-      </div>
     </div>
   );
 }

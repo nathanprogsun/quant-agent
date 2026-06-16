@@ -5,6 +5,23 @@ interface StrategyCodeCardProps {
   onOpenCode?: () => void;
 }
 
+function StrategyCubeIcon() {
+  return (
+    <svg
+      width="22"
+      height="22"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      aria-hidden
+    >
+      <path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z" />
+      <path d="M12 12l8-4.5M12 12v9M12 12L4 7.5" />
+    </svg>
+  );
+}
+
 export function StrategyCodeCard({
   strategyName,
   onOpenCode,
@@ -13,27 +30,16 @@ export function StrategyCodeCard({
     <button
       type="button"
       onClick={onOpenCode}
-      className="mt-3 flex w-full max-w-sm items-center gap-3 rounded-lg border border-gray-200 bg-white px-4 py-3 text-left shadow-sm transition hover:border-blue-300 hover:shadow-md"
+      className="mt-3 flex w-full max-w-xs items-center gap-3 rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-left transition hover:border-gray-300 hover:shadow-sm"
     >
-      <span className="flex h-10 w-10 items-center justify-center rounded-md bg-blue-50 text-blue-600">
-        <svg
-          width="20"
-          height="20"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          aria-hidden
-        >
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-          <path d="M14 2v6h6M10 13l-2 2 2 2M14 17h4" />
-        </svg>
+      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-gray-100 bg-gray-50 text-red-500">
+        <StrategyCubeIcon />
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block text-sm font-medium text-gray-900 truncate">
+        <span className="block truncate text-sm font-medium text-gray-900">
           {strategyName}
         </span>
-        <span className="block text-xs text-gray-500">点击查看策略代码</span>
+        <span className="mt-0.5 block text-xs text-red-500">点击查看</span>
       </span>
     </button>
   );

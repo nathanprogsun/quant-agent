@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
-from app.core.chat.agent.lead_agent import _make_agent_node, _should_use_tools
+from app.core.chat.agent.lead_agent import _make_agent_node, _should_use_tools, make_lead_agent
 from app.core.chat.agent.thread_state import ThreadState
 from app.core.chat.middlewares.base import AgentMiddleware
 
@@ -168,6 +168,18 @@ async def test_agent_node_refreshes_stale_system_prompt() -> None:
     call_args = mock_model.ainvoke.call_args[0][0]
     assert call_args[0].content == "system instructions"
     assert len(call_args) == 2
+
+
+def test_make_lead_agent_requests_reasoning_split() -> None:
+    """Lead agent model should split reasoning from answer at the provider."""
+    with patch("app.core.chat.agent.lead_agent.ChatOpenAI") as chat_openai:
+        chat_openai.return_value.bind_tools.return_value = chat_openai.return_value
+        with patch("app.core.chat.agent.lead_agent.StateGraph") as state_graph:
+            state_graph.return_value.compile.return_value = object()
+            make_lead_agent({"configurable": {}})
+
+    chat_openai.assert_called_once()
+    assert chat_openai.call_args.kwargs["extra_body"] == {"reasoning_split": True}
 
 
 @pytest.mark.asyncio

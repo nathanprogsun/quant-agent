@@ -3,6 +3,10 @@ import { describe, expect, test } from "vitest";
 
 import {
   extractContentFromMessage,
+  extractReasoningFromMessage,
+  getLastAiMessage,
+  getLastVisibleAiMessage,
+  splitThinkingFromText,
   extractToolCallsFromMessage,
   getMessageGroups,
 } from "@/core/messages/utils";
@@ -128,6 +132,17 @@ describe("extractContentFromMessage", () => {
     expect(extractContentFromMessage(message)).toBe("hello");
   });
 
+  test("strips inline redacted_thinking from string content", () => {
+    const open = "<thinking>";
+    const close = "</thinking>";
+    const message = {
+      id: "1",
+      type: "ai",
+      content: `${open}plan${close}\n\n## Answer\n\nHi`,
+    } as Message;
+    expect(extractContentFromMessage(message)).toBe("## Answer\n\nHi");
+  });
+
   test("extracts LangChain checkpoint data.content string", () => {
     const message = {
       type: "human",
@@ -144,6 +159,72 @@ describe("extractContentFromMessage", () => {
       },
     } as unknown as Message;
     expect(extractContentFromMessage(message)).toBe("Hello");
+  });
+});
+
+describe("splitThinkingFromText", () => {
+  test("strips redacted_thinking tags", () => {
+    const open = "<thinking>";
+    const close = "</thinking>";
+    const { thinking, text } = splitThinkingFromText(
+      `${open}inner${close}\n\n## Title\n\nBody`,
+    );
+    expect(thinking).toBe("inner");
+    expect(text).toBe("## Title\n\nBody");
+  });
+
+  test("splits Chinese reasoning preamble before markdown heading", () => {
+    const raw =
+      "用户问的是'ETF轮动策略'，我需要根据 DC42 策略库中相关的策略进行回复。\n\n## DC42 ETF 轮动策略概览\n\n您好！";
+    const { thinking, text } = splitThinkingFromText(raw);
+    expect(thinking).toContain("用户问的是");
+    expect(text.startsWith("## DC42")).toBe(true);
+  });
+
+  test("strips unclosed redacted_thinking during streaming", () => {
+    const open = "<thinking>";
+    const { thinking, text } = splitThinkingFromText(`${open}still thinking`);
+    expect(thinking).toBe("still thinking");
+    expect(text).toBe("");
+  });
+});
+
+describe("extractReasoningFromMessage", () => {
+  test("extracts reasoning blocks from array content", () => {
+    const message = {
+      id: "1",
+      type: "ai",
+      content: [
+        { type: "reasoning", reasoning: "step 1" },
+        { type: "text", text: "Answer" },
+      ],
+    } as unknown as Message;
+    expect(extractReasoningFromMessage(message)).toBe("step 1");
+  });
+
+  test("extracts reasoning from additional_kwargs.reasoning_content", () => {
+    const message = {
+      id: "1",
+      type: "ai",
+      content: "",
+      additional_kwargs: { reasoning_content: "provider reasoning" },
+    } as unknown as Message;
+    expect(extractReasoningFromMessage(message)).toBe("provider reasoning");
+  });
+
+  test("getLastAiMessage includes tool-call assistant turns", () => {
+    const messages = [
+      { id: "a1", type: "ai", content: "visible answer" },
+      {
+        id: "a2",
+        type: "ai",
+        content: [{ type: "reasoning", reasoning: "delegating" }],
+        tool_calls: [{ id: "tc1", name: "lint_code_tool", args: {} }],
+      },
+    ] as Message[];
+
+    expect(getLastAiMessage(messages)?.id).toBe("a2");
+    expect(getLastVisibleAiMessage(messages)?.id).toBe("a1");
   });
 });
 

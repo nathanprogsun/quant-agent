@@ -79,6 +79,7 @@ def make_lead_agent(config: RunnableConfig) -> Any:
         api_key=settings.openai_api_key.get_secret_value(),
         base_url=settings.openai_base_url,
         streaming=True,
+        extra_body={"reasoning_split": True},
     )
 
     # Tools — Phase 2: backtest safety tools

@@ -9,6 +9,7 @@
   } from "react";
 
   import type { AuthResult, User } from "./types";
+import { userSchema } from "./types";
 
   // ── Context Types ───────────────────────────────────────────────────────────
 
@@ -48,8 +49,19 @@
         });
 
         if (response.ok) {
-          const data: AuthResult = await response.json();
-          setUser(data.status === "authenticated" ? data.user : null);
+          const data: unknown = await response.json();
+          const tagged = data as AuthResult;
+          if (
+            tagged &&
+            typeof tagged === "object" &&
+            tagged.status === "authenticated" &&
+            tagged.user
+          ) {
+            setUser(tagged.user);
+          } else {
+            const parsed = userSchema.safeParse(data);
+            setUser(parsed.success ? parsed.data : null);
+          }
         } else if (response.status === 401) {
           setUser(null);
         }
