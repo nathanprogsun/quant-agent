@@ -461,12 +461,12 @@ function ChatThreadPage({ thread_id }: { thread_id: string }) {
         <div
           className={
             showStrategyWorkspace
-              ? "flex min-h-0 min-w-0 w-1/2 shrink-0 flex-col border-r bg-white"
+              ? "flex min-h-0 min-w-0 w-[65%] shrink-0 flex-col border-r bg-white"
               : "flex min-h-0 min-w-0 flex-1 flex-col bg-white"
           }
         >
-          <div className="min-h-0 flex-1 overflow-auto px-[25px]">
-            <div className="mx-auto w-full max-w-[420px]">
+          <div className="min-h-0 flex-1 overflow-auto px-8">
+            <div className="mx-auto w-full max-w-[1000px]">
               <MessageList
                 messages={messages}
                 isLoading={isLoading}
@@ -475,10 +475,10 @@ function ChatThreadPage({ thread_id }: { thread_id: string }) {
               />
             </div>
           </div>
-          <div className="bg-white px-[25px] pb-8 pt-2">
+          <div className="bg-white px-8 pb-8 pt-2">
             <div
               className={
-                showStrategyWorkspace ? "w-full" : "mx-auto w-full max-w-[720px]"
+                showStrategyWorkspace ? "w-full" : "mx-auto w-full max-w-[1000px]"
               }
             >
               <MessageQueueBar
