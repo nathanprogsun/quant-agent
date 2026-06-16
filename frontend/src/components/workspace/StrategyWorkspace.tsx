@@ -65,7 +65,7 @@ export function StrategyWorkspace({
   onSubmitSimulation,
 }: StrategyWorkspaceProps) {
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-white">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col border-l border-gray-200 bg-white">
       <WorkspaceHeader
         title={title}
         onClose={onClose}

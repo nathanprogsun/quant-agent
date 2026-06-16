@@ -35,6 +35,7 @@ export function BacktestButton({
       onClick={isBacktesting ? onAbort : onRun}
       disabled={isDisabled}
       variant={isBacktesting ? 'destructive' : 'default'}
+      className="bg-red-500 hover:bg-red-600 transition-colors"
       title={tooltip}
     >
       {isBacktesting ? '回测进行中' : runLabel}
