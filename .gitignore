@@ -27,6 +27,7 @@ wheels/
 !backend/data/dc42/**
 
 # IDE
+.cursor/
 .idea/
 .vscode/
 *.swp
