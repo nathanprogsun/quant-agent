@@ -1,0 +1,66 @@
+{
+  "dataset": "/Users/jung/pro/quant-agent/backend/eval/datasets/jq_strategy_eval_pilot.jsonl",
+  "llm_model": "MiniMax-M3",
+  "count": 8,
+  "recall@5": 0.625,
+  "mrr": 0.625,
+  "failures": [
+    {
+      "id": "s002",
+      "query": "ETF动量轮动 MA乖离择时",
+      "expected": 35235,
+      "got": [
+        36060,
+        36060,
+        36060,
+        36060,
+        36060
+      ],
+      "titles": [
+        "ETF-控制回撤性能拉满（国债ETF增强）",
+        "ETF-控制回撤性能拉满（国债ETF增强）",
+        "ETF-控制回撤性能拉满（国债ETF增强）",
+        "ETF-控制回撤性能拉满（国债ETF增强）",
+        "ETF-控制回撤性能拉满（国债ETF增强）"
+      ]
+    },
+    {
+      "id": "s004",
+      "query": "场内基金定投价值平均",
+      "expected": 39272,
+      "got": [
+        36060,
+        36060,
+        36060,
+        36060,
+        36060
+      ],
+      "titles": [
+        "ETF-控制回撤性能拉满（国债ETF增强）",
+        "ETF-控制回撤性能拉满（国债ETF增强）",
+        "ETF-控制回撤性能拉满（国债ETF增强）",
+        "ETF-控制回撤性能拉满（国债ETF增强）",
+        "ETF-控制回撤性能拉满（国债ETF增强）"
+      ]
+    },
+    {
+      "id": "s008",
+      "query": "initialize 函数 set_benchmark 沪深300",
+      "expected": 36092,
+      "got": [
+        36060,
+        38663,
+        36382,
+        35235,
+        38120
+      ],
+      "titles": [
+        "ETF-控制回撤性能拉满（国债ETF增强）",
+        "集合竞价量比策略V1",
+        "龙头首阴战法改版二",
+        "ETF动量轮动MA乖离择时",
+        "ETF轮动策略-入门2.0"
+      ]
+    }
+  ]
+}

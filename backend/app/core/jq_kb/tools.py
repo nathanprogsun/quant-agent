@@ -10,6 +10,7 @@ from langchain_core.tools import tool
 from app.core.jq_kb.retrievers import (
     create_default_jq_api_retriever,
     create_default_jq_dict_retriever,
+    create_default_jq_strategy_retriever,
 )
 
 
@@ -56,7 +57,7 @@ async def search_jq_api(
 
     不适用:
     - 行业/概念/指数(HY001) — 使用 search_jq_dict
-    - 策略范例 — PR3 search_jq_strategy
+    - 策略范例 — 使用 search_jq_strategy
 
     Args:
         query: 自然语言检索问题
@@ -87,7 +88,7 @@ async def search_jq_dict(
 
     不适用:
     - API 函数用法 — 使用 search_jq_api
-    - 策略范例 — PR3 search_jq_strategy
+    - 策略范例 — 使用 search_jq_strategy
 
     Args:
         query: 自然语言检索问题
@@ -100,6 +101,60 @@ async def search_jq_dict(
         top_k=5,
     )
     return _format_dict_hits(hits)
+
+
+def _format_strategy_hits(hits: list[Any]) -> str:
+    if not hits:
+        return "未找到相关聚宽精选策略。请换关键词或指定年份/策略类型。"
+    parts: list[str] = []
+    for i, hit in enumerate(hits, 1):
+        meta = hit.metadata
+        title = meta.get("title", hit.chunk_id)
+        layer = meta.get("layer", "")
+        year = meta.get("year", "")
+        stype = meta.get("strategy_type", "")
+        header = f"## {i}. {title} ({layer}, {year}, {stype}, score={hit.score:.3f})"
+        body = hit.document[:3500]
+        parts.append(f"{header}\n\n{body}")
+    return "\n\n---\n\n".join(parts)
+
+
+@tool
+async def search_jq_strategy(
+    query: str,
+    year: int = 0,
+    strategy_type: str = "",
+) -> str:
+    """在 2020-2024 聚宽精选策略库中检索实战策略思路、代码片段与 API 用法。
+
+    适用场景:
+    - 策略实现:"ETF 轮动怎么写"、"小市值选股策略"
+    - 因子组合:"F-Score 选股"、"多因子策略"
+    - 完整代码:"initialize 函数示例"
+    - 反向查询:"用到 get_fundamentals 的策略"
+
+    不适用:
+    - API 函数签名 — 使用 search_jq_api
+    - 行业/字段代码 — 使用 search_jq_dict
+
+    Args:
+        query: 自然语言检索问题
+        year: 可选,按年份过滤(如 2023)
+        strategy_type: 可选,策略类型过滤(如 "ETF 轮动")
+    """
+    retriever = _get_jq_strategy_retriever()
+    hits = await retriever.retrieve(
+        query,
+        year=year,
+        strategy_type=strategy_type.strip(),
+        top_k=5,
+    )
+    return _format_strategy_hits(hits)
+
+
+@lru_cache(maxsize=1)
+def _get_jq_strategy_retriever() -> Any:
+    return create_default_jq_strategy_retriever()
 
 
 @lru_cache(maxsize=1)
@@ -119,4 +174,6 @@ def get_tools(*, pr_phase: int = 1) -> list[Any]:
         tools.append(search_jq_api)
     if pr_phase >= 2:
         tools.append(search_jq_dict)
+    if pr_phase >= 3:
+        tools.append(search_jq_strategy)
     return tools

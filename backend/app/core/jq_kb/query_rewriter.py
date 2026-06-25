@@ -20,7 +20,11 @@ import json
 import logging
 from functools import lru_cache
 
-from app.core.jq_kb.paths import JQ_API_MANIFEST_PATH, JQ_DICT_MANIFEST_PATH
+from app.core.jq_kb.paths import (
+    JQ_API_MANIFEST_PATH,
+    JQ_DICT_MANIFEST_PATH,
+    JQ_STRATEGY_MANIFEST_PATH,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +74,7 @@ def reset_known_names_cache() -> None:
     """Invalidate the manifest cache (call after re-ingest)."""
     known_function_names.cache_clear()
     known_codes.cache_clear()
+    known_post_ids.cache_clear()
 
 
 @lru_cache(maxsize=1)
@@ -88,3 +93,16 @@ def known_codes() -> frozenset[str]:
 
 def is_known_code(name: str) -> bool:
     return name in known_codes()
+
+
+@lru_cache(maxsize=1)
+def known_post_ids() -> frozenset[int]:
+    if not JQ_STRATEGY_MANIFEST_PATH.is_file():
+        return frozenset()
+    try:
+        data = json.loads(JQ_STRATEGY_MANIFEST_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        logger.warning("Could not parse manifest %s: %s", JQ_STRATEGY_MANIFEST_PATH, exc)
+        return frozenset()
+    ids = data.get("post_ids") or []
+    return frozenset(int(i) for i in ids if isinstance(i, int) or str(i).isdigit())
