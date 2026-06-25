@@ -24,6 +24,7 @@ from app.core.chat.middlewares.title_middleware import TitleMiddleware
 from app.core.chat.middlewares.token_usage_middleware import TokenUsageMiddleware
 from app.core.chat.tools.builtin.lint_tool import lint_code_tool
 from app.core.chat.tools.builtin.param_tool import make_validate_parameters_tool
+from app.core.jq_kb.tools import get_tools
 from app.settings import get_settings
 
 _SYSTEM_SUFFIX_MARKERS = ("[系统上下文]", "[DC42 Knowledge]", "<dc42_knowledge>", "<memory>")
@@ -82,8 +83,12 @@ def make_lead_agent(config: RunnableConfig) -> Any:
         extra_body={"reasoning_split": True},
     )
 
-    # Tools — Phase 2: backtest safety tools
-    tools: list[Any] = [lint_code_tool, make_validate_parameters_tool()]
+    # Tools — lint/validate + jq_kb (PR1: search_jq_api)
+    tools: list[Any] = [
+        lint_code_tool,
+        make_validate_parameters_tool(),
+        *get_tools(pr_phase=1),
+    ]
     if tools:
         model = model.bind_tools(tools)
 

@@ -1,0 +1,269 @@
+{
+  "version": "pilot-2026-06-24",
+  "source": "joinquant.com/help/api/help",
+  "functions": [
+    {
+      "function_name": "get_price",
+      "module": "Stock",
+      "signature": "get_price(security, start_date=None, end_date=None, frequency='daily', fields=None, skip_paused=False, fq='pre')",
+      "params": [
+        {"name": "security", "type": "str/list", "default": "-", "description": "股票代码或代码列表"},
+        {"name": "frequency", "type": "str", "default": "daily", "description": "频率: daily/1m/5m/60m 等"},
+        {"name": "fields", "type": "list", "default": "None", "description": "字段列表如 open close high low volume"}
+      ],
+      "returns": "pandas DataFrame, 列为 fields 指定字段",
+      "examples": ["df = get_price('000001.XSHE', start_date='2024-01-01', end_date='2024-01-31')"],
+      "notes": "获取行情数据 ♠ 研究/回测/模拟可用",
+      "env_text": "研究 回测 模拟"
+    },
+    {
+      "function_name": "order_target",
+      "module": "Trading",
+      "signature": "order_target(security, amount)",
+      "params": [
+        {"name": "security", "type": "str", "default": "-", "description": "标的代码"},
+        {"name": "amount", "type": "int", "default": "-", "description": "目标持仓股数"}
+      ],
+      "returns": "Order 对象或 None",
+      "examples": ["order_target('000001.XSHE', 1000)"],
+      "notes": "调整持仓到目标股数 ♠ 回测/模拟",
+      "env_text": "回测 模拟"
+    },
+    {
+      "function_name": "order_value",
+      "module": "Trading",
+      "signature": "order_value(security, value)",
+      "params": [
+        {"name": "security", "type": "str", "default": "-", "description": "标的代码"},
+        {"name": "value", "type": "float", "default": "-", "description": "目标持仓市值"}
+      ],
+      "returns": "Order 对象或 None",
+      "examples": ["order_value('000001.XSHE', 10000)"],
+      "notes": "按目标市值下单 ♠ 回测/模拟",
+      "env_text": "回测 模拟"
+    },
+    {
+      "function_name": "order",
+      "module": "Trading",
+      "signature": "order(security, amount, style=None)",
+      "params": [
+        {"name": "security", "type": "str", "default": "-", "description": "标的代码"},
+        {"name": "amount", "type": "int", "default": "-", "description": "正数买入负数卖出"},
+        {"name": "style", "type": "MarketOrderStyle/LimitOrderStyle", "default": "None", "description": "订单类型"}
+      ],
+      "returns": "Order 对象",
+      "examples": ["order('000001.XSHE', 100)"],
+      "notes": "按股数下单 ♠ 回测/模拟",
+      "env_text": "回测 模拟"
+    },
+    {
+      "function_name": "get_fundamentals",
+      "module": "Stock",
+      "signature": "get_fundamentals(query, date=None, statDate=None)",
+      "params": [
+        {"name": "query", "type": "Query", "default": "-", "description": "fundamentals 查询对象"},
+        {"name": "date", "type": "str", "default": "None", "description": "查询日期"}
+      ],
+      "returns": "pandas DataFrame 财务/估值数据",
+      "examples": ["q = query(valuation.code, valuation.pe_ratio).filter(valuation.pe_ratio < 20)"],
+      "notes": "查询财务基本面数据 ♠ 研究/回测",
+      "env_text": "研究 回测"
+    },
+    {
+      "function_name": "get_index_stocks",
+      "module": "index",
+      "signature": "get_index_stocks(index_symbol, date=None)",
+      "params": [
+        {"name": "index_symbol", "type": "str", "default": "-", "description": "指数代码如 000300.XSHG"},
+        {"name": "date", "type": "str", "default": "None", "description": "成分股日期"}
+      ],
+      "returns": "股票代码列表",
+      "examples": ["stocks = get_index_stocks('000300.XSHG')"],
+      "notes": "获取指数成分股",
+      "env_text": "研究 回测"
+    },
+    {
+      "function_name": "history",
+      "module": "Stock",
+      "signature": "history(count, unit='1d', field='avg', security_list=None, df=True, skip_paused=False, fq='pre')",
+      "params": [
+        {"name": "count", "type": "int", "default": "-", "description": "bar 数量"},
+        {"name": "unit", "type": "str", "default": "1d", "description": "时间单位"},
+        {"name": "field", "type": "str", "default": "avg", "description": "字段名"},
+        {"name": "security_list", "type": "list", "default": "None", "description": "标的列表,默认当前股票池"}
+      ],
+      "returns": "DataFrame 或 dict 历史数据",
+      "examples": ["history(20, field='close')"],
+      "notes": "批量获取历史行情 ♠ 回测",
+      "env_text": "回测"
+    },
+    {
+      "function_name": "attribute_history",
+      "module": "Stock",
+      "signature": "attribute_history(security, count, unit='1d', fields=['open','close'], skip_paused=True, df=True, fq='pre')",
+      "params": [
+        {"name": "security", "type": "str", "default": "-", "description": "单个标的"},
+        {"name": "count", "type": "int", "default": "-", "description": "bar 数"},
+        {"name": "fields", "type": "list", "default": "open close", "description": "字段列表"}
+      ],
+      "returns": "DataFrame 历史数据",
+      "examples": ["attribute_history('000001.XSHE', 30, fields=['close'])"],
+      "notes": "单标的 attribute 历史数据 ♠ 回测",
+      "env_text": "回测"
+    },
+    {
+      "function_name": "set_order_cost",
+      "module": "Trading",
+      "signature": "set_order_cost(open_tax, close_tax, open_commission, close_commission, min_commission, type='stock')",
+      "params": [
+        {"name": "open_commission", "type": "float", "default": "-", "description": "买入佣金率"},
+        {"name": "close_commission", "type": "float", "default": "-", "description": "卖出佣金率"},
+        {"name": "min_commission", "type": "float", "default": "-", "description": "最低佣金"}
+      ],
+      "returns": "None",
+      "examples": ["set_order_cost(0, 0.001, 0.0003, 0.0003, 5)"],
+      "notes": "设置交易成本 ♠ 回测",
+      "env_text": "回测"
+    },
+    {
+      "function_name": "get_current_data",
+      "module": "Stock",
+      "signature": "get_current_data()",
+      "params": [],
+      "returns": "dict-like 当前所有标的快照,含 paused/is_st/day_open/high_limit",
+      "examples": ["cd = get_current_data(); cd['000001.XSHE'].paused"],
+      "notes": "当前时刻标的快照 ♠ 回测/模拟",
+      "env_text": "回测 模拟"
+    },
+    {
+      "function_name": "get_security_info",
+      "module": "Stock",
+      "signature": "get_security_info(code, date=None)",
+      "params": [
+        {"name": "code", "type": "str", "default": "-", "description": "证券代码"},
+        {"name": "date", "type": "str", "default": "None", "description": "日期"}
+      ],
+      "returns": "SecurityInfo 对象 display_name/start_date/end_date",
+      "examples": ["get_security_info('000001.XSHE').display_name"],
+      "notes": "证券基本信息",
+      "env_text": "研究 回测"
+    },
+    {
+      "function_name": "get_trade_days",
+      "module": "Stock",
+      "signature": "get_trade_days(start_date=None, end_date=None, count=None)",
+      "params": [
+        {"name": "start_date", "type": "str", "default": "None", "description": "开始日期"},
+        {"name": "end_date", "type": "str", "default": "None", "description": "结束日期"},
+        {"name": "count", "type": "int", "default": "None", "description": "交易日数量"}
+      ],
+      "returns": "numpy.ndarray 交易日",
+      "examples": ["get_trade_days(end_date='2024-01-31', count=5)"],
+      "notes": "获取交易日历",
+      "env_text": "研究 回测"
+    },
+    {
+      "function_name": "get_industry_stocks",
+      "module": "plateData",
+      "signature": "get_industry_stocks(industry_code, date=None)",
+      "params": [
+        {"name": "industry_code", "type": "str", "default": "-", "description": "行业代码如 HY001"},
+        {"name": "date", "type": "str", "default": "None", "description": "日期"}
+      ],
+      "returns": "股票代码列表",
+      "examples": ["get_industry_stocks('HY001')"],
+      "notes": "行业成分股",
+      "env_text": "研究 回测"
+    },
+    {
+      "function_name": "normalize_code",
+      "module": "Stock",
+      "signature": "normalize_code(code)",
+      "params": [
+        {"name": "code", "type": "str", "default": "-", "description": "原始代码"}
+      ],
+      "returns": "标准化代码 带交易所后缀",
+      "examples": ["normalize_code('000001')"],
+      "notes": "代码规范化",
+      "env_text": "研究 回测"
+    },
+    {
+      "function_name": "run_daily",
+      "module": "Scheduler",
+      "signature": "run_daily(func, time='9:30', reference_security='000300.XSHG')",
+      "params": [
+        {"name": "func", "type": "callable", "default": "-", "description": "定时函数"},
+        {"name": "time", "type": "str", "default": "9:30", "description": "运行时间"},
+        {"name": "reference_security", "type": "str", "default": "000300.XSHG", "description": "参考标的决定交易日"}
+      ],
+      "returns": "None",
+      "examples": ["run_daily(rebalance, time='14:50')"],
+      "notes": "每日定时任务 ♠ 回测",
+      "env_text": "回测"
+    },
+    {
+      "function_name": "initialize",
+      "module": "Strategy",
+      "signature": "initialize(context)",
+      "params": [
+        {"name": "context", "type": "Context", "default": "-", "description": "策略上下文"}
+      ],
+      "returns": "None",
+      "examples": ["def initialize(context):\n    g.stocks = []"],
+      "notes": "策略初始化入口,必须定义",
+      "env_text": "回测 模拟"
+    },
+    {
+      "function_name": "handle_data",
+      "module": "Strategy",
+      "signature": "handle_data(context, data)",
+      "params": [
+        {"name": "context", "type": "Context", "default": "-", "description": "策略上下文"},
+        {"name": "data", "type": "BarDict", "default": "-", "description": "当前 bar 数据"}
+      ],
+      "returns": "None",
+      "examples": ["def handle_data(context, data):\n    pass"],
+      "notes": "按 bar 驱动的策略主函数",
+      "env_text": "回测 模拟"
+    },
+    {
+      "function_name": "get_bars",
+      "module": "Stock",
+      "signature": "get_bars(security, count, unit='1d', fields=['date','open','close'], include_now=False)",
+      "params": [
+        {"name": "security", "type": "str", "default": "-", "description": "标的"},
+        {"name": "count", "type": "int", "default": "-", "description": "bar 数量"},
+        {"name": "fields", "type": "list", "default": "-", "description": "字段"}
+      ],
+      "returns": "numpy structured array 或 DataFrame",
+      "examples": ["get_bars('000001.XSHE', 10, unit='1d', fields=['close'])"],
+      "notes": "获取 bar 数据 ♠ 回测",
+      "env_text": "回测"
+    },
+    {
+      "function_name": "get_extras",
+      "module": "Stock",
+      "signature": "get_extras(info, security_list, start_date='2015-01-01', end_date='2015-12-31', df=True, count=None)",
+      "params": [
+        {"name": "info", "type": "str", "default": "-", "description": "is_st/paused 等"},
+        {"name": "security_list", "type": "list", "default": "-", "description": "标的列表"}
+      ],
+      "returns": "DataFrame 额外信息",
+      "examples": ["get_extras('is_st', ['000001.XSHE'], start_date='2024-01-01', end_date='2024-01-31')"],
+      "notes": "获取 is_st 等附加信息",
+      "env_text": "研究 回测"
+    },
+    {
+      "function_name": "log",
+      "module": "Strategy",
+      "signature": "log.info(content)",
+      "params": [
+        {"name": "content", "type": "str", "default": "-", "description": "日志内容"}
+      ],
+      "returns": "None",
+      "examples": ["log.info('rebalance done')"],
+      "notes": "策略日志输出",
+      "env_text": "回测 模拟"
+    }
+  ]
+}

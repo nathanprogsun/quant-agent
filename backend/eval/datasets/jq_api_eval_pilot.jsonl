@@ -1,0 +1,20 @@
+{"id": "q001", "query": "get_price 怎么用", "difficulty": "easy", "category": "basic_usage", "expected_function": "get_price", "ground_truth": "get_price 获取行情,参数含 security/frequency/fields", "source": "human_written"}
+{"id": "q002", "query": "order_target 的参数是什么", "difficulty": "easy", "category": "param_query", "expected_function": "order_target", "ground_truth": "security 和 amount 目标持仓股数", "source": "human_written"}
+{"id": "q003", "query": "按市值下单用什么函数", "difficulty": "medium", "category": "basic_usage", "expected_function": "order_value", "ground_truth": "order_value(security, value)", "source": "human_written"}
+{"id": "q004", "query": "如何获取沪深300成分股", "difficulty": "medium", "category": "basic_usage", "expected_function": "get_index_stocks", "ground_truth": "get_index_stocks('000300.XSHG')", "source": "human_written"}
+{"id": "q005", "query": "查询 PE 等财务数据", "difficulty": "medium", "category": "basic_usage", "expected_function": "get_fundamentals", "ground_truth": "get_fundamentals 配合 query 对象", "source": "human_written"}
+{"id": "q006", "query": "history 和 attribute_history 区别", "difficulty": "hard", "category": "basic_usage", "expected_function": "history", "ground_truth": "history 批量多标的,attribute_history 单标的", "source": "human_written"}
+{"id": "q007", "query": "设置佣金手续费", "difficulty": "easy", "category": "basic_usage", "expected_function": "set_order_cost", "ground_truth": "set_order_cost 设置佣金和印花税", "source": "human_written"}
+{"id": "q008", "query": "怎么判断股票是否停牌", "difficulty": "medium", "category": "basic_usage", "expected_function": "get_current_data", "ground_truth": "get_current_data()[code].paused", "source": "human_written"}
+{"id": "q009", "query": "获取股票中文名称", "difficulty": "easy", "category": "basic_usage", "expected_function": "get_security_info", "ground_truth": "get_security_info(code).display_name", "source": "human_written"}
+{"id": "q010", "query": "获取最近5个交易日", "difficulty": "easy", "category": "basic_usage", "expected_function": "get_trade_days", "ground_truth": "get_trade_days(count=5)", "source": "human_written"}
+{"id": "q011", "query": "行业 HY001 有哪些股票", "difficulty": "medium", "category": "basic_usage", "expected_function": "get_industry_stocks", "ground_truth": "get_industry_stocks('HY001')", "source": "human_written"}
+{"id": "q012", "query": "000001 代码规范化", "difficulty": "easy", "category": "basic_usage", "expected_function": "normalize_code", "ground_truth": "normalize_code 补全 .XSHE/.XSHG 后缀", "source": "human_written"}
+{"id": "q013", "query": "每天下午2点50运行函数", "difficulty": "medium", "category": "basic_usage", "expected_function": "run_daily", "ground_truth": "run_daily(func, time='14:50')", "source": "human_written"}
+{"id": "q014", "query": "策略 initialize 函数", "difficulty": "easy", "category": "basic_usage", "expected_function": "initialize", "ground_truth": "initialize(context) 策略初始化入口", "source": "human_written"}
+{"id": "q015", "query": "handle_data 什么时候调用", "difficulty": "medium", "category": "basic_usage", "expected_function": "handle_data", "ground_truth": "每个 bar 调用 handle_data(context, data)", "source": "human_written"}
+{"id": "q016", "query": "get_bars 取10根日线", "difficulty": "easy", "category": "param_query", "expected_function": "get_bars", "ground_truth": "get_bars(security, 10, unit='1d')", "source": "human_written"}
+{"id": "q017", "query": "查询 is_st 状态", "difficulty": "medium", "category": "basic_usage", "expected_function": "get_extras", "ground_truth": "get_extras('is_st', security_list, ...)", "source": "human_written"}
+{"id": "q018", "query": "order 函数买入100股", "difficulty": "easy", "category": "param_query", "expected_function": "order", "ground_truth": "order(security, 100)", "source": "human_written"}
+{"id": "q019", "query": "策略里打日志", "difficulty": "easy", "category": "basic_usage", "expected_function": "log", "ground_truth": "log.info('message')", "source": "human_written"}
+{"id": "q020", "query": "attribute_history 取30日收盘价", "difficulty": "medium", "category": "param_query", "expected_function": "attribute_history", "ground_truth": "attribute_history(security, 30, fields=['close'])", "source": "human_written"}
