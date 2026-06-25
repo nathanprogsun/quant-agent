@@ -1,0 +1,21 @@
+{
+  "dataset": "/Users/jung/pro/quant-agent/backend/eval/datasets/jq_api_eval_full.jsonl",
+  "llm_model": "MiniMax-M3",
+  "count": 20,
+  "recall@5": 0.95,
+  "mrr": 0.8083333333333333,
+  "failures": [
+    {
+      "id": "q009",
+      "query": "获取股票中文名称",
+      "expected": "get_security_info",
+      "got": [
+        "get_industry_stocks",
+        "get_index_stocks",
+        "get_index_stocks",
+        "get_concept_stocks",
+        "get_industry_stocks"
+      ]
+    }
+  ]
+}
