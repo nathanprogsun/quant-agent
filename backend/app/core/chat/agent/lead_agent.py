@@ -83,11 +83,11 @@ def make_lead_agent(config: RunnableConfig) -> Any:
         extra_body={"reasoning_split": True},
     )
 
-    # Tools — lint/validate + jq_kb (PR1: search_jq_api)
+    # Tools — lint/validate + jq_kb (PR2: search_jq_api + search_jq_dict)
     tools: list[Any] = [
         lint_code_tool,
         make_validate_parameters_tool(),
-        *get_tools(pr_phase=1),
+        *get_tools(pr_phase=2),
     ]
     if tools:
         model = model.bind_tools(tools)

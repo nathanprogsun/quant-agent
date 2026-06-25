@@ -60,6 +60,7 @@ from llama_index.retrievers.bm25 import BM25Retriever
 from app.core.jq_kb.embeddings import get_reranker
 from app.core.jq_kb.llm import get_llm
 from app.core.jq_kb.schemas import JqApiEnvConstraint
+from app.core.jq_kb.dict_storage import JqDictStore
 from app.core.jq_kb.storage import JqApiStore
 
 logger = logging.getLogger(__name__)
@@ -377,3 +378,138 @@ def _filter_nodes_by_env(nodes: list[Any], env: JqApiEnvConstraint) -> list[Any]
 
 def create_default_jq_api_retriever() -> JqApiRetriever:
     return JqApiRetriever(JqApiStore())
+
+
+# ---------------------------------------------------------------------------
+# jq_dict retriever (PR2) — BM25-heavy fusion, no env filter
+# ---------------------------------------------------------------------------
+
+DICT_VECTOR_WEIGHT = 0.3
+DICT_BM25_WEIGHT = 0.7
+
+
+class JqDictRetriever:
+    """Hybrid retrieval for jq_dict (industry/concept/index/field/suffix codes)."""
+
+    def __init__(
+        self,
+        store: Any | None = None,
+        *,
+        llm: LLM | None = None,
+        num_queries: int = 4,
+    ) -> None:
+        self.store = store or JqDictStore()
+        self._llm = llm
+        self.num_queries = num_queries
+
+    async def retrieve(
+        self,
+        query: str,
+        *,
+        code: str = "",
+        top_k: int = 5,
+    ) -> list[RetrievedChunk]:
+        if code:
+            hit = await self.retrieve_by_code(code)
+            if hit:
+                logger.info(
+                    "jq_dict retrieve: code shortcut hit=%s query=%r",
+                    code,
+                    query[:80],
+                )
+                return [hit]
+            logger.warning(
+                "jq_dict retrieve: code=%r not found, falling back to hybrid query=%r",
+                code,
+                query[:80],
+            )
+
+        return await self._retrieve_hybrid(query, top_k=top_k)
+
+    async def retrieve_by_code(self, code: str) -> RetrievedChunk | None:
+        hit = self.store.get_by_code(code)
+        if hit is None:
+            return None
+        return RetrievedChunk(
+            chunk_id=hit["id"],
+            score=1.0,
+            document=hit["document"],
+            metadata=hit["metadata"],
+        )
+
+    async def _retrieve_hybrid(self, query: str, *, top_k: int) -> list[RetrievedChunk]:
+        candidate_k = top_k * RERANK_CANDIDATE_MULTIPLIER
+        logger.info(
+            "jq_dict hybrid retrieve: query=%r top_k=%d candidate_k=%d num_queries=%d",
+            query[:80],
+            top_k,
+            candidate_k,
+            self.num_queries,
+        )
+        fusion = self._build_fusion_retriever(top_k=candidate_k)
+        bundle = QueryBundle(query_str=query)
+        nodes = await fusion.aretrieve(bundle)
+
+        reranker = self._build_reranker(top_k=top_k)
+        if reranker is not None and nodes:
+            try:
+                nodes = await reranker.apostprocess_nodes(nodes, query_bundle=bundle)
+            except Exception:
+                logger.warning(
+                    "jq_dict rerank failed, using fusion order (top_k=%d)",
+                    top_k,
+                    exc_info=True,
+                )
+                nodes = nodes[:top_k]
+        else:
+            nodes = nodes[:top_k]
+
+        chunks = [_node_to_chunk(n) for n in nodes]
+        if chunks:
+            logger.info("jq_dict hybrid retrieve done: hits=%s", _summarize_dict_hits(chunks))
+        else:
+            logger.warning("jq_dict hybrid retrieve: no hits query=%r", query[:80])
+        return chunks
+
+    def _build_fusion_retriever(self, *, top_k: int) -> QueryFusionRetriever:
+        vector_retriever = VectorIndexRetriever(
+            index=self.store.index,
+            similarity_top_k=top_k,
+        )
+        bm25_retriever = self.store.load_bm25()
+
+        retrievers: list[BaseRetriever] = [vector_retriever]
+        weights: list[float] | None = None
+        if bm25_retriever is not None:
+            retrievers.append(bm25_retriever)
+            weights = [DICT_VECTOR_WEIGHT, DICT_BM25_WEIGHT]
+        else:
+            logger.debug("jq_dict fusion: BM25 unavailable, vector-only")
+
+        return QueryFusionRetriever(
+            retrievers=retrievers,
+            llm=self._get_llm(),
+            mode="reciprocal_rerank",
+            retriever_weights=weights,
+            num_queries=self.num_queries,
+            use_async=True,
+            similarity_top_k=top_k,
+        )
+
+    def _build_reranker(self, *, top_k: int) -> SentenceTransformerRerank | None:
+        return get_reranker(top_n=top_k)
+
+    def _get_llm(self) -> LLM:
+        if self._llm is None:
+            self._llm = get_llm(temperature=0.0)
+        return self._llm
+
+
+def _summarize_dict_hits(chunks: list[RetrievedChunk]) -> str:
+    return ", ".join(
+        f"{c.metadata.get('code', c.chunk_id)}:{c.score:.3f}" for c in chunks
+    )
+
+
+def create_default_jq_dict_retriever() -> JqDictRetriever:
+    return JqDictRetriever()

@@ -42,6 +42,9 @@ venv/
 data/models/
 data/jq_api/chroma_db/
 data/jq_api/bm25.pkl
+data/jq_dict/chroma_db/
+data/jq_dict/bm25.pkl
+data/jq_dict/raw/browser_export.json
 
 # Committed DC42 knowledge base (exceptions — see repo root .gitignore)
 !data/

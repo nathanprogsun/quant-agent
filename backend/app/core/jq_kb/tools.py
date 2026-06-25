@@ -7,10 +7,13 @@ from typing import Any
 
 from langchain_core.tools import tool
 
-from app.core.jq_kb.retrievers import create_default_jq_api_retriever
+from app.core.jq_kb.retrievers import (
+    create_default_jq_api_retriever,
+    create_default_jq_dict_retriever,
+)
 
 
-def _format_hits(hits: list[Any]) -> str:
+def _format_api_hits(hits: list[Any]) -> str:
     if not hits:
         return "未找到相关聚宽 API 文档。请换关键词或提供 function_name。"
     parts: list[str] = []
@@ -20,6 +23,21 @@ def _format_hits(hits: list[Any]) -> str:
         url = meta.get("source_url", "")
         body = hit.document[:2500]
         parts.append(f"{header}\n来源: {url}\n\n{body}")
+    return "\n\n---\n\n".join(parts)
+
+
+def _format_dict_hits(hits: list[Any]) -> str:
+    if not hits:
+        return "未找到相关聚宽数据字典条目。请换关键词或提供 code。"
+    parts: list[str] = []
+    for i, hit in enumerate(hits, 1):
+        meta = hit.metadata
+        code = meta.get("code", hit.chunk_id)
+        name = meta.get("name", "")
+        dict_type = meta.get("dict_type", "")
+        header = f"## {i}. {code} {name} ({dict_type}, score={hit.score:.3f})"
+        body = hit.document[:2500]
+        parts.append(f"{header}\n\n{body}")
     return "\n\n---\n\n".join(parts)
 
 
@@ -37,7 +55,7 @@ async def search_jq_api(
     - 涉及 get_*/set_*/order_*/create_*/run_*/history 等函数名
 
     不适用:
-    - 行业/概念/指数(HY001) — PR2 search_jq_dict
+    - 行业/概念/指数(HY001) — 使用 search_jq_dict
     - 策略范例 — PR3 search_jq_strategy
 
     Args:
@@ -50,7 +68,38 @@ async def search_jq_api(
         function_name=function_name.strip(),
         top_k=5,
     )
-    return _format_hits(hits)
+    return _format_api_hits(hits)
+
+
+@tool
+async def search_jq_dict(
+    query: str,
+    code: str = "",
+) -> str:
+    """在聚宽数据字典中检索行业、概念、指数、行情字段、代码后缀等实体含义。
+
+    适用场景:
+    - 行业代码:"HY001 是什么行业"、"农林牧渔对应代码"
+    - 概念板块:"人工智能概念代码"、"GN001"
+    - 指数:"沪深300代码"、"000300"
+    - 行情字段:"close 字段含义"、"pe_ratio 单位"
+    - 代码后缀:".XSHG 是什么"、"上交所后缀"
+
+    不适用:
+    - API 函数用法 — 使用 search_jq_api
+    - 策略范例 — PR3 search_jq_strategy
+
+    Args:
+        query: 自然语言检索问题
+        code: 可选,精确代码(如 HY001、close、.XSHG)
+    """
+    retriever = _get_jq_dict_retriever()
+    hits = await retriever.retrieve(
+        query,
+        code=code.strip(),
+        top_k=5,
+    )
+    return _format_dict_hits(hits)
 
 
 @lru_cache(maxsize=1)
@@ -58,9 +107,16 @@ def _get_jq_api_retriever() -> Any:
     return create_default_jq_api_retriever()
 
 
+@lru_cache(maxsize=1)
+def _get_jq_dict_retriever() -> Any:
+    return create_default_jq_dict_retriever()
+
+
 def get_tools(*, pr_phase: int = 1) -> list[Any]:
     """Return jq_kb tools enabled for the given PR phase."""
     tools: list[Any] = []
     if pr_phase >= 1:
         tools.append(search_jq_api)
+    if pr_phase >= 2:
+        tools.append(search_jq_dict)
     return tools

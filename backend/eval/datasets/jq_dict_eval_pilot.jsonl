@@ -1,0 +1,20 @@
+{"id": "d001", "query": "申万农林牧渔一级行业代码", "expected_code": "801010", "category": "industry", "difficulty": "medium"}
+{"id": "d002", "query": "HY001 对应什么聚宽行业", "expected_code": "HY001", "category": "industry", "difficulty": "easy"}
+{"id": "d003", "query": "申万医药生物行业代码", "expected_code": "801150", "category": "industry", "difficulty": "medium"}
+{"id": "d004", "query": "人工智能概念板块代码", "expected_code": "GN201", "category": "concept", "difficulty": "medium"}
+{"id": "d005", "query": "GN039 是什么概念", "expected_code": "GN039", "category": "concept", "difficulty": "easy"}
+{"id": "d006", "query": "锂电池概念代码", "expected_code": "GN039", "category": "concept", "difficulty": "easy"}
+{"id": "d007", "query": "半导体概念代码", "expected_code": "GN878", "category": "concept", "difficulty": "medium"}
+{"id": "d008", "query": "沪深300指数代码", "expected_code": "000300.XSHG", "category": "index", "difficulty": "easy"}
+{"id": "d009", "query": "中证500指数代码", "expected_code": "000905.XSHG", "category": "index", "difficulty": "easy"}
+{"id": "d010", "query": "创业板指代码", "expected_code": "399006.XSHE", "category": "index", "difficulty": "easy"}
+{"id": "d011", "query": "close 收盘价字段", "expected_code": "close", "category": "field", "difficulty": "easy"}
+{"id": "d012", "query": "开盘价 open 字段", "expected_code": "open", "category": "field", "difficulty": "easy"}
+{"id": "d013", "query": "pe_ratio 市盈率字段", "expected_code": "pe_ratio", "category": "field", "difficulty": "easy"}
+{"id": "d014", "query": "成交量 volume 字段", "expected_code": "volume", "category": "field", "difficulty": "easy"}
+{"id": "d015", "query": "MACD 技术指标", "expected_code": "MACD", "category": "field", "difficulty": "medium"}
+{"id": "d016", "query": "alpha_001 Alpha101因子", "expected_code": "alpha_001", "category": "field", "difficulty": "medium"}
+{"id": "d017", "query": "上证指数代码", "expected_code": "000001.XSHG", "category": "index", "difficulty": "easy"}
+{"id": "d018", "query": "上海证券交易所代码后缀", "expected_code": ".XSHG", "category": "suffix", "difficulty": "easy"}
+{"id": "d019", "query": ".XSHE 是什么后缀", "expected_code": ".XSHE", "category": "suffix", "difficulty": "easy"}
+{"id": "d020", "query": "公募基金代码后缀", "expected_code": ".OF", "category": "suffix", "difficulty": "easy"}

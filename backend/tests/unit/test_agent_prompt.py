@@ -13,6 +13,7 @@ def test_system_prompt_lists_builtin_and_jq_tools() -> None:
     assert "lint_code_tool" in SYSTEM_PROMPT
     assert "validate_strategy_parameters" in SYSTEM_PROMPT
     assert "search_jq_api" in SYSTEM_PROMPT
+    assert "search_jq_dict" in SYSTEM_PROMPT
     assert "禁止编造" in SYSTEM_PROMPT or "禁止" in SYSTEM_PROMPT
 
 

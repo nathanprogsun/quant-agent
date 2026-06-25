@@ -14,6 +14,14 @@ JQ_API_MANIFEST_PATH = JQ_API_DATA_DIR / "manifest.json"
 
 JQ_API_COLLECTION_NAME = "jq_api_chunks"
 
+JQ_DICT_DATA_DIR = BACKEND_ROOT / "data" / "jq_dict"
+JQ_DICT_RAW_DIR = JQ_DICT_DATA_DIR / "raw"
+JQ_DICT_CHROMA_PATH = JQ_DICT_DATA_DIR / "chroma_db"
+JQ_DICT_BM25_PATH = JQ_DICT_DATA_DIR / "bm25.pkl"
+JQ_DICT_MANIFEST_PATH = JQ_DICT_DATA_DIR / "manifest.json"
+
+JQ_DICT_COLLECTION_NAME = "jq_dict_chunks"
+
 JQ_KB_MODELS_DIR = BACKEND_ROOT / "data" / "models"
 
 DEFAULT_EMBEDDING_MODEL_ID = "BAAI/bge-large-zh-v1.5"
