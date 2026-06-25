@@ -305,6 +305,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, Any]:
         # Configure thread pool (keep reference to prevent garbage collection)
         init_default_anyio_limiter()
 
+        # PR1 (jq_kb): pre-warm embedding + reranker so the first chat request
+        # doesn't stall on the ~5-10s model load. Runs in a thread to avoid
+        # blocking the event loop.
+        try:
+            from app.core.jq_kb.embeddings import warm_up_models
+            await run_in_pool(warm_up_models)
+            logger.info("jq_kb models warmed up")  # type: ignore[no-untyped-call]
+        except FileNotFoundError as exc:
+            # Models not downloaded — log and continue. First request will
+            # surface the install hint in the tool error.
+            logger.warning("jq_kb warm-up skipped: %s", exc)  # type: ignore[no-untyped-call]
+
         # Optional instrumentation (commented out by default)
         # task_gauge_event_loop = asyncio.create_task(
         #     _gauge_event_loop(), name="_task_gauge_event_loop"
