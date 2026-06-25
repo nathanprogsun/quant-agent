@@ -20,7 +20,7 @@ import json
 import logging
 from functools import lru_cache
 
-from app.core.jq_kb.paths import JQ_API_MANIFEST_PATH
+from app.core.jq_kb.paths import JQ_API_MANIFEST_PATH, JQ_DICT_MANIFEST_PATH
 
 logger = logging.getLogger(__name__)
 
@@ -69,3 +69,22 @@ def suggest_function_names(query: str, limit: int = 5) -> list[str]:
 def reset_known_names_cache() -> None:
     """Invalidate the manifest cache (call after re-ingest)."""
     known_function_names.cache_clear()
+    known_codes.cache_clear()
+
+
+@lru_cache(maxsize=1)
+def known_codes() -> frozenset[str]:
+    """Read indexed jq_dict codes from manifest."""
+    if not JQ_DICT_MANIFEST_PATH.is_file():
+        return frozenset()
+    try:
+        data = json.loads(JQ_DICT_MANIFEST_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        logger.warning("Could not parse manifest %s: %s", JQ_DICT_MANIFEST_PATH, exc)
+        return frozenset()
+    codes = data.get("codes") or []
+    return frozenset(c for c in codes if isinstance(c, str))
+
+
+def is_known_code(name: str) -> bool:
+    return name in known_codes()

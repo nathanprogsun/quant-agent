@@ -1,0 +1,129 @@
+{
+  "dataset": "/Users/jung/pro/quant-agent/backend/eval/datasets/jq_dict_eval_full.jsonl",
+  "llm_model": "MiniMax-M3",
+  "count": 20,
+  "recall@5": 0.5,
+  "mrr": 0.35833333333333334,
+  "failures": [
+    {
+      "id": "d001",
+      "query": "农林牧渔是什么行业代码",
+      "expected": "HY001",
+      "got": [
+        "000746",
+        "000751",
+        "000752",
+        "000749",
+        "000756"
+      ]
+    },
+    {
+      "id": "d003",
+      "query": "医药生物行业代码",
+      "expected": "HY011",
+      "got": [
+        "801150",
+        "510660",
+        "851531",
+        "851541",
+        "850333"
+      ]
+    },
+    {
+      "id": "d004",
+      "query": "人工智能概念板块代码",
+      "expected": "GN001",
+      "got": [
+        "000747",
+        "000752",
+        "000751",
+        "000756",
+        "000746"
+      ]
+    },
+    {
+      "id": "d005",
+      "query": "GN007 是什么概念",
+      "expected": "GN007",
+      "got": [
+        ".CCFX",
+        "000748",
+        "000749",
+        "000746",
+        "000751"
+      ]
+    },
+    {
+      "id": "d006",
+      "query": "锂电池概念",
+      "expected": "GN006",
+      "got": [
+        "GN039",
+        "GN852",
+        "GN869",
+        "GN894",
+        "GN844"
+      ]
+    },
+    {
+      "id": "d007",
+      "query": "半导体概念代码",
+      "expected": "GN018",
+      "got": [
+        "GN878",
+        "GN252",
+        "GN786",
+        "GN826",
+        "GN251"
+      ]
+    },
+    {
+      "id": "d012",
+      "query": "开盘价字段",
+      "expected": "open",
+      "got": [
+        "book_price",
+        "deal_number",
+        "total_market_cap",
+        "spot_sell",
+        ".CCFX"
+      ]
+    },
+    {
+      "id": "d014",
+      "query": "换手率字段",
+      "expected": "turnover_rate",
+      "got": [
+        "turnover_volatility",
+        "xshg_avg_turnover",
+        "turnover_ratio",
+        "6日变动速率（Price Rate of Change）",
+        "turnover"
+      ]
+    },
+    {
+      "id": "d016",
+      "query": "是否ST字段",
+      "expected": "is_st",
+      "got": [
+        "301002",
+        "301003",
+        ".CCFX",
+        "000748",
+        "000746"
+      ]
+    },
+    {
+      "id": "d017",
+      "query": "前收盘价",
+      "expected": "pre_close",
+      "got": [
+        "000749",
+        ".CCFX",
+        "000751",
+        "000744",
+        "000756"
+      ]
+    }
+  ]
+}

@@ -73,6 +73,44 @@ class JqApiChunk(BaseModel):
         }
 
 
+class DictType(StrEnum):
+    INDUSTRY = "industry"
+    CONCEPT = "concept"
+    INDEX = "index"
+    FIELD = "field"
+    SUFFIX = "suffix"
+    FUND = "fund"
+
+
+class JqDictChunk(BaseModel):
+    id: str
+    library: Literal[Library.JQ_DICT] = Library.JQ_DICT
+    source: Literal[Source.JQ_OFFICIAL_DOC] = Source.JQ_OFFICIAL_DOC
+    code: str
+    name: str
+    dict_type: DictType
+    unit: str | None = None
+    sample: str | None = None
+    source_description: str = ""
+    source_url: str = ""
+    parent_code: str | None = None
+    content: str
+    contextual_content: str
+    ingested_at: date = Field(default_factory=date.today)
+
+    def to_metadata(self) -> dict[str, Any]:
+        return {
+            "library": self.library.value,
+            "code": self.code,
+            "name": self.name,
+            "dict_type": self.dict_type.value,
+            "unit": self.unit or "",
+            "sample": self.sample or "",
+            "source_description": self.source_description,
+            "source_url": self.source_url,
+        }
+
+
 class LibraryManifest(BaseModel):
     library: Library
     version: str
