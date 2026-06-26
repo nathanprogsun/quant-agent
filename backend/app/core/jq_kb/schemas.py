@@ -120,3 +120,65 @@ class LibraryManifest(BaseModel):
     rerank_model: str = ""
     ingested_at: date = Field(default_factory=date.today)
     notes: str = ""
+
+
+class StrategyLayer(StrEnum):
+    SUMMARY = "summary"
+    ENTITY = "entity"
+    CODE = "code"
+
+
+class EntityType(StrEnum):
+    FACTOR = "factor"
+    API = "api"
+    PARAMETER = "parameter"
+    CLASS = "class"
+
+
+class StrategySummary(BaseModel):
+    """8-dim LLM summary for jq_strategy (also used as heuristic fallback)."""
+
+    post_id: int
+    strategy_type: str = "其他"
+    one_line: str = ""
+    factors: list[str] = Field(default_factory=list)
+    key_params: dict[str, Any] = Field(default_factory=dict)
+    code_dependencies: list[str] = Field(default_factory=list)
+    risk_handling: list[str] = Field(default_factory=list)
+    backtest_claimed: dict[str, str] = Field(default_factory=dict)
+    applicable_market: str = "A 股"
+    failure_modes: list[str] = Field(default_factory=list)
+
+
+class JqStrategyChunk(BaseModel):
+    id: str
+    library: Literal[Library.JQ_STRATEGY] = Library.JQ_STRATEGY
+    source: Literal[Source.JQ_COMMUNITY, Source.LOCAL_2020_2024] = Source.LOCAL_2020_2024
+    post_id: int
+    year: int = Field(..., ge=2020, le=2030)
+    title: str
+    author: str = "unknown"
+    source_url: str = ""
+    layer: StrategyLayer
+    entity_type: str = ""
+    entity_name: str = ""
+    function_name: str = ""
+    strategy_type: str = ""
+    content: str
+    contextual_content: str
+    ingested_at: date = Field(default_factory=date.today)
+
+    def to_metadata(self) -> dict[str, Any]:
+        return {
+            "library": self.library.value,
+            "post_id": self.post_id,
+            "year": self.year,
+            "title": self.title,
+            "author": self.author,
+            "layer": self.layer.value,
+            "entity_type": self.entity_type,
+            "entity_name": self.entity_name,
+            "function_name": self.function_name,
+            "strategy_type": self.strategy_type,
+            "source_url": self.source_url,
+        }

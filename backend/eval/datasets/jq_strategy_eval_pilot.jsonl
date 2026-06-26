@@ -1,0 +1,8 @@
+{"id": "s001", "query": "ETF轮动策略入门", "expected_post_id": 38120, "category": "etf", "difficulty": "easy"}
+{"id": "s002", "query": "ETF动量轮动 MA乖离择时", "expected_post_id": 35235, "category": "etf", "difficulty": "medium"}
+{"id": "s003", "query": "国债ETF增强控制回撤", "expected_post_id": 36060, "category": "etf", "difficulty": "medium"}
+{"id": "s004", "query": "场内基金定投价值平均", "expected_post_id": 39272, "category": "etf", "difficulty": "medium"}
+{"id": "s005", "query": "龙头首阴战法", "expected_post_id": 36382, "category": "stock", "difficulty": "easy"}
+{"id": "s006", "query": "BOLL择时策略", "expected_post_id": 39510, "category": "timing", "difficulty": "easy"}
+{"id": "s007", "query": "集合竞价量比策略", "expected_post_id": 38663, "category": "auction", "difficulty": "medium"}
+{"id": "s008", "query": "initialize 函数 set_benchmark 沪深300", "expected_post_id": 36092, "category": "code", "difficulty": "hard"}

@@ -62,6 +62,7 @@ from app.core.jq_kb.llm import get_llm
 from app.core.jq_kb.schemas import JqApiEnvConstraint
 from app.core.jq_kb.dict_storage import JqDictStore
 from app.core.jq_kb.storage import JqApiStore
+from app.core.jq_kb.strategy_storage import JqStrategyStore
 
 logger = logging.getLogger(__name__)
 
@@ -513,3 +514,156 @@ def _summarize_dict_hits(chunks: list[RetrievedChunk]) -> str:
 
 def create_default_jq_dict_retriever() -> JqDictRetriever:
     return JqDictRetriever()
+
+
+# ---------------------------------------------------------------------------
+# jq_strategy retriever (PR3) — summary-heavy hybrid retrieval
+# ---------------------------------------------------------------------------
+
+STRATEGY_VECTOR_WEIGHT = 0.5
+STRATEGY_BM25_WEIGHT = 0.5
+
+
+class JqStrategyRetriever:
+    """Hybrid retrieval for jq_strategy (2020-2024 community strategies)."""
+
+    def __init__(
+        self,
+        store: Any | None = None,
+        *,
+        llm: LLM | None = None,
+        num_queries: int = 2,
+    ) -> None:
+        self.store = store or JqStrategyStore()
+        self._llm = llm
+        self.num_queries = num_queries
+
+    async def retrieve(
+        self,
+        query: str,
+        *,
+        post_id: int = 0,
+        year: int = 0,
+        strategy_type: str = "",
+        top_k: int = 5,
+    ) -> list[RetrievedChunk]:
+        if post_id:
+            hit = await self.retrieve_by_post_id(post_id)
+            if hit:
+                logger.info("jq_strategy retrieve: post_id shortcut hit=%s", post_id)
+                return [hit]
+
+        return await self._retrieve_hybrid(
+            query,
+            top_k=top_k,
+            year=year,
+            strategy_type=strategy_type.strip(),
+        )
+
+    async def retrieve_by_post_id(self, post_id: int) -> RetrievedChunk | None:
+        hit = self.store.get_by_post_id(post_id, layer="summary")
+        if hit is None:
+            hit = self.store.get_by_post_id(post_id)
+        if hit is None:
+            return None
+        return RetrievedChunk(
+            chunk_id=hit["id"],
+            score=1.0,
+            document=hit["document"],
+            metadata=hit["metadata"],
+        )
+
+    async def _retrieve_hybrid(
+        self,
+        query: str,
+        *,
+        top_k: int,
+        year: int,
+        strategy_type: str,
+    ) -> list[RetrievedChunk]:
+        candidate_k = top_k * RERANK_CANDIDATE_MULTIPLIER
+        fusion = self._build_fusion_retriever(
+            top_k=candidate_k,
+            year=year,
+            strategy_type=strategy_type,
+        )
+        bundle = QueryBundle(query_str=query)
+        nodes = await fusion.aretrieve(bundle)
+
+        reranker = self._build_strategy_reranker(top_k=top_k)
+        if reranker is not None and nodes:
+            try:
+                nodes = await reranker.apostprocess_nodes(nodes, query_bundle=bundle)
+            except Exception:
+                logger.warning("jq_strategy rerank failed, using fusion order", exc_info=True)
+                nodes = nodes[:top_k]
+        else:
+            nodes = nodes[:top_k]
+
+        chunks = [_node_to_chunk(n) for n in nodes]
+        if chunks:
+            logger.info("jq_strategy hybrid done: %s", _summarize_strategy_hits(chunks))
+        return chunks
+
+    def _build_metadata_filters(
+        self,
+        *,
+        year: int,
+        strategy_type: str,
+    ) -> MetadataFilters | None:
+        filters: list[MetadataFilter] = []
+        if year:
+            filters.append(MetadataFilter(key="year", value=year))
+        if strategy_type:
+            filters.append(MetadataFilter(key="strategy_type", value=strategy_type))
+        if not filters:
+            return None
+        return MetadataFilters(filters=filters, condition=FilterCondition.AND)
+
+    def _build_fusion_retriever(
+        self,
+        *,
+        top_k: int,
+        year: int,
+        strategy_type: str,
+    ) -> QueryFusionRetriever:
+        meta_filters = self._build_metadata_filters(year=year, strategy_type=strategy_type)
+        vector_retriever = VectorIndexRetriever(
+            index=self.store.index,
+            similarity_top_k=top_k,
+            filters=meta_filters,
+        )
+        bm25_retriever = self.store.load_bm25()
+        retrievers: list[BaseRetriever] = [vector_retriever]
+        weights: list[float] | None = None
+        if bm25_retriever is not None:
+            retrievers.append(bm25_retriever)
+            weights = [STRATEGY_VECTOR_WEIGHT, STRATEGY_BM25_WEIGHT]
+
+        return QueryFusionRetriever(
+            retrievers=retrievers,
+            llm=self._get_strategy_llm(),
+            mode="reciprocal_rerank",
+            retriever_weights=weights,
+            num_queries=self.num_queries,
+            use_async=True,
+            similarity_top_k=top_k,
+        )
+
+    def _build_strategy_reranker(self, *, top_k: int) -> SentenceTransformerRerank | None:
+        return get_reranker(top_n=top_k)
+
+    def _get_strategy_llm(self) -> LLM:
+        if self._llm is None:
+            self._llm = get_llm(temperature=0.0)
+        return self._llm
+
+
+def _summarize_strategy_hits(chunks: list[RetrievedChunk]) -> str:
+    return ", ".join(
+        f"{c.metadata.get('title', c.chunk_id)}:{c.score:.3f}" for c in chunks
+    )
+
+
+def create_default_jq_strategy_retriever() -> JqStrategyRetriever:
+    return JqStrategyRetriever()
