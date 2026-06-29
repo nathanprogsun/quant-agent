@@ -30,6 +30,26 @@ def _convert_to_json_serializable(data: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
+def decode_access_token(token: str) -> TokenClaims | None:
+    """Stateless JWT decode — usable from middleware without an AuthService instance.
+
+    Only validates signature/exp/iss/aud. The caller is responsible for any
+    downstream version checks (see `AuthService.assert_token_version_valid`).
+    """
+    settings = get_settings()
+    try:
+        payload = jwt.decode(
+            token,
+            settings.jwt_secret_key.get_secret_value(),
+            algorithms=[settings.jwt_algorithm],
+            audience=settings.jwt_audience,
+            issuer=settings.jwt_issuer,
+        )
+        return TokenClaims.model_validate(payload)
+    except (JWTError, ValueError, TypeError):
+        return None
+
+
 class AuthService:
     """Auth service — wraps UserService for auth-specific operations.
 
@@ -86,18 +106,7 @@ class AuthService:
         )
 
     def decode_token(self, token: str) -> TokenClaims | None:
-        settings = get_settings()
-        try:
-            payload = jwt.decode(
-                token,
-                settings.jwt_secret_key.get_secret_value(),
-                algorithms=[settings.jwt_algorithm],
-                audience=settings.jwt_audience,
-                issuer=settings.jwt_issuer,
-            )
-            return TokenClaims.model_validate(payload)
-        except (JWTError, ValueError, TypeError):
-            return None
+        return decode_access_token(token)
 
     async def change_password(self, user_id: UUID, old_password: str, new_password: str) -> None:
         """Change password; raise UnauthorizedError on bad old password."""
@@ -123,6 +132,11 @@ class AuthService:
         user = await self.user_service.get_user_model_by_id(user_id)
         assert user is not None  # we just changed its password
         return TokenClaims(sub=user.id, email=user.email), user.token_version
+
+    async def check_setup_access(self) -> bool:
+        """Return True when no users exist yet — system needs initial setup."""
+        count = await self.user_service.count_users()
+        return count == 0
 
     def assert_token_version_valid(
         self, user: UserDTO, token_ver: int | None

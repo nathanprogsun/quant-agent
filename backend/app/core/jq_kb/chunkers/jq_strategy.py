@@ -11,9 +11,14 @@ from typing import Any
 from app.core.jq_kb.ast_parser import extract_entities, extract_function_code
 from app.core.jq_kb.parser.strategy_txt import stable_hash
 from app.core.jq_kb.schemas import JqStrategyChunk, StrategyLayer, StrategySummary
-from app.core.jq_kb.utils import json_safe_value
+from app.core.jq_kb.utils import json_safe_value, split_text
 
 logger = logging.getLogger(__name__)
+
+# Max chars per code chunk — kept well below the embedder's effective context
+# so long functions split into multiple retrievable chunks with continuation
+# markers (added by split_text).
+_CODE_CHUNK_MAX_CHARS = 4000
 
 
 def _sanitize_token(text: str, max_len: int = 80) -> str:
@@ -185,24 +190,34 @@ def chunk_jq_strategy_post(post: dict[str, Any]) -> list[JqStrategyChunk]:
         func_code = extract_function_code(post.get("code") or "", func_name)
         if not func_code:
             continue
-        body = func_code[:4000]
-        chunks.append(
-            JqStrategyChunk(
-                id=f"strategy::{post_id}::code::{_sanitize_token(func_name)}::{_id_suffix(post_id, 'code', func_name)}",
-                post_id=post_id,
-                year=year,
-                title=title,
-                author=author,
-                source_url=source_url,
-                layer=StrategyLayer.CODE,
-                function_name=func_name,
-                strategy_type=summary.strategy_type,
-                content=body,
-                contextual_content=(
-                    f"{_build_header(StrategyLayer.CODE, post, f'函数: {func_name}')}\n\n{body}"
-                ),
+        # Split long functions into multiple chunks so each fits within the
+        # embedding model context. _CODE_CHUNK_MAX_CHARS aligns with the
+        # embedder's preferred chunk size; split_text adds continuation
+        # markers so retrievers can detect partial matches.
+        parts = split_text(func_code, _CODE_CHUNK_MAX_CHARS)
+        for part_idx, part in enumerate(parts):
+            chunk_id_suffix = (
+                f"{_id_suffix(post_id, 'code', func_name)}::{part_idx:03d}"
+                if len(parts) > 1
+                else _id_suffix(post_id, "code", func_name)
             )
-        )
+            chunks.append(
+                JqStrategyChunk(
+                    id=f"strategy::{post_id}::code::{_sanitize_token(func_name)}::{chunk_id_suffix}",
+                    post_id=post_id,
+                    year=year,
+                    title=title,
+                    author=author,
+                    source_url=source_url,
+                    layer=StrategyLayer.CODE,
+                    function_name=func_name,
+                    strategy_type=summary.strategy_type,
+                    content=part,
+                    contextual_content=(
+                        f"{_build_header(StrategyLayer.CODE, post, f'函数: {func_name}')}\n\n{part}"
+                    ),
+                )
+            )
 
     return chunks
 

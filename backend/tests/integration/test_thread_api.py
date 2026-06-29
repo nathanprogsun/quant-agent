@@ -166,7 +166,7 @@ class TestThreadStreamSDK:
 
         async def immediate_sse(
             *_args: object, **_kwargs: object
-        ) -> AsyncGenerator[None, None]:
+        ) -> AsyncGenerator[None]:
             return
             yield  # pragma: no cover - makes this an async generator
 

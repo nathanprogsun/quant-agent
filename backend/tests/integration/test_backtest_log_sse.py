@@ -12,7 +12,12 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.core.backtest.service import BacktestService
-from app.core.backtest.types import BacktestMetrics, BacktestResult, BacktestStatus
+from app.core.backtest.types import (
+    BacktestLogResult,
+    BacktestMetrics,
+    BacktestResult,
+    BacktestStatus,
+)
 from app.settings import reload_settings
 from app.web.api.backtest.views import get_backtest_service
 from app.web.application import get_app
@@ -33,7 +38,7 @@ def _parse_sse_messages(body: str) -> list[dict[str, Any]]:
 @pytest.fixture
 async def backtest_log_sse_client(
     test_app_context: Any, monkeypatch: pytest.MonkeyPatch
-) -> AsyncGenerator[tuple[APITestClient, AsyncMock], None]:
+) -> AsyncGenerator[tuple[APITestClient, AsyncMock]]:
     monkeypatch.setenv("JQCLI_TOKEN", "test-token")
     reload_settings()
 
@@ -51,12 +56,12 @@ async def backtest_log_sse_client(
     ]
 
     svc = AsyncMock(spec=BacktestService)
-    svc.submit.return_value = "bt_log_1"
-    svc.poll.side_effect = poll_results
-    svc.fetch_logs_incremental.return_value = {
-        "logs": ["[12:00:01] INFO start", "[12:00:02] INFO running"],
-        "next_offset": 2,
-    }
+    svc.submit_for_user.return_value = "bt_log_1"
+    svc.poll_for_user.side_effect = poll_results
+    svc.fetch_logs_incremental.return_value = BacktestLogResult(
+        logs=["[12:00:01] INFO start", "[12:00:02] INFO running"],
+        next_offset=2,
+    )
 
     app = get_app()
     app.state.app_context = test_app_context
@@ -109,6 +114,7 @@ async def test_backtest_sse_includes_log_lines(
             events = _parse_sse_messages(body.decode())
 
     log_events = [e for e in events if e.get("type") == "backtest_log_line"]
+    print("DEBUG events:", events)
     assert len(log_events) >= 1
     assert "INFO" in log_events[0]["line"]
 

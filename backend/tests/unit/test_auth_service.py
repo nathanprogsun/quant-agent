@@ -8,7 +8,7 @@ from uuid import uuid4
 
 import pytest
 
-from app.common.exception import ConflictResourceError, ResourceNotFoundError
+from app.common.exception import ResourceNotFoundError
 from app.common.exception.exception import UnauthorizedError
 from app.core.auth.service.auth_service import AuthService
 from app.core.auth.types import TokenClaims
@@ -113,8 +113,8 @@ class TestAuthServiceAuthenticateUser:
         self, auth_service: AuthService, mock_user_service: AsyncMock
     ) -> None:
         mock_user_service.get_user_model_by_email = AsyncMock(return_value=None)
-        result = await auth_service.authenticate_user(TEST_USER_EMAIL, TEST_USER_PASSWORD)
-        assert result is None
+        with pytest.raises(UnauthorizedError):
+            await auth_service.authenticate_user(TEST_USER_EMAIL, TEST_USER_PASSWORD)
 
     @pytest.mark.asyncio
     async def test_authenticate_user_wrong_password(
@@ -129,8 +129,8 @@ class TestAuthServiceAuthenticateUser:
         user_model.email = TEST_USER_EMAIL
         mock_user_service.get_user_model_by_email = AsyncMock(return_value=user_model)
 
-        result = await auth_service.authenticate_user(TEST_USER_EMAIL, "wrong_password")
-        assert result is None
+        with pytest.raises(UnauthorizedError):
+            await auth_service.authenticate_user(TEST_USER_EMAIL, "wrong_password")
 
 
 class TestAuthServiceRegisterUser:
@@ -150,10 +150,11 @@ class TestAuthServiceRegisterUser:
         assert result == sample_user_dto
         mock_user_service.create_user_with_password.assert_called_once()
         call_args = mock_user_service.create_user_with_password.call_args
-        assert call_args[0][0] == TEST_USER_EMAIL
-        assert call_args[0][2] == TEST_USER_FULL_NAME
-        assert call_args[0][1] != TEST_USER_PASSWORD
-        assert call_args[0][1].startswith("$2b$")
+        dto_arg = call_args[0][0]
+        assert dto_arg.email == TEST_USER_EMAIL
+        assert dto_arg.full_name == TEST_USER_FULL_NAME
+        assert dto_arg.hashed_password != TEST_USER_PASSWORD
+        assert dto_arg.hashed_password.startswith("$2b$")
 
 
 class TestAuthServiceChangePassword:
@@ -204,43 +205,3 @@ class TestAuthServiceChangePassword:
             await auth_service.change_password(TEST_USER_ID, wrong_password, "new_password")
 
         mock_user_service.update_password.assert_not_called()
-
-
-class TestAuthServiceInitializeSystem:
-    @pytest.mark.asyncio
-    async def test_initialize_system_success(
-        self,
-        auth_service: AuthService,
-        mock_user_service: AsyncMock,
-        sample_user_dto: UserDTO,
-    ) -> None:
-        mock_user_service.count_users = AsyncMock(return_value=0)
-        mock_user_service.create_admin_user = AsyncMock(return_value=sample_user_dto)
-
-        result = await auth_service.initialize_system(  # type: ignore[attr-defined]
-            TEST_USER_EMAIL, TEST_USER_PASSWORD, TEST_USER_FULL_NAME
-        )
-
-        assert result == sample_user_dto
-        mock_user_service.count_users.assert_called_once()
-        mock_user_service.create_admin_user.assert_called_once()
-        call_args = mock_user_service.create_admin_user.call_args
-        assert call_args[0][0] == TEST_USER_EMAIL
-        assert call_args[0][2] == TEST_USER_FULL_NAME
-        assert call_args[0][1] != TEST_USER_PASSWORD
-        assert call_args[0][1].startswith("$2b$")
-
-    @pytest.mark.asyncio
-    async def test_initialize_system_already_initialized(
-        self,
-        auth_service: AuthService,
-        mock_user_service: AsyncMock,
-    ) -> None:
-        mock_user_service.count_users = AsyncMock(return_value=1)
-
-        with pytest.raises(ConflictResourceError, match="System already initialized"):
-            await auth_service.initialize_system(  # type: ignore[attr-defined]
-                TEST_USER_EMAIL, TEST_USER_PASSWORD, TEST_USER_FULL_NAME
-            )
-
-        mock_user_service.create_admin_user.assert_not_called()

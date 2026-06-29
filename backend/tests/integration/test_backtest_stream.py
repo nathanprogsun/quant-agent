@@ -33,7 +33,7 @@ def _parse_sse_messages(body: str) -> list[dict[str, Any]]:
 @pytest.fixture
 async def backtest_stream_client(
     test_app_context: Any, monkeypatch: pytest.MonkeyPatch
-) -> AsyncGenerator[tuple[APITestClient, AsyncMock], None]:
+) -> AsyncGenerator[tuple[APITestClient, AsyncMock]]:
     """Authenticated client with mocked BacktestService and jqcli env."""
     monkeypatch.setenv("JQCLI_TOKEN", "test-token")
     reload_settings()
@@ -48,8 +48,8 @@ async def backtest_stream_client(
     ]
 
     svc = AsyncMock(spec=BacktestService)
-    svc.submit.return_value = "bt_stream_1"
-    svc.poll.side_effect = poll_results
+    svc.submit_for_user.return_value = "bt_stream_1"
+    svc.poll_for_user.side_effect = poll_results
 
     app = get_app()
     app.state.app_context = test_app_context

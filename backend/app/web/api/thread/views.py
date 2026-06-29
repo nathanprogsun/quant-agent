@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from typing import Annotated, Any
-from uuid import UUID, uuid4
+from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, Request
 from fastapi.responses import StreamingResponse
@@ -16,6 +16,7 @@ from app.core.chat.service.thread_service import RunService, ThreadService
 from app.db.models.user import User
 from app.web.api.deps import get_current_user
 from app.web.api.thread.schema import (
+    DEFAULT_THREAD_TITLE,
     CancelResponse,
     CreateThreadRequest,
     HistoryRequest,
@@ -70,17 +71,17 @@ async def create_thread(
 ) -> ThreadResponse:
     """Create a new thread.
 
-    All fields are optional. If ``thread_id`` (or its ``threadId`` alias) is
-    omitted, the service generates a UUID. The request body may also be empty
-    or missing entirely.
+    The body is fully optional. When the client omits ``title`` the service
+    uses ``DEFAULT_THREAD_TITLE`` as a placeholder; the chat agent rewrites
+    the title from the first user message via the thread-state flow.
     """
 
-    payload = body or CreateThreadRequest()
+    title = body.title if body is not None else None
+    model_name = body.model_name if body is not None else None
     thread = await thread_service.create(
-        thread_id=payload.resolved_thread_id or uuid4(),
         user_id=current_user.id,
-        title=payload.title,
-        model_name=payload.model_name,
+        title=title or DEFAULT_THREAD_TITLE,
+        model_name=model_name,
     )
     return ThreadResponse(
         id=thread.id,

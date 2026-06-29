@@ -275,6 +275,7 @@ class TestUserServiceList:
                 hashed_password="$2b$12$hash2",
                 is_active=True,
                 is_superuser=False,
+                token_version=0,
                 created_at=datetime.now(UTC),
             ),
         ]

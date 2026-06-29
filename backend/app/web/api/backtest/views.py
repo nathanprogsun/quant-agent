@@ -105,12 +105,25 @@ def _start_backtest_worker(request: Request, backtest_id: str, service: Backtest
 @router.get("/auth-check", response_model=BacktestAuthStatusResponse)
 async def auth_check_get(
     current_user: Annotated[User, Depends(get_current_user)],
-    service: Annotated[BacktestService, Depends(get_backtest_service)],
 ) -> BacktestAuthStatusResponse:
-    """Read-only jqcli auth status from server env."""
+    """Read-only jqcli auth status from server env.
+
+    Returns `configured=False` when no credentials are configured rather
+    than 400 — clients (the setup wizard) need to distinguish the two.
+    """
+    creds = get_jqcli_credentials()
+    if creds is None:
+        return BacktestAuthStatusResponse(
+            authenticated=False,
+            username=None,
+            message="未配置 JQCLI_TOKEN 或 JQCLI_COOKIE，请联系管理员",
+            configured=False,
+        )
+    token, cookie, api_base = creds
+    service = BacktestService(token=token, cookie=cookie, api_base=api_base)
     status = await service.check_auth_status()
     return BacktestAuthStatusResponse(
-        is_authenticated=status.authenticated,
+        authenticated=status.authenticated,
         username=status.username,
         message=status.message,
         configured=status.configured,
@@ -120,10 +133,9 @@ async def auth_check_get(
 @router.post("/auth-check", response_model=BacktestAuthStatusResponse)
 async def auth_check_post(
     current_user: Annotated[User, Depends(get_current_user)],
-    service: Annotated[BacktestService, Depends(get_backtest_service)],
 ) -> BacktestAuthStatusResponse:
     """Legacy POST alias for auth-check."""
-    return await auth_check_get(current_user, service)
+    return await auth_check_get(current_user)
 
 
 @router.post("", response_model=BacktestSubmitResponse)

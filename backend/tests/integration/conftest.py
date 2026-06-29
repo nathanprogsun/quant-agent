@@ -33,7 +33,7 @@ def test_db_url(tmp_path_factory: pytest.TempPathFactory) -> str:
 
 
 @pytest.fixture(scope="session")
-def setup_test_db(test_db_url: str) -> Generator[str, None, None]:
+def setup_test_db(test_db_url: str) -> Generator[str]:
     """Set up test database schema via Base.metadata.create_all().
 
     Replaces the previous alembic-based setup. Sets DATABASE_URL env var so
@@ -64,7 +64,7 @@ def setup_test_db(test_db_url: str) -> Generator[str, None, None]:
 async def test_app_context(
     setup_test_db: str,
     tmp_path_factory: pytest.TempPathFactory,
-) -> AsyncGenerator[AppContext, None]:
+) -> AsyncGenerator[AppContext]:
     """Create test app context with test database and sqlite checkpointer.
 
     Uses the new per-request pattern: services are NOT pre-constructed;
@@ -102,7 +102,7 @@ async def test_app_context(
 
 
 @pytest.fixture
-async def api_client(test_app_context: AppContext) -> AsyncGenerator[AsyncClient, None]:
+async def api_client(test_app_context: AppContext) -> AsyncGenerator[AsyncClient]:
     """Base AsyncClient - unauthenticated."""
     app = get_app()
     app.state.app_context = test_app_context

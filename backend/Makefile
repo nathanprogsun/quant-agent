@@ -1,4 +1,4 @@
-.PHONY: help install dev test lint format clean run docker-build docker-run db-migrate
+.PHONY: help install dev test lint format clean run docker-build docker-run
 
 help:
 	@echo "Available commands:"
@@ -9,7 +9,6 @@ help:
 	@echo "  make format      - Format code"
 	@echo "  make clean       - Clean cache files"
 	@echo "  make run         - Run development server"
-	@echo "  make db-migrate  - Run database migrations"
 
 install:
 	pip install -e .
@@ -45,8 +44,3 @@ clean:
 run:
 	uvicorn app.web.__main__:app --reload --host 0.0.0.0 --port 8000
 
-db-migrate:
-	alembic upgrade head
-
-db-create-migration:
-	alembic revision --autogenerate -m "$(MSG)"

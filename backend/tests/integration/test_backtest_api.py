@@ -44,7 +44,7 @@ def _build_abort_result(success: bool) -> BacktestAbortResult:
 @pytest.fixture
 async def backtest_api_client(
     test_app_context: AppContext,
-) -> AsyncGenerator[tuple[APITestClient, AsyncMock], None]:
+) -> AsyncGenerator[tuple[APITestClient, AsyncMock]]:
     """API client with BacktestService dependency overridden and auth."""
     svc = AsyncMock(spec=BacktestService)
     app = get_app()

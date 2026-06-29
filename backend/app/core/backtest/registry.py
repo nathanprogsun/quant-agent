@@ -27,6 +27,10 @@ class BacktestRegistry:
         owner = self._owner_map.get(backtest_id)
         return owner is not None and owner == user_id
 
+    def get_owner(self, backtest_id: str) -> UUID | None:
+        """Return the user_id that owns backtest_id, or None."""
+        return self._owner_map.get(backtest_id)
+
     def get_active_for_thread(self, thread_id: str) -> str | None:
         """Return active backtest id for a thread, if any."""
         return self._thread_active.get(thread_id)

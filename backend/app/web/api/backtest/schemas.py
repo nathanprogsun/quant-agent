@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class BacktestParamsInput(BaseModel):
@@ -32,7 +32,9 @@ class BacktestSubmitResponse(BaseModel):
 
 class BacktestAuthStatusResponse(BaseModel):
     """Auth-check status combining configured flag with credentials."""
-    is_authenticated: bool
+    model_config = ConfigDict(populate_by_name=True)
+
+    is_authenticated: bool = Field(alias="authenticated")
     username: str | None = None
     message: str = ""
     configured: bool = True

@@ -8,7 +8,6 @@ from pydantic import (
     Field,
     computed_field,
     field_validator,
-    model_validator,
 )
 
 from app.common.runs.manager import MultitaskStrategy, RunRecord
@@ -80,33 +79,19 @@ class UpdateTitleRequest(BaseModel):
 class CreateThreadRequest(BaseModel):
     """Request body for creating a thread.
 
-    Accepts both snake_case (``thread_id``, ``model_name``) and the LangGraph
-    SDK camelCase alias (``threadId``). When both ``thread_id`` and
-    ``threadId`` are provided, ``threadId`` (SDK) wins to match SDK
-    expectations. If neither is given, the service generates a UUID.
+    Both fields are optional. When ``title`` is omitted the server uses
+    ``DEFAULT_THREAD_TITLE`` as a placeholder; the chat agent rewrites the
+    title from the first user message via the thread-state update flow.
+    ``model_name`` pins the LLM used for runs started in this thread.
     """
 
-    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+    model_config = ConfigDict(extra="ignore")
 
-    thread_id: UUID | None = Field(default=None, validation_alias="thread_id")
-    threadId: UUID | None = Field(default=None, validation_alias="threadId")
     title: str | None = None
     model_name: str | None = None
 
-    @model_validator(mode="before")
-    @classmethod
-    def _merge_aliases(cls, data: Any) -> Any:
-        if not isinstance(data, dict):
-            return data
-        if data.get("threadId") and not data.get("thread_id"):
-            data["thread_id"] = data["threadId"]
-        return data
 
-    @property
-    def resolved_thread_id(self) -> UUID | None:
-        """Return whichever alias the caller actually sent."""
-        return self.thread_id or self.threadId
-
+DEFAULT_THREAD_TITLE = "新对话"
 
 class RunResponse(BaseModel):
     run_id: UUID

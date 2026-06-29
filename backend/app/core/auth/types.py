@@ -32,3 +32,9 @@ class TokenClaims(BaseModel):
     model_config = ConfigDict(extra="allow")
 
 
+class SetupStatusResponse(BaseModel):
+    """Response payload for /auth/setup-status — public, no auth required."""
+
+    needs_setup: bool
+
+

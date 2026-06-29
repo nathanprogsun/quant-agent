@@ -143,20 +143,6 @@ wheels = [
 ]
 
 [[package]]
-name = "alembic"
-version = "1.18.4"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "mako" },
-    { name = "sqlalchemy" },
-    { name = "typing-extensions" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/94/13/8b084e0f2efb0275a1d534838844926f798bd766566b1375174e2448cd31/alembic-1.18.4.tar.gz", hash = "sha256:cb6e1fd84b6174ab8dbb2329f86d631ba9559dd78df550b57804d607672cedbc", size = 2056725, upload-time = "2026-02-10T16:00:47.195Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/d2/29/6533c317b74f707ea28f8d633734dbda2119bbadfc61b2f3640ba835d0f7/alembic-1.18.4-py3-none-any.whl", hash = "sha256:a5ed4adcf6d8a4cb575f3d759f071b03cd6e5c7618eb796cb52497be25bfe19a", size = 263893, upload-time = "2026-02-10T16:00:49.997Z" },
-]
-
-[[package]]
 name = "annotated-doc"
 version = "0.0.4"
 source = { registry = "https://pypi.org/simple" }
@@ -299,7 +285,6 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "aiosqlite" },
-    { name = "alembic" },
     { name = "asyncpg" },
     { name = "bcrypt" },
     { name = "chromadb" },
@@ -341,8 +326,9 @@ dependencies = [
     { name = "uvicorn" },
 ]
 
-[package.optional-dependencies]
+[package.dev-dependencies]
 dev = [
+    { name = "black" },
     { name = "mypy" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -350,17 +336,9 @@ dev = [
     { name = "ruff" },
 ]
 
-[package.dev-dependencies]
-dev = [
-    { name = "black" },
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-]
-
 [package.metadata]
 requires-dist = [
     { name = "aiosqlite", specifier = ">=0.20" },
-    { name = "alembic", specifier = ">=1.13" },
     { name = "asyncpg", specifier = ">=0.30" },
     { name = "bcrypt", specifier = ">=4.0.0,<5.0.0" },
     { name = "chromadb", specifier = ">=0.5.0" },
@@ -378,7 +356,6 @@ requires-dist = [
     { name = "llama-index-llms-openai", specifier = ">=0.7.9" },
     { name = "llama-index-retrievers-bm25", specifier = ">=0.7.1" },
     { name = "llama-index-vector-stores-chroma", specifier = ">=0.5.5" },
-    { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.0" },
     { name = "opentelemetry-api", specifier = ">=1.20" },
     { name = "opentelemetry-exporter-otlp-proto-grpc", specifier = ">=1.20" },
     { name = "opentelemetry-instrumentation", specifier = ">=0.63b1" },
@@ -391,13 +368,9 @@ requires-dist = [
     { name = "prometheus-fastapi-instrumentator", specifier = ">=7.1.0" },
     { name = "pydantic", extras = ["email"], specifier = ">=2.0" },
     { name = "pydantic-settings", specifier = ">=2.0" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
-    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23" },
-    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.1" },
     { name = "python-jose", extras = ["cryptography"], specifier = ">=3.3" },
     { name = "python-multipart", specifier = ">=0.0.9" },
     { name = "pytz", specifier = ">=2023.3" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.1" },
     { name = "sentence-transformers", specifier = ">=3.0.0" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0" },
     { name = "types-gunicorn", specifier = ">=26.0.0.20260518" },
@@ -406,13 +379,15 @@ requires-dist = [
     { name = "types-pytz", specifier = ">=2026.2.0.20260518" },
     { name = "uvicorn", specifier = ">=0.30" },
 ]
-provides-extras = ["dev"]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "black", specifier = ">=26.5.1" },
+    { name = "mypy", specifier = ">=1.0" },
     { name = "pytest", specifier = ">=9.0.3" },
     { name = "pytest-asyncio", specifier = ">=1.3.0" },
+    { name = "pytest-cov", specifier = ">=4.1" },
+    { name = "ruff", specifier = ">=0.1" },
 ]
 
 [[package]]
@@ -2084,18 +2059,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/3e/8e/5d2c6789a00a866e82e1ddbfbeb6ec911ded288577a61750d9515bdbfa94/llama_index_workflows-2.22.1.tar.gz", hash = "sha256:63b273107f59c4eba330fd1fb492fb927bfd3880ea3d91dfa6de1c8982874385", size = 134739, upload-time = "2026-06-22T19:49:56.158Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/16/29/b5ef6d46ff66b4133401d8ae0286da22ab6269ae31673bb82807075d8e90/llama_index_workflows-2.22.1-py3-none-any.whl", hash = "sha256:ac5360c1811757fb6b6e2c6c8f1600fe1d99443ff44b5b0b62234fcb1ad4df5b", size = 162743, upload-time = "2026-06-22T19:49:55.05Z" },
-]
-
-[[package]]
-name = "mako"
-version = "1.3.12"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "markupsafe" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/00/62/791b31e69ae182791ec67f04850f2f062716bbd205483d63a215f3e062d3/mako-1.3.12.tar.gz", hash = "sha256:9f778e93289bd410bb35daadeb4fc66d95a746f0b75777b942088b7fd7af550a", size = 400219, upload-time = "2026-04-28T19:01:08.512Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/bc/b1/a0ec7a5a9db730a08daef1fdfb8090435b82465abbf758a596f0ea88727e/mako-1.3.12-py3-none-any.whl", hash = "sha256:8f61569480282dbf557145ce441e4ba888be453c30989f879f0d652e39f53ea9", size = 78521, upload-time = "2026-04-28T19:01:10.393Z" },
 ]
 
 [[package]]

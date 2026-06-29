@@ -53,7 +53,10 @@ async def test_jq_api_retriever_pilot(tmp_path: Path) -> None:
         bm25_path=tmp_path / "bm25.pkl",
     )
     store.upsert_chunks(chunks)
-    retriever = JqApiRetriever(store)
+    # num_queries=1 disables LLM query-gen so BM25 + vector ranking is the
+    # only thing under test. With more queries the reranker can re-order
+    # ``get_price`` below ``get_fundamentals`` non-deterministically.
+    retriever = JqApiRetriever(store, num_queries=1)
 
     hits = await retriever.retrieve("get_price 怎么用", top_k=3)
     assert hits

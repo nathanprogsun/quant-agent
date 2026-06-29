@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,20 +24,21 @@ class ThreadService:
 
     async def create(
         self,
-        thread_id: UUID,
         user_id: UUID,
         *,
-        title: str | None = None,
+        title: str,
         model_name: str | None = None,
     ) -> Thread:
-        """Create a thread if it doesn't exist, otherwise return existing."""
+        """Create a thread.
+
+        ``title`` is required by the service contract — callers must supply a
+        non-empty value (views fall back to ``DEFAULT_THREAD_TITLE``).
+        ``model_name`` is optional and pins the LLM used for runs in this thread.
+        """
         repo = ThreadRepository(self._session)
-        existing = await repo.find_by_id_and_user(thread_id, user_id)
-        if existing:
-            return existing
 
         thread = Thread(
-            id=thread_id,
+            id=uuid4(),
             user_id=user_id,
             title=title,
             model_name=model_name,

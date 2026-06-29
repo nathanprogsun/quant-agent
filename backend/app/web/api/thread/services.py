@@ -15,7 +15,6 @@ from langchain_core.messages.base import BaseMessage
 from langchain_core.runnables import Runnable, RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver
 
-from app.common.exception.exception import InvalidArgumentError
 from app.common.runs.manager import ConflictError, RunManager, RunRecord
 from app.common.runs.schemas import DisconnectMode
 from app.common.stream_bridge.base import StreamBridge
@@ -88,19 +87,28 @@ def normalize_input(raw_input: dict[str, Any]) -> dict[str, Any]:
             role = msg.get("role", "")
             if role and role not in ALLOWED_ROLES:
                 logger.warning("Invalid role '%s' at message index %d", role, i)
-                raise InvalidArgumentError("请求参数无效")
+                raise HTTPException(
+                    status_code=400,
+                    detail="请求参数无效",
+                )
             # Validate length
             content = msg.get("content", "")
             if isinstance(content, str) and len(content) > MAX_MESSAGE_LENGTH:
                 logger.warning(
                     "Message at index %d exceeds %d chars", i, MAX_MESSAGE_LENGTH
                 )
-                raise InvalidArgumentError("请求参数无效")
+                raise HTTPException(
+                    status_code=400,
+                    detail="请求参数无效",
+                )
             try:
                 converted.extend(convert_to_messages([msg]))
             except Exception as e:
                 logger.warning("Invalid message at index %d: %s", i, e)
-                raise InvalidArgumentError("请求参数无效")
+                raise HTTPException(
+                    status_code=400,
+                    detail="请求参数无效",
+                )
         else:
             logger.warning(
                 "Unsupported message type at index %d: %s", i, type(msg)
@@ -185,14 +193,7 @@ async def start_run(
     except ConflictError:
         raise
 
-    # 3. Ensure thread exists
-    await thread_service.create(
-        thread_id=thread_id,
-        user_id=request.state.current_user_id,
-        model_name=model_name,
-    )
-
-    # 4. Normalize input
+    # 3. Normalize input
     raw_input = getattr(body, "input", {"messages": []})
     normalized_input = normalize_input(raw_input)
     graph_input = GraphInput.from_langchain_messages(
@@ -201,24 +202,24 @@ async def start_run(
         user_id=request.state.current_user_id,
     )
 
-    # 5. Build config
+    # 4. Build config
     request_config = getattr(body, "config", {}) or {}
     metadata = getattr(body, "metadata", {}) or {}
     config = build_run_config(thread_id, request_config, metadata)
 
-    # 6. Merge context
+    # 5. Merge context
     config = merge_run_context_overrides(config, context)
 
-    # 7. Inject user_id
+    # 6. Inject user_id
     configurable = dict(config.get("configurable", {}))
     configurable["user_id"] = request.state.current_user_id
     config = RunnableConfig(configurable=configurable, metadata=config.get("metadata") or {})
 
-    # 8. Inject checkpointer
+    # 7. Inject checkpointer
     configurable["checkpointer"] = checkpointer
     config = RunnableConfig(configurable=configurable, metadata=config.get("metadata") or {})
 
-    # 9. Build agent and start background task
+    # 8. Build agent and start background task
     agent = agent_factory(config=config)
 
     stream_modes = normalize_request_stream_modes(getattr(body, "stream_mode", None))

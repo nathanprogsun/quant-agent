@@ -1,6 +1,7 @@
 """ThreadRepository ORM tests (soft-delete semantics)."""
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -41,11 +42,16 @@ async def test_list_by_user_id_orders_by_recent(session: Any) -> None:
     repo = ThreadRepository(session)
     user = uuid4()
     a = await repo.create(_thread(user_id=user))
-    # Create b and immediately update it to ensure b.updated_at > a.created_at
     b = await repo.create(_thread(user_id=user))
-    await repo.update_title(b.id, user, "b")
-    # Update a to have updated_at older than b's updated_at
-    await repo.update_title(a.id, user, "a")
+
+    # SQLite's CURRENT_TIMESTAMP is second-precision, so back-to-back updates
+    # in the same second produce identical updated_at values. Set explicit
+    # timestamps to make ordering deterministic across all DBs.
+    base = datetime.now(UTC).replace(microsecond=0)
+    a.updated_at = base
+    b.updated_at = base + timedelta(seconds=5)
+    await session.flush()
+
     items = await repo.list_by_user_id(user)
     # b has newer updated_at, so b comes first despite being created earlier
     assert [t.id for t in items] == [b.id, a.id]

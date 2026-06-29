@@ -6,6 +6,7 @@ from app.core.auth.types import (
     ChangePasswordRequest,
     LoginRequest,
     RegisterRequest,
+    SetupStatusResponse,
     TokenClaims,
 )
 from app.core.user.types import UserDTO
@@ -22,6 +23,15 @@ async def get_me(
 ) -> UserDTO:
     """Returns current authenticated user."""
     return current_user
+
+
+@router.get("/setup-status", response_model=SetupStatusResponse)
+async def setup_status(
+    auth_service: AuthService = Depends(auth_service_from_request),
+) -> SetupStatusResponse:
+    """Public endpoint — indicates whether the system needs initial setup."""
+    needs_setup = await auth_service.check_setup_access()
+    return SetupStatusResponse(needs_setup=needs_setup)
 
 
 @router.post(

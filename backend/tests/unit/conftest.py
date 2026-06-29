@@ -55,6 +55,7 @@ def sample_user_model() -> User:
         hashed_password="$2b$12$test_hash",
         is_active=True,
         is_superuser=False,
+        token_version=0,
         created_at=datetime.now(UTC),
     )
 
@@ -107,21 +108,23 @@ def auth_service(mock_user_service: AsyncMock) -> AuthService:
 
 
 @pytest.fixture
-def user_service(mock_user_repository: MagicMock) -> UserService:
+def user_service(mock_user_repository: MagicMock, request: pytest.FixtureRequest) -> UserService:
     """UserService bound to a mock AsyncSession.
 
-    The service constructs `UserRepository(self._session)` inline, so we
-    patch the local binding of `UserRepository` inside the service module
-    to return our pre-built mock repository. This keeps the service
-    constructor signature (`session=AsyncSession`) while letting callers
-    configure repository return values through `mock_user_repository`.
+    The service does `from app.db.dao.user_repository import UserRepository`
+    at module load, so we must patch the binding in the service's module
+    namespace (`app.core.user.service.user_service.UserRepository`).
+    The patch must outlive the fixture return — register cleanup so it
+    stays active for the whole test function.
     """
     session = AsyncMock()
-    with patch(
-        "app.core.user.service.UserRepository",
+    patcher = patch(
+        "app.core.user.service.user_service.UserRepository",
         return_value=mock_user_repository,
-    ):
-        return UserService(session=session)
+    )
+    patcher.start()
+    request.addfinalizer(patcher.stop)
+    return UserService(session=session)
 
 
 @pytest.fixture

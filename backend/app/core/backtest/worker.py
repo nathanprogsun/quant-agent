@@ -38,7 +38,11 @@ async def run_backtest_worker(
         )
 
         while elapsed < TIMEOUT_SECONDS:
-            result = await service.poll(backtest_id)
+            user_id = service.registry.get_owner(backtest_id)
+            if user_id is None:
+                result = await service.poll(backtest_id)
+            else:
+                result = await service.poll_for_user(backtest_id, user_id)
 
             if result.status == BacktestStatus.RUNNING:
                 try:
