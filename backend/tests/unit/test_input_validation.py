@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+from fastapi import HTTPException
 from pydantic import ValidationError
 
 from app.common.runs.manager import MultitaskStrategy
@@ -31,7 +32,7 @@ class TestMessageInput:
 
     def test_rejects_invalid_role(self) -> None:
         with pytest.raises(ValidationError):
-            MessageInput(role="admin", content="Hello")
+            MessageInput(role="admin", content="Hello")  # type: ignore[arg-type]
 
     def test_empty_content_is_valid(self) -> None:
         msg = MessageInput(role="user", content="")
@@ -66,16 +67,16 @@ class TestRunCreateRequest:
         assert req.on_disconnect == DisconnectMode.CANCEL
 
     def test_valid_disconnect_mode_keep_alive(self) -> None:
-        req = RunCreateRequest(on_disconnect="keep_alive")
+        req = RunCreateRequest(on_disconnect="keep_alive")  # type: ignore[arg-type]
         assert req.on_disconnect == DisconnectMode.CONTINUE
 
     def test_valid_disconnect_mode_continue_alias(self) -> None:
-        req = RunCreateRequest(on_disconnect="continue")
+        req = RunCreateRequest(on_disconnect="continue")  # type: ignore[arg-type]
         assert req.on_disconnect == DisconnectMode.CONTINUE
 
     def test_rejects_invalid_disconnect_mode(self) -> None:
         with pytest.raises(ValidationError):
-            RunCreateRequest(on_disconnect="invalid_mode")
+            RunCreateRequest(on_disconnect="invalid_mode")  # type: ignore[arg-type]
 
     def test_valid_multitask_strategy_reject(self) -> None:
         req = RunCreateRequest(multitask_strategy=MultitaskStrategy.REJECT)
@@ -88,7 +89,7 @@ class TestRunCreateRequest:
 
     def test_rejects_invalid_multitask_strategy(self) -> None:
         with pytest.raises(ValidationError):
-            RunCreateRequest(multitask_strategy="invalid_strategy")
+            RunCreateRequest(multitask_strategy="invalid_strategy")  # type: ignore[arg-type]
 
     def test_valid_input_with_messages(self) -> None:
         messages = [{"role": "user", "content": "Hello"}]
@@ -135,8 +136,6 @@ class TestNormalizeInput:
         assert len(result["messages"]) == 1
 
     def test_rejects_invalid_role(self) -> None:
-        from fastapi import HTTPException
-
         raw = {"messages": [{"role": "admin", "content": "Hello"}]}
         with pytest.raises(HTTPException) as exc_info:
             normalize_input(raw)
@@ -144,8 +143,6 @@ class TestNormalizeInput:
         assert exc_info.value.detail == "请求参数无效"
 
     def test_rejects_message_exceeding_max_length(self) -> None:
-        from fastapi import HTTPException
-
         content = "a" * (MAX_MESSAGE_LENGTH + 1)
         raw = {"messages": [{"role": "user", "content": content}]}
         with pytest.raises(HTTPException) as exc_info:
@@ -160,8 +157,6 @@ class TestNormalizeInput:
         assert len(result["messages"]) == 1
 
     def test_rejects_unsupported_message_type(self) -> None:
-        from fastapi import HTTPException
-
         raw = {"messages": [42]}
         with pytest.raises(HTTPException) as exc_info:
             normalize_input(raw)

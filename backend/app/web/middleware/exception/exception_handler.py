@@ -1,5 +1,6 @@
 """Exception handlers for FastAPI application."""
 
+import logging
 import re
 from http import HTTPStatus
 
@@ -12,16 +13,16 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
-from app.app_logging import Level, get_logger
+from app.app_logging import get_logger
 from app.common.exception import ApplicationError, ConflictResourceError
 
-logger = get_logger()
+logger = get_logger(__name__)
 
 # Pattern to extract column name from SQLite UNIQUE constraint error
 UNIQUE_CONSTRAINT_PATTERN = re.compile(r"UNIQUE constraint failed: (\w+)\.(\w+)")
 
 
-async def application_error_handler(request: Request, exc: ApplicationError) -> JSONResponse:
+async def application_error_handler(request: Request, exc: Exception) -> JSONResponse:
     """Handle ApplicationError and its subclasses.
 
     Logs the error at ERROR level if 5xx, WARNING if 4xx.
@@ -34,26 +35,32 @@ async def application_error_handler(request: Request, exc: ApplicationError) -> 
     Returns:
         JSONResponse with error payload.
     """
-    level = Level.ERROR if exc.http_code() >= HTTPStatus.INTERNAL_SERVER_ERROR else Level.WARNING
+    assert isinstance(exc, ApplicationError)
+    level = (
+        logging.ERROR
+        if exc.http_code() >= HTTPStatus.INTERNAL_SERVER_ERROR
+        else logging.WARNING
+    )
     error_response = exc.to_json_response()
-    logger.opt(depth=1).opt(exception=exc).log(  # type: ignore[no-untyped-call]
+    logger.log(
         level,
-        "application error",
-        http_path=request.url.path,
-        http_method=request.method,
-        http_status=exc.http_code(),
-        error_response_body=error_response.body,
-        error_response_headers=error_response.headers,
+        "application error path=%s method=%s status=%s",
+        request.url.path,
+        request.method,
+        exc.http_code(),
+        exc_info=exc,
     )
     return error_response
 
 
 async def request_validation_error_handler(
-    request: Request, exc: RequestValidationError
+    request: Request, exc: Exception
 ) -> JSONResponse:
     """Handle RequestValidationError from FastAPI.
 
-    Returns 422 with validation error details.
+    Returns 422 with validation error details. Signature accepts
+    `Exception` to match Starlette's `add_exception_handler` protocol;
+    `isinstance` narrows the type at runtime.
 
     Args:
         request: FastAPI request object.
@@ -62,52 +69,60 @@ async def request_validation_error_handler(
     Returns:
         JSONResponse with validation error details.
     """
+    assert isinstance(exc, RequestValidationError)
     error_response = await request_validation_exception_handler(request=request, exc=exc)
-    logger.opt(depth=1).opt(exception=exc).warning(  # type: ignore[no-untyped-call]
-        "request validation error",
-        http_path=request.url.path,
-        http_method=request.method,
-        error_response_body=error_response.body,
-        error_response_headers=error_response.headers,
+    logger.warning(
+        "request validation error path=%s method=%s",
+        request.url.path,
+        request.method,
+        exc_info=exc,
     )
     return error_response
 
 
-async def http_exception_handler(request: Request, exc: StarletteHTTPException) -> Response:
+async def http_exception_handler(request: Request, exc: Exception) -> Response:
     """Handle Starlette HTTPException.
 
-    Logs at ERROR level for 5xx, WARNING for 4xx.
+    Logs at ERROR level for 5xx, WARNING for 4xx. Signature accepts
+    `Exception` to match Starlette's `add_exception_handler` protocol;
+    `isinstance` narrows the type at runtime.
 
     Args:
         request: FastAPI request object.
-        exc: StarletteHTTPException instance.
+        exc: Starlette HTTPException instance.
 
     Returns:
         Response (usually JSONResponse).
     """
-    level = Level.ERROR if exc.status_code >= HTTPStatus.INTERNAL_SERVER_ERROR else Level.WARNING
+    assert isinstance(exc, StarletteHTTPException)
+    level = (
+        logging.ERROR
+        if exc.status_code >= HTTPStatus.INTERNAL_SERVER_ERROR
+        else logging.WARNING
+    )
     error_response = JSONResponse(
         status_code=exc.status_code,
         content={"detail": exc.detail},
         headers=exc.headers,
     )
-    logger.opt(depth=1).opt(exception=exc).log(  # type: ignore[no-untyped-call]
+    logger.log(
         level,
-        "http exception",
-        http_path=request.url.path,
-        http_method=request.method,
-        http_status=exc.status_code,
-        error_response_body=error_response.body,
-        error_response_headers=error_response.headers,
+        "http exception path=%s method=%s status=%s",
+        request.url.path,
+        request.method,
+        exc.status_code,
+        exc_info=exc,
     )
     return error_response
 
 
-async def integrity_error_handler(request: Request, exc: IntegrityError) -> JSONResponse:
+async def integrity_error_handler(request: Request, exc: Exception) -> JSONResponse:
     """Handle SQLAlchemy IntegrityError from database constraints.
 
     Converts database unique constraint violations to user-friendly
-    application errors without exposing internal details.
+    application errors without exposing internal details. Signature
+    accepts `Exception` to match Starlette's `add_exception_handler`
+    protocol; `isinstance` narrows the type at runtime.
 
     Args:
         request: FastAPI request object.
@@ -116,20 +131,24 @@ async def integrity_error_handler(request: Request, exc: IntegrityError) -> JSON
     Returns:
         JSONResponse with appropriate error payload.
     """
-    logger.opt(depth=1).opt(exception=exc).warning(  # type: ignore[no-untyped-call]
-        "database integrity error",
-        http_path=request.url.path,
-        http_method=request.method,
+    assert isinstance(exc, IntegrityError)
+    logger.warning(
+        "database integrity error path=%s method=%s",
+        request.url.path,
+        request.method,
+        exc_info=exc,
     )
 
-    # Extract error message to determine the type of constraint violation
     error_message = str(exc)
 
-    # Check for email uniqueness constraint
-    if "users.email" in error_message or "email" in error_message.lower():
-        app_error = ConflictResourceError("Email already exists")
+    match = UNIQUE_CONSTRAINT_PATTERN.search(error_message)
+    if match:
+        _, column = match.groups()
+        if column == "email":
+            app_error = ConflictResourceError("Email already exists")
+        else:
+            app_error = ConflictResourceError(f"Duplicate value for column: {column}")
     else:
-        # Generic conflict error for other unique constraints
         app_error = ConflictResourceError("A resource with the same unique value already exists")
 
     return app_error.to_json_response()

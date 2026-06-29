@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class BacktestParamsInput(BaseModel):
@@ -30,6 +30,24 @@ class BacktestSubmitResponse(BaseModel):
     backtest_id: str
 
 
+class BacktestAuthStatusResponse(BaseModel):
+    """Auth-check status combining configured flag with credentials."""
+    model_config = ConfigDict(populate_by_name=True)
+
+    is_authenticated: bool = Field(alias="authenticated")
+    username: str | None = None
+    message: str = ""
+    configured: bool = True
+
+
+class BacktestSimulationResponse(BaseModel):
+    """Response for simulation submission."""
+    success: bool
+    message: str = ""
+    simulation_id: str | None = None
+    status: str = "submitted"
+
+
 class BacktestMetricsResponse(BaseModel):
     annual_return: float | None = None
     sharpe: float | None = None
@@ -37,6 +55,7 @@ class BacktestMetricsResponse(BaseModel):
     volatility: float | None = None
     win_rate: float | None = None
     total_return: float | None = None
+    # Raw upstream payload is opaque — keep it typed-but-flexible.
     raw: dict[str, Any] = Field(default_factory=dict)
 
 

@@ -1,0 +1,32 @@
+{
+  "dataset": "/Users/jung/pro/quant-agent/backend/eval/datasets/jq_api_eval_pilot.jsonl",
+  "count": 20,
+  "recall@5": 0.9,
+  "mrr": 0.8083333333333333,
+  "failures": [
+    {
+      "id": "q004",
+      "query": "如何获取沪深300成分股",
+      "expected": "get_index_stocks",
+      "got": [
+        "get_index_weights",
+        "get_concept_stocks",
+        "get_extras",
+        "get_industry",
+        "get_all_securities"
+      ]
+    },
+    {
+      "id": "q009",
+      "query": "获取股票中文名称",
+      "expected": "get_security_info",
+      "got": [
+        "get_industry_stocks",
+        "get_index_stocks",
+        "get_index_stocks",
+        "get_concept_stocks",
+        "get_industry_stocks"
+      ]
+    }
+  ]
+}

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 import httpx
 
@@ -79,7 +79,7 @@ class MCPClient:
             response = await self._client.get("/tools")
             response.raise_for_status()
             data = response.json()
-            return data.get("tools", [])
+            return cast(list[dict[str, Any]], data.get("tools", []))
         except Exception as e:
             raise RuntimeError(f"Failed to get tools from MCP server: {e}")
 
@@ -124,23 +124,3 @@ class MCPClient:
             True if connected, False otherwise.
         """
         return self._connected
-
-
-# Global MCP client instance
-_mcp_client: MCPClient | None = None
-
-
-def get_mcp_client(server_url: str = "http://localhost:8080", timeout: int = 60) -> MCPClient:
-    """Get or create the global MCP client singleton.
-
-    Args:
-        server_url: URL of the MCP server.
-        timeout: Request timeout in seconds.
-
-    Returns:
-        MCPClient singleton instance.
-    """
-    global _mcp_client
-    if _mcp_client is None:
-        _mcp_client = MCPClient(server_url, timeout)
-    return _mcp_client

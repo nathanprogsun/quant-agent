@@ -6,6 +6,12 @@ from pathlib import Path
 
 import pytest
 from dotenv import load_dotenv
+from langchain_core.messages import HumanMessage
+from langchain_openai import ChatOpenAI
+from openai import AuthenticationError
+from pydantic import SecretStr
+
+from app.settings import get_settings, reload_settings
 
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent
 
@@ -19,8 +25,6 @@ load_dotenv(_BACKEND_ROOT / ".env", override=False)
 
 def is_openai_api_key_configured() -> bool:
     """True when OPENAI_API_KEY is set via env or backend/.env (via Settings)."""
-    from app.settings import get_settings, reload_settings
-
     reload_settings()
     key = get_settings().openai_api_key.get_secret_value()
     return bool(key and key.strip())
@@ -32,16 +36,10 @@ async def require_working_llm() -> None:
     if not is_openai_api_key_configured():
         pytest.skip("Requires OPENAI_API_KEY in environment or backend/.env")
 
-    from langchain_core.messages import HumanMessage
-    from langchain_openai import ChatOpenAI
-    from openai import AuthenticationError
-
-    from app.settings import get_settings
-
     settings = get_settings()
     model = ChatOpenAI(
         model=settings.model,
-        api_key=settings.openai_api_key.get_secret_value(),
+        api_key=SecretStr(settings.openai_api_key.get_secret_value()),
         base_url=settings.openai_base_url,
         max_retries=0,
         timeout=30,
@@ -58,5 +56,5 @@ async def require_working_llm() -> None:
 
 
 @pytest.fixture(scope="session")
-def anyio_backend():
+def anyio_backend() -> str:
     return "asyncio"

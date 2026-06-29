@@ -2,31 +2,19 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.chat.memory.service import MemoryService
-from app.db.models.memory import MemoryFact, UserMemory
-from app.db.models.user import User
+from app.core.user.types import UserDTO
 from app.web.api.deps import get_current_user
+from app.web.lifespan_service import memory_service_from_request
 
 router = APIRouter(prefix="/api/memory", tags=["memory"])
-
-
-def memory_service_from_request(request: Request) -> MemoryService:
-    """Get MemoryService from app context."""
-    app_context = request.app.state.app_context
-    if not app_context or not app_context.lifespan_service:
-        raise HTTPException(status_code=500, detail="Memory service not initialized")
-    # MemoryService is created on-demand via factory
-    from app.core.chat.memory.service import MemoryService
-    from app.db.dao.memory_repository import MemoryRepository
-
-    repo = MemoryRepository(engine=app_context.main_db)
-    return MemoryService(memory_repository=repo)
 
 
 # ── Request models ───────────────────────────────────────────
@@ -49,14 +37,43 @@ class FactCreateRequest(BaseModel):
     embedding: list[float] | None = Field(default=None, description="Vector embedding for similarity")
 
 
-# ── Response models ───────────────────────────────────────────
+# ── Response models (DTOs, decoupled from DB TableModel) ──────
+
+
+class UserMemoryOut(BaseModel):
+    """Response DTO for a user memory record."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    user_id: UUID
+    memory_type: str
+    content: str
+    confidence: float
+    source: str | None
+    created_at: datetime
+    updated_at: datetime | None
+
+
+class MemoryFactOut(BaseModel):
+    """Response DTO for a memory fact record."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    user_id: UUID
+    fact_type: str
+    content: str
+    embedding: list[float] | None
+    created_at: datetime
+    updated_at: datetime | None
 
 
 class MemoryContextResponse(BaseModel):
     """Response containing user memory context."""
 
-    memories: list[UserMemory]
-    facts: list[MemoryFact]
+    memories: list[UserMemoryOut]
+    facts: list[MemoryFactOut]
     context_string: str = Field(description="Formatted context string for prompts")
 
 
@@ -65,7 +82,7 @@ class MemoryContextResponse(BaseModel):
 
 @router.get("", response_model=MemoryContextResponse)
 async def get_memory_context(
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[UserDTO, Depends(get_current_user)],
     memory_service: Annotated[MemoryService, Depends(memory_service_from_request)],
 ) -> MemoryContextResponse:
     """Get aggregated memory context for the current user.
@@ -74,51 +91,50 @@ async def get_memory_context(
     """
     context = await memory_service.get_user_memory(current_user.id)
     return MemoryContextResponse(
-        memories=context.memories,
-        facts=context.facts,
+        memories=[UserMemoryOut.model_validate(m) for m in context.memories],
+        facts=[MemoryFactOut.model_validate(f) for f in context.facts],
         context_string=context.to_prompt_string(),
     )
 
 
-@router.post("/memories", response_model=UserMemory)
+@router.post("/memories", response_model=UserMemoryOut)
 async def create_memory(
     body: MemoryCreateRequest,
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[UserDTO, Depends(get_current_user)],
     memory_service: Annotated[MemoryService, Depends(memory_service_from_request)],
-) -> UserMemory:
+) -> UserMemoryOut:
     """Create a new user memory."""
-    return await memory_service.add_memory(
+    record = await memory_service.add_memory(
         user_id=current_user.id,
         memory_type=body.memory_type,
         content=body.content,
         confidence=body.confidence,
         source=body.source,
     )
+    return UserMemoryOut.model_validate(record)
 
 
-@router.post("/facts", response_model=MemoryFact)
+@router.post("/facts", response_model=MemoryFactOut)
 async def create_fact(
     body: FactCreateRequest,
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[UserDTO, Depends(get_current_user)],
     memory_service: Annotated[MemoryService, Depends(memory_service_from_request)],
-) -> MemoryFact:
+) -> MemoryFactOut:
     """Create a new memory fact."""
-    return await memory_service.add_fact(
+    record = await memory_service.add_fact(
         user_id=current_user.id,
         fact_type=body.fact_type,
         content=body.content,
         embedding=body.embedding,
     )
+    return MemoryFactOut.model_validate(record)
 
 
-@router.delete("/facts/{fact_id}")
+@router.delete("/facts/{fact_id}", status_code=204)
 async def delete_fact(
     fact_id: UUID,
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[UserDTO, Depends(get_current_user)],
     memory_service: Annotated[MemoryService, Depends(memory_service_from_request)],
-) -> dict[str, bool]:
+) -> None:
     """Delete a memory fact."""
-    deleted = await memory_service.delete_fact(fact_id, current_user.id)
-    if not deleted:
-        raise HTTPException(status_code=404, detail="Fact not found")
-    return {"deleted": True}
+    await memory_service.delete_fact(fact_id, current_user.id)

@@ -1,47 +1,44 @@
-"""Memory database models."""
+"""Memory ORM models (UserMemory, MemoryFact)."""
+from __future__ import annotations
 
 from datetime import datetime
-from uuid import UUID
+from uuid import UUID, uuid4
 
-from app.db.models.core.base import Column, JsonColumn, TableModel
+from sqlalchemy import JSON, DateTime, Float, String, func
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy.orm import Mapped, mapped_column
 
-
-class UserMemory(TableModel):
-    """User memory table model.
-
-    Stores user memories with type classification, confidence scores,
-    and source attribution.
-    """
-
-    table_name = "user_memories"
-    schema_name = ""
-    ordered_primary_keys = ("id",)
-
-    id: Column[UUID]
-    user_id: Column[UUID]
-    memory_type: Column[str]  # e.g., "preference", "fact", "context", "goal"
-    content: Column[str]
-    confidence: Column[float] = 1.0  # 0.0 to 1.0
-    source: Column[str | None] = None  # e.g., "chat", "profile", "explicit"
-    created_at: Column[datetime]
-    updated_at: Column[str | None] = None
+from app.db.models import Base
 
 
-class MemoryFact(TableModel):
-    """Memory fact table model.
+class UserMemory(Base):
+    __tablename__ = "user_memories"
 
-    Stores structured facts extracted from user interactions.
-    Includes embedding vector for similarity search.
-    """
+    id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    user_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), index=True, nullable=False)
+    memory_type: Mapped[str] = mapped_column(String(50), index=True, nullable=False)
+    content: Mapped[str] = mapped_column(String, nullable=False)
+    confidence: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
+    source: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=False), nullable=False, server_default=func.now(), index=True
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
 
-    table_name = "memory_facts"
-    schema_name = ""
-    ordered_primary_keys = ("id",)
 
-    id: Column[UUID]
-    user_id: Column[UUID]
-    fact_type: Column[str]  # e.g., "preference", "knowledge", "plan", "relationship"
-    content: Column[str]
-    embedding: JsonColumn[list[float] | None] = None  # Vector embedding for similarity
-    created_at: Column[datetime]
-    updated_at: Column[str | None] = None
+class MemoryFact(Base):
+    __tablename__ = "memory_facts"
+
+    id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    user_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), index=True, nullable=False)
+    fact_type: Mapped[str] = mapped_column(String(50), index=True, nullable=False)
+    content: Mapped[str] = mapped_column(String, nullable=False)
+    embedding: Mapped[list[float] | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=False), nullable=False, server_default=func.now(), index=True
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)

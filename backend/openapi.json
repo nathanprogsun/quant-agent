@@ -1,0 +1,2937 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "quant-agent-backend",
+    "description": "app API",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/v1/auth/me": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Get Me",
+        "description": "Returns current authenticated user.",
+        "operationId": "get_me_api_v1_auth_me_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserDTO"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/register": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Register",
+        "operationId": "register_api_v1_auth_register_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/v1/auth/login": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Login",
+        "operationId": "login_api_v1_auth_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/v1/auth/signout": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Signout",
+        "description": "Signs out user, clears session.",
+        "operationId": "signout_api_v1_auth_signout_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/change-password": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Change Password",
+        "description": "Change password for authenticated user.",
+        "operationId": "change_password_api_v1_auth_change_password_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangePasswordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/backtest/auth-check": {
+      "get": {
+        "tags": [
+          "backtest"
+        ],
+        "summary": "Auth Check Get",
+        "description": "Read-only jqcli auth status from server env.",
+        "operationId": "auth_check_get_api_v1_backtest_auth_check_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BacktestAuthStatusResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "backtest"
+        ],
+        "summary": "Auth Check Post",
+        "description": "Legacy POST alias for auth-check.",
+        "operationId": "auth_check_post_api_v1_backtest_auth_check_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BacktestAuthStatusResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/backtest": {
+      "post": {
+        "tags": [
+          "backtest"
+        ],
+        "summary": "Submit Backtest",
+        "description": "Submit a backtest for execution.",
+        "operationId": "submit_backtest_api_v1_backtest_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BacktestSubmitRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BacktestSubmitResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/backtest/{backtest_id}": {
+      "get": {
+        "tags": [
+          "backtest"
+        ],
+        "summary": "Get Backtest Result",
+        "description": "Get backtest result by ID.",
+        "operationId": "get_backtest_result_api_v1_backtest__backtest_id__get",
+        "parameters": [
+          {
+            "name": "backtest_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Backtest Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BacktestResultResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/backtest/{backtest_id}/stream": {
+      "get": {
+        "tags": [
+          "backtest"
+        ],
+        "summary": "Stream Backtest",
+        "description": "Stream backtest progress events via SSE.",
+        "operationId": "stream_backtest_api_v1_backtest__backtest_id__stream_get",
+        "parameters": [
+          {
+            "name": "backtest_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Backtest Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/backtest/{backtest_id}/simulation": {
+      "post": {
+        "tags": [
+          "backtest"
+        ],
+        "summary": "Submit Simulation",
+        "description": "Submit simulation stub — jqcli simulation wiring deferred.",
+        "operationId": "submit_simulation_api_v1_backtest__backtest_id__simulation_post",
+        "parameters": [
+          {
+            "name": "backtest_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Backtest Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BacktestSimulationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/backtest/{backtest_id}/abort": {
+      "post": {
+        "tags": [
+          "backtest"
+        ],
+        "summary": "Abort Backtest",
+        "description": "Abort a running backtest.",
+        "operationId": "abort_backtest_api_v1_backtest__backtest_id__abort_post",
+        "parameters": [
+          {
+            "name": "backtest_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Backtest Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BacktestAbortResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/threads": {
+      "get": {
+        "tags": [
+          "threads"
+        ],
+        "summary": "List Threads",
+        "description": "List threads for the current user.",
+        "operationId": "list_threads_api_v1_threads_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "threads"
+        ],
+        "summary": "Create Thread",
+        "description": "Create a new thread.\n\nAll fields are optional. If ``thread_id`` (or its ``threadId`` alias) is\nomitted, the service generates a UUID. The request body may also be empty\nor missing entirely.",
+        "operationId": "create_thread_api_v1_threads_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/CreateThreadRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/threads/{thread_id}": {
+      "get": {
+        "tags": [
+          "threads"
+        ],
+        "summary": "Get Thread",
+        "description": "Get thread by ID.",
+        "operationId": "get_thread_api_v1_threads__thread_id__get",
+        "parameters": [
+          {
+            "name": "thread_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Thread Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "threads"
+        ],
+        "summary": "Update Thread",
+        "description": "Update thread title.",
+        "operationId": "update_thread_api_v1_threads__thread_id__patch",
+        "parameters": [
+          {
+            "name": "thread_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Thread Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTitleRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "threads"
+        ],
+        "summary": "Delete Thread",
+        "description": "Soft delete a thread.",
+        "operationId": "delete_thread_api_v1_threads__thread_id__delete",
+        "parameters": [
+          {
+            "name": "thread_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Thread Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/threads/{thread_id}/runs": {
+      "get": {
+        "tags": [
+          "threads"
+        ],
+        "summary": "List Runs",
+        "description": "List all runs for a thread (owner-only).\n\nNon-owners see the same response as no-runs; we don't disclose other users' runs.",
+        "operationId": "list_runs_api_v1_threads__thread_id__runs_get",
+        "parameters": [
+          {
+            "name": "thread_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Thread Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/threads/{thread_id}/runs/{run_id}": {
+      "get": {
+        "tags": [
+          "threads"
+        ],
+        "summary": "Get Run",
+        "description": "Get a specific run by ID.",
+        "operationId": "get_run_api_v1_threads__thread_id__runs__run_id__get",
+        "parameters": [
+          {
+            "name": "thread_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Thread Id"
+            }
+          },
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/threads/{thread_id}/runs/stream": {
+      "post": {
+        "tags": [
+          "threads"
+        ],
+        "summary": "Stream Run",
+        "description": "Create a run and stream events via SSE.",
+        "operationId": "stream_run_api_v1_threads__thread_id__runs_stream_post",
+        "parameters": [
+          {
+            "name": "thread_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Thread Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/threads/{thread_id}/runs/{run_id}/cancel": {
+      "post": {
+        "tags": [
+          "threads"
+        ],
+        "summary": "Cancel Run",
+        "description": "Cancel a running run (owner-only).",
+        "operationId": "cancel_run_api_v1_threads__thread_id__runs__run_id__cancel_post",
+        "parameters": [
+          {
+            "name": "thread_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Thread Id"
+            }
+          },
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CancelResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/threads/{thread_id}/history": {
+      "get": {
+        "tags": [
+          "threads"
+        ],
+        "summary": "Get Thread History",
+        "description": "Legacy GET history — returns latest checkpoint messages.",
+        "operationId": "get_thread_history_api_v1_threads__thread_id__history_get",
+        "parameters": [
+          {
+            "name": "thread_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Thread Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Get Thread History Api V1 Threads  Thread Id  History Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "threads"
+        ],
+        "summary": "Post Thread History",
+        "description": "Return checkpoint history in LangGraph SDK ThreadState shape.",
+        "operationId": "post_thread_history_api_v1_threads__thread_id__history_post",
+        "parameters": [
+          {
+            "name": "thread_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Thread Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HistoryRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true
+                  },
+                  "title": "Response Post Thread History Api V1 Threads  Thread Id  History Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/threads/{thread_id}/state": {
+      "get": {
+        "tags": [
+          "threads"
+        ],
+        "summary": "Get Thread State",
+        "description": "Return latest thread state in LangGraph SDK shape.",
+        "operationId": "get_thread_state_api_v1_threads__thread_id__state_get",
+        "parameters": [
+          {
+            "name": "thread_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Thread Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Get Thread State Api V1 Threads  Thread Id  State Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "threads"
+        ],
+        "summary": "Post Thread State",
+        "description": "Update thread state values and return the new ThreadState snapshot.",
+        "operationId": "post_thread_state_api_v1_threads__thread_id__state_post",
+        "parameters": [
+          {
+            "name": "thread_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Thread Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StateUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Post Thread State Api V1 Threads  Thread Id  State Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/memory": {
+      "get": {
+        "tags": [
+          "memory"
+        ],
+        "summary": "Get Memory Context",
+        "description": "Get aggregated memory context for the current user.\n\nReturns all user memories and facts formatted for prompt injection.",
+        "operationId": "get_memory_context_api_memory_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryContextResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/memory/memories": {
+      "post": {
+        "tags": [
+          "memory"
+        ],
+        "summary": "Create Memory",
+        "description": "Create a new user memory.",
+        "operationId": "create_memory_api_memory_memories_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemoryCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserMemoryOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/memory/facts": {
+      "post": {
+        "tags": [
+          "memory"
+        ],
+        "summary": "Create Fact",
+        "description": "Create a new memory fact.",
+        "operationId": "create_fact_api_memory_facts_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FactCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryFactOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/memory/facts/{fact_id}": {
+      "delete": {
+        "tags": [
+          "memory"
+        ],
+        "summary": "Delete Fact",
+        "description": "Delete a memory fact.",
+        "operationId": "delete_fact_api_memory_facts__fact_id__delete",
+        "parameters": [
+          {
+            "name": "fact_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Fact Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/skills": {
+      "get": {
+        "tags": [
+          "skills"
+        ],
+        "summary": "List Skills",
+        "description": "List all registered skills.\n\nReturns all available skills that can be executed by the agent.",
+        "operationId": "list_skills_api_skills_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillListResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "skills"
+        ],
+        "summary": "Create Skill",
+        "description": "Register a new skill.\n\nCreates a new skill definition that can be executed by the agent.\n\nArgs:\n    body: Skill definition to register.\n\nReturns:\n    Created skill definition.",
+        "operationId": "create_skill_api_skills_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SkillCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/skills/{skill_name}": {
+      "get": {
+        "tags": [
+          "skills"
+        ],
+        "summary": "Get Skill",
+        "description": "Get skill details by name.\n\nArgs:\n    skill_name: Name of skill to retrieve.\n\nReturns:\n    Skill definition.\n\nRaises:\n    404: If skill not found.",
+        "operationId": "get_skill_api_skills__skill_name__get",
+        "parameters": [
+          {
+            "name": "skill_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Skill Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "skills"
+        ],
+        "summary": "Delete Skill",
+        "description": "Unregister a skill.\n\nRemoves a skill from the registry.\n\nArgs:\n    skill_name: Name of skill to remove.\n\nRaises:\n    404: If skill not found.",
+        "operationId": "delete_skill_api_skills__skill_name__delete",
+        "parameters": [
+          {
+            "name": "skill_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Skill Name"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "summary": "Health Check",
+        "description": "Health check endpoint.",
+        "operationId": "health_check_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Health Check Health Get"
+                }
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AuthResponse": {
+        "properties": {
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "title": "AuthResponse"
+      },
+      "BacktestAbortResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "success"
+        ],
+        "title": "BacktestAbortResponse"
+      },
+      "BacktestAuthStatusResponse": {
+        "properties": {
+          "is_authenticated": {
+            "type": "boolean",
+            "title": "Is Authenticated"
+          },
+          "username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Username"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": ""
+          },
+          "configured": {
+            "type": "boolean",
+            "title": "Configured",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "is_authenticated"
+        ],
+        "title": "BacktestAuthStatusResponse",
+        "description": "Auth-check status combining configured flag with credentials."
+      },
+      "BacktestMetricsResponse": {
+        "properties": {
+          "annual_return": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Annual Return"
+          },
+          "sharpe": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sharpe"
+          },
+          "max_drawdown": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Drawdown"
+          },
+          "volatility": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Volatility"
+          },
+          "win_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Win Rate"
+          },
+          "total_return": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Return"
+          },
+          "raw": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Raw"
+          }
+        },
+        "type": "object",
+        "title": "BacktestMetricsResponse"
+      },
+      "BacktestParamsInput": {
+        "properties": {
+          "start_date": {
+            "type": "string",
+            "title": "Start Date",
+            "default": "2020-01-01"
+          },
+          "end_date": {
+            "type": "string",
+            "title": "End Date",
+            "default": "2024-12-31"
+          },
+          "initial_capital": {
+            "type": "number",
+            "title": "Initial Capital",
+            "default": 100000.0
+          },
+          "frequency": {
+            "type": "string",
+            "title": "Frequency",
+            "default": "day"
+          },
+          "benchmark": {
+            "type": "string",
+            "title": "Benchmark",
+            "default": "000300.XSHG"
+          }
+        },
+        "type": "object",
+        "title": "BacktestParamsInput"
+      },
+      "BacktestResultResponse": {
+        "properties": {
+          "backtest_id": {
+            "type": "string",
+            "title": "Backtest Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "metrics": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BacktestMetricsResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "performance": {
+            "items": {
+              "$ref": "#/components/schemas/PerformancePointResponse"
+            },
+            "type": "array",
+            "title": "Performance"
+          },
+          "trades": {
+            "items": {
+              "$ref": "#/components/schemas/TradeDayGroupResponse"
+            },
+            "type": "array",
+            "title": "Trades"
+          },
+          "holdings": {
+            "items": {
+              "$ref": "#/components/schemas/HoldingDayGroupResponse"
+            },
+            "type": "array",
+            "title": "Holdings"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "backtest_id",
+          "status"
+        ],
+        "title": "BacktestResultResponse"
+      },
+      "BacktestSimulationResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": ""
+          },
+          "simulation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Simulation Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "default": "submitted"
+          }
+        },
+        "type": "object",
+        "required": [
+          "success"
+        ],
+        "title": "BacktestSimulationResponse",
+        "description": "Response for simulation submission."
+      },
+      "BacktestSubmitRequest": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "maxLength": 65536,
+            "title": "Code"
+          },
+          "thread_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Thread Id"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version",
+            "default": 1
+          },
+          "params": {
+            "$ref": "#/components/schemas/BacktestParamsInput"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "thread_id"
+        ],
+        "title": "BacktestSubmitRequest"
+      },
+      "BacktestSubmitResponse": {
+        "properties": {
+          "backtest_id": {
+            "type": "string",
+            "title": "Backtest Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "backtest_id"
+        ],
+        "title": "BacktestSubmitResponse"
+      },
+      "CancelResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "run_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Run Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "run_id"
+        ],
+        "title": "CancelResponse"
+      },
+      "ChangePasswordRequest": {
+        "properties": {
+          "old_password": {
+            "type": "string",
+            "title": "Old Password"
+          },
+          "new_password": {
+            "type": "string",
+            "title": "New Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "old_password",
+          "new_password"
+        ],
+        "title": "ChangePasswordRequest"
+      },
+      "CreateThreadRequest": {
+        "properties": {
+          "thread_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thread Id"
+          },
+          "threadId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Threadid"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "model_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Name"
+          }
+        },
+        "type": "object",
+        "title": "CreateThreadRequest",
+        "description": "Request body for creating a thread.\n\nAccepts both snake_case (``thread_id``, ``model_name``) and the LangGraph\nSDK camelCase alias (``threadId``). When both ``thread_id`` and\n``threadId`` are provided, ``threadId`` (SDK) wins to match SDK\nexpectations. If neither is given, the service generates a UUID."
+      },
+      "DisconnectMode": {
+        "type": "string",
+        "enum": [
+          "cancel",
+          "keep_alive"
+        ],
+        "title": "DisconnectMode"
+      },
+      "FactCreateRequest": {
+        "properties": {
+          "fact_type": {
+            "type": "string",
+            "title": "Fact Type",
+            "description": "Type of fact (preference, knowledge, plan, relationship)"
+          },
+          "content": {
+            "type": "string",
+            "maxLength": 4096,
+            "title": "Content",
+            "description": "Fact content"
+          },
+          "embedding": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Embedding",
+            "description": "Vector embedding for similarity"
+          }
+        },
+        "type": "object",
+        "required": [
+          "fact_type",
+          "content"
+        ],
+        "title": "FactCreateRequest",
+        "description": "Request to create a memory fact."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "HistoryRequest": {
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "maximum": 1000.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "default": 10
+          },
+          "before": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Before"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
+          },
+          "checkpoint": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checkpoint"
+          }
+        },
+        "type": "object",
+        "title": "HistoryRequest",
+        "description": "LangGraph SDK POST /history body."
+      },
+      "HoldingDayGroupResponse": {
+        "properties": {
+          "date": {
+            "type": "string",
+            "title": "Date"
+          },
+          "holdings": {
+            "items": {
+              "$ref": "#/components/schemas/HoldingRecordResponse"
+            },
+            "type": "array",
+            "title": "Holdings"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/HoldingDaySummaryResponse"
+          }
+        },
+        "type": "object",
+        "required": [
+          "date"
+        ],
+        "title": "HoldingDayGroupResponse"
+      },
+      "HoldingDaySummaryResponse": {
+        "properties": {
+          "total_assets": {
+            "type": "number",
+            "title": "Total Assets",
+            "default": 0
+          },
+          "cash": {
+            "type": "number",
+            "title": "Cash",
+            "default": 0
+          },
+          "total_market_value": {
+            "type": "number",
+            "title": "Total Market Value",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "title": "HoldingDaySummaryResponse"
+      },
+      "HoldingRecordResponse": {
+        "properties": {
+          "symbol": {
+            "type": "string",
+            "title": "Symbol",
+            "default": ""
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "default": ""
+          },
+          "quantity": {
+            "type": "number",
+            "title": "Quantity",
+            "default": 0
+          },
+          "avg_cost": {
+            "type": "number",
+            "title": "Avg Cost",
+            "default": 0
+          },
+          "close": {
+            "type": "number",
+            "title": "Close",
+            "default": 0
+          },
+          "market_value": {
+            "type": "number",
+            "title": "Market Value",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "title": "HoldingRecordResponse"
+      },
+      "LoginRequest": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email"
+          },
+          "password": {
+            "type": "string",
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "LoginRequest"
+      },
+      "MemoryContextResponse": {
+        "properties": {
+          "memories": {
+            "items": {
+              "$ref": "#/components/schemas/UserMemoryOut"
+            },
+            "type": "array",
+            "title": "Memories"
+          },
+          "facts": {
+            "items": {
+              "$ref": "#/components/schemas/MemoryFactOut"
+            },
+            "type": "array",
+            "title": "Facts"
+          },
+          "context_string": {
+            "type": "string",
+            "title": "Context String",
+            "description": "Formatted context string for prompts"
+          }
+        },
+        "type": "object",
+        "required": [
+          "memories",
+          "facts",
+          "context_string"
+        ],
+        "title": "MemoryContextResponse",
+        "description": "Response containing user memory context."
+      },
+      "MemoryCreateRequest": {
+        "properties": {
+          "memory_type": {
+            "type": "string",
+            "title": "Memory Type",
+            "description": "Type of memory (preference, fact, context, goal)"
+          },
+          "content": {
+            "type": "string",
+            "maxLength": 4096,
+            "title": "Content",
+            "description": "Memory content"
+          },
+          "confidence": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "description": "Confidence score 0-1",
+            "default": 1.0
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source",
+            "description": "Source of memory (chat, profile, explicit)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "memory_type",
+          "content"
+        ],
+        "title": "MemoryCreateRequest",
+        "description": "Request to create a user memory."
+      },
+      "MemoryFactOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "User Id"
+          },
+          "fact_type": {
+            "type": "string",
+            "title": "Fact Type"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content"
+          },
+          "embedding": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Embedding"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "user_id",
+          "fact_type",
+          "content",
+          "embedding",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "MemoryFactOut",
+        "description": "Response DTO for a memory fact record."
+      },
+      "MultitaskStrategy": {
+        "type": "string",
+        "enum": [
+          "reject",
+          "interrupt",
+          "rollback",
+          "enqueue"
+        ],
+        "title": "MultitaskStrategy"
+      },
+      "PerformancePointResponse": {
+        "properties": {
+          "date": {
+            "type": "string",
+            "title": "Date"
+          },
+          "strategy": {
+            "type": "number",
+            "title": "Strategy",
+            "default": 0
+          },
+          "relative": {
+            "type": "number",
+            "title": "Relative",
+            "default": 0
+          },
+          "benchmark": {
+            "type": "number",
+            "title": "Benchmark",
+            "default": 0
+          },
+          "position_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Position Pct"
+          }
+        },
+        "type": "object",
+        "required": [
+          "date"
+        ],
+        "title": "PerformancePointResponse"
+      },
+      "RegisterRequest": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email"
+          },
+          "password": {
+            "type": "string",
+            "title": "Password"
+          },
+          "full_name": {
+            "type": "string",
+            "title": "Full Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email",
+          "password",
+          "full_name"
+        ],
+        "title": "RegisterRequest"
+      },
+      "RunCreateRequest": {
+        "properties": {
+          "input": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Input",
+            "description": "包含 messages 数组的输入"
+          },
+          "config": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Config"
+          },
+          "context": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Context"
+          },
+          "streamMode": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Streammode"
+          },
+          "onDisconnect": {
+            "$ref": "#/components/schemas/DisconnectMode",
+            "default": "cancel"
+          },
+          "multitaskStrategy": {
+            "$ref": "#/components/schemas/MultitaskStrategy",
+            "default": "reject"
+          }
+        },
+        "type": "object",
+        "title": "RunCreateRequest"
+      },
+      "RunListResponse": {
+        "properties": {
+          "runs": {
+            "items": {
+              "$ref": "#/components/schemas/RunResponse"
+            },
+            "type": "array",
+            "title": "Runs"
+          }
+        },
+        "type": "object",
+        "required": [
+          "runs"
+        ],
+        "title": "RunListResponse"
+      },
+      "RunResponse": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Run Id"
+          },
+          "thread_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Thread Id"
+          },
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "User Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "model_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Name"
+          },
+          "assistant_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assistant Id"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metadata"
+          },
+          "on_disconnect": {
+            "$ref": "#/components/schemas/DisconnectMode"
+          },
+          "multitask_strategy": {
+            "$ref": "#/components/schemas/MultitaskStrategy"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "thread_id",
+          "user_id",
+          "status",
+          "on_disconnect",
+          "multitask_strategy",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "RunResponse"
+      },
+      "SkillCreateRequest": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Name",
+            "description": "Unique skill name"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 1024,
+            "minLength": 1,
+            "title": "Description",
+            "description": "Human-readable description"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version",
+            "description": "Semantic version",
+            "default": "1.0.0"
+          },
+          "parameters": {
+            "items": {
+              "$ref": "#/components/schemas/SkillParameter"
+            },
+            "type": "array",
+            "title": "Parameters",
+            "description": "Input parameters"
+          },
+          "prompt_template": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Prompt Template",
+            "description": "Prompt template for LLM"
+          },
+          "tools": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tools",
+            "description": "Required tool names"
+          },
+          "max_iterations": {
+            "type": "integer",
+            "maximum": 50.0,
+            "minimum": 1.0,
+            "title": "Max Iterations",
+            "description": "Max agentic iterations",
+            "default": 5
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "description",
+          "prompt_template"
+        ],
+        "title": "SkillCreateRequest",
+        "description": "Request to register a new skill."
+      },
+      "SkillListResponse": {
+        "properties": {
+          "skills": {
+            "items": {
+              "$ref": "#/components/schemas/SkillResponse"
+            },
+            "type": "array",
+            "title": "Skills"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "skills",
+          "total"
+        ],
+        "title": "SkillListResponse",
+        "description": "Response containing list of skills."
+      },
+      "SkillParameter": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Parameter name"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "description": "Parameter description"
+          },
+          "type": {
+            "type": "string",
+            "title": "Type",
+            "description": "Parameter type (string, number, boolean, object)"
+          },
+          "required": {
+            "type": "boolean",
+            "title": "Required",
+            "description": "Whether parameter is required",
+            "default": false
+          },
+          "default": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default",
+            "description": "Default value if optional"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "description",
+          "type"
+        ],
+        "title": "SkillParameter",
+        "description": "Definition of a skill parameter."
+      },
+      "SkillResponse": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "parameters": {
+            "items": {
+              "$ref": "#/components/schemas/SkillParameter"
+            },
+            "type": "array",
+            "title": "Parameters"
+          },
+          "prompt_template": {
+            "type": "string",
+            "title": "Prompt Template"
+          },
+          "tools": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tools"
+          },
+          "max_iterations": {
+            "type": "integer",
+            "title": "Max Iterations"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "description",
+          "version",
+          "parameters",
+          "prompt_template",
+          "tools",
+          "max_iterations"
+        ],
+        "title": "SkillResponse",
+        "description": "Response containing skill definition."
+      },
+      "StateUpdateRequest": {
+        "properties": {
+          "values": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Values"
+          },
+          "checkpoint": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checkpoint"
+          },
+          "checkpointId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checkpointid"
+          },
+          "asNode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asnode"
+          }
+        },
+        "type": "object",
+        "title": "StateUpdateRequest",
+        "description": "LangGraph SDK POST /state body."
+      },
+      "ThreadListResponse": {
+        "properties": {
+          "threads": {
+            "items": {
+              "$ref": "#/components/schemas/ThreadResponse"
+            },
+            "type": "array",
+            "title": "Threads"
+          }
+        },
+        "type": "object",
+        "required": [
+          "threads"
+        ],
+        "title": "ThreadListResponse"
+      },
+      "ThreadResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "User Id"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "model_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Name"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
+          "thread_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Thread Id",
+            "description": "LangGraph SDK expects ``thread_id`` alongside legacy ``id``.",
+            "readOnly": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "user_id",
+          "thread_id"
+        ],
+        "title": "ThreadResponse"
+      },
+      "TradeDayGroupResponse": {
+        "properties": {
+          "date": {
+            "type": "string",
+            "title": "Date"
+          },
+          "trades": {
+            "items": {
+              "$ref": "#/components/schemas/TradeRecordResponse"
+            },
+            "type": "array",
+            "title": "Trades"
+          }
+        },
+        "type": "object",
+        "required": [
+          "date"
+        ],
+        "title": "TradeDayGroupResponse"
+      },
+      "TradeRecordResponse": {
+        "properties": {
+          "symbol": {
+            "type": "string",
+            "title": "Symbol",
+            "default": ""
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "default": ""
+          },
+          "side": {
+            "type": "string",
+            "title": "Side",
+            "default": ""
+          },
+          "quantity": {
+            "type": "number",
+            "title": "Quantity",
+            "default": 0
+          },
+          "price": {
+            "type": "number",
+            "title": "Price",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "title": "TradeRecordResponse"
+      },
+      "UpdateTitleRequest": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title"
+        ],
+        "title": "UpdateTitleRequest"
+      },
+      "UserDTO": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Username"
+          },
+          "full_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Full Name"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active",
+            "default": true
+          },
+          "is_superuser": {
+            "type": "boolean",
+            "title": "Is Superuser",
+            "default": false
+          },
+          "token_version": {
+            "type": "integer",
+            "title": "Token Version",
+            "default": 0
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "email",
+          "created_at"
+        ],
+        "title": "UserDTO",
+        "description": "User data transfer object."
+      },
+      "UserMemoryOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "User Id"
+          },
+          "memory_type": {
+            "type": "string",
+            "title": "Memory Type"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content"
+          },
+          "confidence": {
+            "type": "number",
+            "title": "Confidence"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "user_id",
+          "memory_type",
+          "content",
+          "confidence",
+          "source",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "UserMemoryOut",
+        "description": "Response DTO for a user memory record."
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    },
+    "securitySchemes": {
+      "cookieAuth": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "access_token",
+        "description": "JWT issued by /api/v1/auth/login, set as the access_token cookie. Configure the value in Postman's Cookies modal for the host above."
+      }
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8000",
+      "description": "Local dev server"
+    }
+  ],
+  "security": [
+    {
+      "cookieAuth": []
+    }
+  ]
+}

@@ -12,8 +12,6 @@ from gunicorn.app.base import BaseApplication
 from gunicorn.util import import_app
 from uvicorn.workers import UvicornWorker as BaseUvicornWorker
 
-from app.app_logging import patch_gunicorn_logger, patch_uvicorn_logger
-
 try:
     import uvloop
 except ImportError:
@@ -25,11 +23,6 @@ class UvicornWorker(BaseUvicornWorker):
 
     Uses uvloop as the event loop and httptools as the HTTP parser.
     """
-
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        super().__init__(*args, **kwargs)
-        patch_uvicorn_logger()
-
 
 class GunicornApplication(BaseApplication):
     """Custom gunicorn application with uvicorn workers.
@@ -67,7 +60,6 @@ class GunicornApplication(BaseApplication):
         }
         self.app = app
         super().__init__()
-        patch_gunicorn_logger()
 
     def load_config(self) -> None:
         """Load gunicorn configuration.

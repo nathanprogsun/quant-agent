@@ -81,7 +81,9 @@ async def test_create_or_reject_interrupt(manager: RunManager) -> None:
     r1 = await manager.create_or_reject(thread_id, user_id)
     r2 = await manager.create_or_reject(thread_id, user_id, multitask_strategy="interrupt")
 
-    assert (await manager.get(r1.run_id)).status == RunStatus.INTERRUPTED
+    interrupted = await manager.get(r1.run_id)
+    assert interrupted is not None
+    assert interrupted.status == RunStatus.INTERRUPTED
     assert r2.status == RunStatus.PENDING
 
 
@@ -104,6 +106,7 @@ async def test_set_status(manager: RunManager) -> None:
     await manager.set_status(record.run_id, RunStatus.RUNNING)
 
     updated = await manager.get(record.run_id)
+    assert updated is not None
     assert updated.status == RunStatus.RUNNING
 
 

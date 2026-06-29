@@ -1,27 +1,33 @@
 """Memory middleware - injects user memory context before model calls."""
-
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+from langchain_core.messages import HumanMessage
 
 from app.core.chat.middlewares.base import AgentMiddleware
 from app.db.dao.memory_repository import MemoryRepository
-from app.db.dbengine.core import DatabaseEngine
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
 
 logger = logging.getLogger(__name__)
 
-# Database engine reference - set during app initialization
-_db_engine: DatabaseEngine | None = None
+# Session factory reference - set during app initialization
+_session_factory: async_sessionmaker[AsyncSession] | None = None
 
 
-def set_memory_middleware_engine(engine: DatabaseEngine) -> None:
-    """Set the database engine for memory middleware.
+def set_memory_middleware_session_factory(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """Set the session factory for memory middleware.
 
-    Called during app initialization to inject the engine.
+    Called during app initialization to inject the factory.
     """
-    global _db_engine
-    _db_engine = engine
+    global _session_factory
+    _session_factory = session_factory
 
 
 class MemoryMiddleware(AgentMiddleware):
@@ -31,14 +37,16 @@ class MemoryMiddleware(AgentMiddleware):
     injects it into the state for the LLM to consume.
     """
 
-    async def before_model(self, state: dict[str, Any], config: dict[str, Any]) -> dict[str, Any] | None:
+    async def before_model(
+        self, state: dict[str, Any], config: dict[str, Any]
+    ) -> dict[str, Any] | None:
         """Inject memory context into messages.
 
         Retrieves user_id from config and fetches memory context,
         then injects a system message with the memory context.
         """
-        if _db_engine is None:
-            logger.warning("Memory middleware: no database engine configured")
+        if _session_factory is None:
+            logger.warning("Memory middleware: no session factory configured")
             return None
 
         configurable = config.get("configurable", {})
@@ -49,26 +57,37 @@ class MemoryMiddleware(AgentMiddleware):
             return None
 
         try:
-            repo = MemoryRepository(engine=_db_engine)
-            memories = await repo.find_memories_by_user(user_id)
-            facts = await repo.find_facts_by_user(user_id)
+            # Extract plain data inside session to avoid DetachedInstanceError.
+            async with _session_factory() as session:
+                repo = MemoryRepository(session=session)
+                memories = await repo.find_memories_by_user(user_id)
+                facts = await repo.find_facts_by_user(user_id)
 
-            if not memories and not facts:
+                memory_data: list[tuple[str, float, str | None]] = [
+                    (m.content, m.confidence, m.source) for m in memories
+                ]
+                fact_data: list[str] = [f.content for f in facts]
+
+            if not memory_data and not fact_data:
                 return None
 
-            # Build context string
+            # Build context string (no ORM access beyond this point)
             sections: list[str] = []
-            if memories:
+            if memory_data:
                 sections.append("[User Memories]")
-                for mem in memories:
-                    confidence_str = f" (confidence: {mem.confidence:.0%})" if mem.confidence < 1.0 else ""
-                    source_str = f" [source: {mem.source}]" if mem.source else ""
-                    sections.append(f"- {mem.content}{confidence_str}{source_str}")
+                for content, confidence, source in memory_data:
+                    confidence_str = (
+                        f" (confidence: {confidence:.0%})"
+                        if confidence < 1.0
+                        else ""
+                    )
+                    source_str = f" [source: {source}]" if source else ""
+                    sections.append(f"- {content}{confidence_str}{source_str}")
 
-            if facts:
+            if fact_data:
                 sections.append("[User Facts]")
-                for fact in facts:
-                    sections.append(f"- {fact.content}")
+                for content in fact_data:
+                    sections.append(f"- {content}")
 
             context_string = "\n".join(sections)
 
@@ -78,7 +97,10 @@ class MemoryMiddleware(AgentMiddleware):
                 return None
 
             # Check if memory context already injected
-            if any("[User Memories]" in str(m.content) or "[User Facts]" in str(m.content) for m in messages):
+            if any(
+                "[User Memories]" in str(m.content) or "[User Facts]" in str(m.content)
+                for m in messages
+            ):
                 return None
 
             memory_context = (
@@ -86,10 +108,12 @@ class MemoryMiddleware(AgentMiddleware):
                 "Use this context to personalize responses based on the user's known preferences and facts."
             )
 
-            from langchain_core.messages import HumanMessage
-
             # Inject after first system message if present, else at start
-            if len(messages) > 0 and hasattr(messages[0], "type") and messages[0].type == "system":
+            if (
+                len(messages) > 0
+                and hasattr(messages[0], "type")
+                and messages[0].type == "system"
+            ):
                 # Insert after system message
                 messages.insert(1, HumanMessage(content=memory_context))
             else:

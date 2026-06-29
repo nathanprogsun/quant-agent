@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import pytest
-from langgraph.checkpoint.base import Checkpoint, RunnableConfig
+from langgraph.checkpoint.base import (  # type: ignore[attr-defined]
+    Checkpoint,
+    RunnableConfig,
+)
 
 from app.app_context.app_context import AppContext
 

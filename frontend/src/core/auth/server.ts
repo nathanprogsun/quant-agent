@@ -16,30 +16,6 @@ export async function getServerSideUser(): Promise<AuthResult> {
   const sessionCookie = cookieStore.get("access_token");
 
   if (!sessionCookie?.value) {
-    try {
-      const backendUrl = process.env.BACKEND_URL ?? "http://localhost:8000";
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), SSR_TIMEOUT_MS);
-
-      const statusResponse = await fetch(
-        `${backendUrl}/api/v1/auth/setup-status`,
-        {
-          signal: controller.signal,
-          cache: "no-store",
-        }
-      );
-
-      clearTimeout(timeoutId);
-
-      if (statusResponse.ok) {
-        const statusData = await statusResponse.json();
-        if (statusData.needs_setup) {
-          return { status: "needs_setup" };
-        }
-      }
-    } catch {
-      // Fall through to unauthenticated if status check fails
-    }
     return { status: "unauthenticated" };
   }
 

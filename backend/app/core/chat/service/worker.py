@@ -7,12 +7,14 @@ import logging
 from typing import Any
 from uuid import UUID
 
-from langchain_core.runnables import RunnableConfig
+from langchain_core.runnables import Runnable, RunnableConfig
 
 from app.common.runs.manager import RunManager, RunRecord
 from app.common.runs.schemas import RunStatus
 from app.common.stream_bridge.base import StreamBridge
 from app.core.chat.service.stream_modes import resolve_langgraph_stream_modes
+from app.core.chat.service.thread_service import ThreadService
+from app.core.chat.service.types import GraphInput
 
 logger = logging.getLogger(__name__)
 
@@ -25,11 +27,11 @@ async def run_agent(
     run_manager: RunManager,
     record: RunRecord,
     *,
-    agent: Any,
-    graph_input: dict[str, Any],
+    agent: Runnable[Any, Any],
+    graph_input: GraphInput,
     config: RunnableConfig,
     stream_modes: list[str] | None = None,
-    thread_service: Any | None = None,
+    thread_service: ThreadService | None = None,
     user_id: UUID | None = None,
 ) -> None:
     """Execute agent in background, publishing events to StreamBridge.
@@ -47,6 +49,9 @@ async def run_agent(
     requested_modes = stream_modes
     langgraph_modes = resolve_langgraph_stream_modes(requested_modes)
 
+    # Convert GraphInput to dict for LangGraph internal use
+    payload = graph_input.model_dump()
+
     try:
         # 1. Set status
         await run_manager.set_status(run_id, RunStatus.RUNNING)
@@ -63,7 +68,7 @@ async def run_agent(
 
         # 3. Stream execution
         async for chunk in agent.astream(
-            graph_input,
+            payload,
             config=config,
             stream_mode=langgraph_modes,
         ):
@@ -111,7 +116,7 @@ async def run_agent(
 async def _sync_thread_title_from_state(
     agent: Any,
     config: RunnableConfig,
-    thread_service: Any | None,
+    thread_service: ThreadService | None,
     thread_id: UUID,
     user_id: UUID | None,
 ) -> None:
@@ -127,7 +132,9 @@ async def _sync_thread_title_from_state(
         state = await agent.aget_state(config)
         title = (state.values or {}).get("title")
         if isinstance(title, str) and title.strip():
-            await thread_service.update_title(thread_id, user_id, title.strip())
+            await thread_service.update_title_or_raise(
+                thread_id, user_id, title.strip()
+            )
     except Exception:
         logger.exception("Failed to sync title for thread %s", thread_id)
 

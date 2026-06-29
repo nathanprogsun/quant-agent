@@ -5,21 +5,27 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from typing import Any
 from uuid import UUID
 
 from fastapi import HTTPException, Request
 from langchain_core.messages import convert_to_messages
 from langchain_core.messages.base import BaseMessage
-from langchain_core.runnables import RunnableConfig
+from langchain_core.runnables import Runnable, RunnableConfig
+from langgraph.checkpoint.base import BaseCheckpointSaver
 
-from app.common.runs.manager import ConflictError, RunManager
+from app.common.runs.manager import ConflictError, RunManager, RunRecord
 from app.common.runs.schemas import DisconnectMode
 from app.common.stream_bridge.base import StreamBridge
 from app.core.chat.service.stream_modes import normalize_request_stream_modes
 from app.core.chat.service.thread_service import ThreadService
+from app.core.chat.service.types import GraphInput
 from app.core.chat.service.worker import run_agent
+from app.web.api.thread.schema import (
+    RunCreateRequest,
+    RunEventPayload,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +47,12 @@ MAX_MESSAGE_LENGTH = 32768  # 32KB per message
 ALLOWED_ROLES = frozenset({"user", "assistant", "system", "tool"})
 
 
-def format_sse(event: str, data: Any, *, event_id: str | None = None) -> str:
+def format_sse(
+    event: str,
+    data: RunEventPayload | dict[str, Any] | None,
+    *,
+    event_id: str | None = None,
+) -> str:
     """Format a single SSE frame."""
     lines = [f"event: {event}"]
     data_str = json.dumps(data, ensure_ascii=False, default=str) if data is not None else "null"
@@ -151,12 +162,12 @@ async def start_run(
     bridge: StreamBridge,
     run_manager: RunManager,
     thread_service: ThreadService,
-    checkpointer: Any,
-    body: Any,
+    checkpointer: BaseCheckpointSaver[Any],
+    body: RunCreateRequest,
     thread_id: UUID,
     request: Request,
-    agent_factory: Any,
-) -> Any:
+    agent_factory: Callable[..., Runnable[Any, Any]],
+) -> RunRecord:
     """Create and start a run.
 
     Flow:
@@ -179,38 +190,36 @@ async def start_run(
             multitask_strategy=getattr(body, "multitask_strategy", "reject"),
             on_disconnect=DisconnectMode(getattr(body, "on_disconnect", "cancel")),
         )
-    except ConflictError as e:
-        raise HTTPException(status_code=409, detail=str(e))
+    except ConflictError:
+        raise
 
-    # 3. Ensure thread exists
-    await thread_service.create(
+    # 3. Normalize input
+    raw_input = getattr(body, "input", {"messages": []})
+    normalized_input = normalize_input(raw_input)
+    graph_input = GraphInput.from_langchain_messages(
+        normalized_input.get("messages", []),
         thread_id=thread_id,
         user_id=request.state.current_user_id,
-        model_name=model_name,
     )
 
-    # 4. Normalize input
-    raw_input = getattr(body, "input", {"messages": []})
-    graph_input = normalize_input(raw_input)
-
-    # 5. Build config
+    # 4. Build config
     request_config = getattr(body, "config", {}) or {}
     metadata = getattr(body, "metadata", {}) or {}
     config = build_run_config(thread_id, request_config, metadata)
 
-    # 6. Merge context
+    # 5. Merge context
     config = merge_run_context_overrides(config, context)
 
-    # 7. Inject user_id
+    # 6. Inject user_id
     configurable = dict(config.get("configurable", {}))
     configurable["user_id"] = request.state.current_user_id
     config = RunnableConfig(configurable=configurable, metadata=config.get("metadata") or {})
 
-    # 8. Inject checkpointer
+    # 7. Inject checkpointer
     configurable["checkpointer"] = checkpointer
     config = RunnableConfig(configurable=configurable, metadata=config.get("metadata") or {})
 
-    # 9. Build agent and start background task
+    # 8. Build agent and start background task
     agent = agent_factory(config=config)
 
     stream_modes = normalize_request_stream_modes(getattr(body, "stream_mode", None))
@@ -236,7 +245,7 @@ async def start_run(
 
 async def sse_consumer(
     bridge: StreamBridge,
-    record: Any,
+    record: RunRecord,
     request: Request,
     run_manager: RunManager,
 ) -> AsyncIterator[str]:

@@ -1,0 +1,10 @@
+{
+  "include": ["app", "tests", "packages", "scripts"],
+  "exclude": ["**/__pycache__", "**/.venv", "**/node_modules", "data", "eval"],
+  "extraPaths": [".", "packages"],
+  "venvPath": ".",
+  "venv": ".venv",
+  "pythonVersion": "3.13",
+  "typeCheckingMode": "basic",
+  "reportMissingImports": "none"
+}

@@ -5,9 +5,10 @@ Configuration is loaded from environment variables and .env files.
 
 from __future__ import annotations
 
+from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, SecretStr, model_validator
+from pydantic import AliasChoices, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -39,72 +40,7 @@ class Settings(BaseSettings):
     )
     db_backend: Literal["memory", "sqlite", "postgres"] = "sqlite"
     db_echo: bool = Field(default=False, description="Echo SQL to logs")
-    db_pool_size: int = Field(default=5, description="Connection pool size")
-    db_max_overflow: int = Field(default=10, description="Max overflow connections")
-    db_conn_prewarm: bool = Field(
-        default=False, description="Pre-warm database connection pool at startup"
-    )
     db_sqlite_dir: str = Field(default="./data", description="SQLite database directory")
-
-    # ==================== Redis ====================
-    # NOTE: Uncomment and configure if enable_redis is true
-    # redis_host: str = "localhost"
-    # redis_port: int = 6379
-    # redis_user: str | None = None
-    # redis_pass: str | None = None
-    # redis_base: int | None = None
-    # redis_db: int = 0
-    # redis_url: str = Field(default="redis://localhost:6379/0", description="Redis connection URL")
-
-    # ==================== Kafka / MSK ====================
-    # NOTE: Uncomment and configure if enable_kafka is true
-    # kafka_bootstrap_servers: str = Field(
-    #     default="localhost:9092",
-    #     description="Kafka bootstrap servers (comma-separated for MSK)"
-    # )
-    # kafka_client_id: str = "backend"
-    # kafka_group_id: str = "backend-consumer-group"
-    # kafka_auto_offset_reset: str = "earliest"
-    # kafka_enable_auto_commit: bool = True
-    # kafka_security_protocol: str = "PLAINTEXT"  # or "SASL_SSL" for MSK
-    # kafka_sasl_mechanism: str = "OAUTHBEARER"  # or "PLAIN"
-    # kafka_sasl_username: str | None = None
-    # kafka_sasl_password: str | None = None
-    # kafka_ssl_cafile: str | None = None
-    # kafka_ssl_certfile: str | None = None
-    # kafka_ssl_keyfile: str | None = None
-
-    # ==================== Temporal ====================
-    # NOTE: Uncomment and configure if enable_temporal is true
-    # temporal_host: str = "localhost"
-    # temporal_port: int = 7233
-    # temporal_namespace: str = "default"
-    # temporal_task_queue: str = "backend-tasks"
-    # temporal_tls_cert_path: str | None = None
-    # temporal_tls_key_path: str | None = None
-    # temporal_tls_ca_path: str | None = None
-
-    # ==================== AWS S3 ====================
-    # NOTE: Uncomment and configure for S3 integration
-    # aws_access_key_id: str | None = None
-    # aws_secret_access_key: str | None = None
-    # aws_region: str = "us-east-1"
-    # aws_s3_bucket: str = "backend-data"
-    # aws_s3_endpoint_url: str | None = None  # For LocalStack or custom S3-compatible storage
-    # aws_s3_presigned_expiry: int = 3600  # seconds
-
-    # ==================== OAuth / Auth ====================
-    # NOTE: Uncomment and configure if enable_oauth is true
-    # oauth_google_client_id: str | None = None
-    # oauth_google_client_secret: str | None = None
-    # oauth_google_redirect_uri: str = "http://localhost:8000/auth/google/callback"
-    # oauth_github_client_id: str | None = None
-    # oauth_github_client_secret: str | None = None
-    # oauth_github_redirect_uri: str = "http://localhost:8000/auth/github/callback"
-    # oauth_auth0_domain: str | None = None
-    # oauth_auth0_client_id: str | None = None
-    # oauth_auth0_client_secret: str | None = None
-    # oauth_auth0_audience: str | None = None
 
     # ==================== JWT / Auth ====================
     jwt_secret_key: SecretStr = SecretStr("changeme-in-production")
@@ -112,29 +48,6 @@ class Settings(BaseSettings):
     jwt_expire_minutes: int = 60 * 24 * 7  # 1 week
     jwt_issuer: str = "http://localhost"
     jwt_audience: str = "http://localhost"
-
-    @model_validator(mode="after")
-    def validate_settings(self) -> Settings:
-        if self.environment == "production":
-            if self.jwt_secret_key.get_secret_value() == "changeme-in-production":
-                raise ValueError(
-                    "JWT_SECRET_KEY must be set in production. "
-                    "Set the JWT_SECRET_KEY environment variable with a secure random value."
-                )
-            if self.session_secret_key.get_secret_value() == "changeme-in-production":
-                raise ValueError(
-                    "SESSION_SECRET_KEY must be set in production. "
-                    "Set the SESSION_SECRET_KEY environment variable with a secure random value."
-                )
-        elif self.jwt_secret_key.get_secret_value() == "changeme-in-production":
-            import warnings
-
-            warnings.warn(
-                "JWT secret key is set to the insecure default 'changeme-in-production'. "
-                "Change it via the JWT_SECRET_KEY env var for security.",
-                stacklevel=2,
-            )
-        return self
 
     # ==================== Session ====================
     session_secret_key: SecretStr = Field(
@@ -154,38 +67,49 @@ class Settings(BaseSettings):
     cors_allow_methods: list[str] = ["*"]
     cors_allow_headers: list[str] = ["*"]
 
-    # ==================== OpenTelemetry (optional) ====================
-    opentelemetry_endpoint: str | None = None
-    opentelemetry_service_name: str = "backend"
-
-    # ==================== Sentry (optional) ====================
-    sentry_dsn: str | None = None
-    sentry_traces_sample_rate: float = 0.1
-    sentry_profiles_sample_rate: float = 0.1
-
-    # ==================== Datadog (optional) ====================
-    datadog_on: bool = False
-    datadog_agent_host: str = "localhost"
-    datadog_agent_port: int = 8125
-
-    # ==================== Task Queue (Celery-like) ====================
-    # NOTE: Uncomment and configure for task queue support
-    # task_queue_broker_url: str = "redis://localhost:6379/0"
-    # task_queue_result_backend: str = "redis://localhost:6379/1"
-    # task_queue_default_queue: str = "default"
-    # task_queue_task_serializer: str = "json"
-    # task_queue_result_serializer: str = "json"
-    # task_queue_accept_content: list[str] = ["json"]
-    # task_queue_timezone: str = "UTC"
-    # task_queue_enable_utc: bool = True
-
-    # ==================== Thread Pools ====================
-    default_main_thread_pool_size: int = 40
-
     # ==================== LLM ====================
-    openai_api_key: SecretStr = Field(default="", validation_alias="OPENAI_API_KEY")
-    openai_base_url: str = Field(default="https://api.openai.com/v1", validation_alias="OPENAI_BASE_URL")
+    openai_api_key: SecretStr = Field(default=SecretStr(""), validation_alias="OPENAI_API_KEY")
+    openai_base_url: str = Field(
+        default="https://api.openai.com/v1", validation_alias="OPENAI_BASE_URL"
+    )
     model: str = Field(default="gpt-4o-mini", validation_alias="MODEL")
+
+    # ==================== jq_kb embedding (HTTP provider) ====================
+    # Preferred: JQKB_* (provider-agnostic). Legacy aliases: OPENAI_*.
+    jq_kb_embedding_api_key: SecretStr = Field(
+        default=SecretStr(""),
+        validation_alias=AliasChoices("JQKB_EMBEDDING_API_KEY", "OPENAI_EMBEDDING_API_KEY"),
+    )
+    jq_kb_embedding_base_url: str = Field(
+        default="",
+        validation_alias=AliasChoices("JQKB_EMBEDDING_BASE_URL", "OPENAI_EMBEDDING_BASE_URL"),
+    )
+    jq_kb_embedding_model: str = Field(
+        default="",
+        validation_alias=AliasChoices("JQKB_EMBEDDING_MODEL", "OPENAI_EMBEDDING_MODEL"),
+    )
+    jq_kb_embedding_max_chars: int = Field(
+        default=6000,
+        validation_alias=AliasChoices("JQKB_EMBEDDING_MAX_CHARS", "OPENAI_EMBEDDING_MAX_CHARS"),
+    )
+    jq_kb_code_chunk_max_chars: int = Field(
+        default=3000,
+        validation_alias=AliasChoices("JQKB_CODE_CHUNK_MAX_CHARS", "OPENAI_CODE_CHUNK_MAX_CHARS"),
+    )
+
+    # ==================== jq_kb rerank (cross-encoder) ====================
+    jq_kb_rerank_api_key: SecretStr = Field(
+        default=SecretStr(""),
+        validation_alias=AliasChoices("JQKB_RERANK_API_KEY", "OPENAI_RERANK_API_KEY"),
+    )
+    jq_kb_rerank_base_url: str = Field(
+        default="",
+        validation_alias=AliasChoices("JQKB_RERANK_BASE_URL", "OPENAI_RERANK_BASE_URL"),
+    )
+    jq_kb_rerank_model: str = Field(
+        default="",
+        validation_alias=AliasChoices("JQKB_RERANK_MODEL", "OPENAI_RERANK_MODEL"),
+    )
 
     # ==================== Checkpointer ====================
     checkpointer_backend: Literal["memory", "sqlite", "postgres"] = "sqlite"
@@ -216,32 +140,17 @@ class Settings(BaseSettings):
     )
 
 
-# Global settings instance
-_settings: Settings | None = None
-
-
+@lru_cache
 def get_settings() -> Settings:
-    """Get or create global settings instance.
+    return Settings()
 
-    Returns:
-        Settings singleton.
+
+def reload_settings() -> None:
+    """Clear the lru_cache so the next get_settings() call rebuilds it.
+
+    Primarily used by tests to pick up env-var changes between cases.
     """
-    global _settings
-    if _settings is None:
-        _settings = Settings()
-    return _settings
+    get_settings.cache_clear()
 
 
-def reload_settings() -> Settings:
-    """Reload settings from environment (useful for testing).
-
-    Returns:
-        New Settings instance.
-    """
-    global _settings
-    _settings = Settings()
-    return _settings
-
-
-# Convenience accessor
 settings = get_settings()

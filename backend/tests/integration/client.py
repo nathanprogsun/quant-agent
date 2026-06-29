@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, cast
 
 from httpx import AsyncClient
 
@@ -26,7 +26,7 @@ class APITestClient:
     Use get_raw() when you need to check status code without raising.
     """
 
-    def __init__(self, client: AsyncClient):
+    def __init__(self, client: AsyncClient) -> None:
         self._client = client
 
     async def post(self, path: str, **kwargs: Any) -> dict[str, Any]:
@@ -34,35 +34,35 @@ class APITestClient:
         resp = await self._client.post(path, **kwargs)
         if not resp.is_success:
             raise APITestError(resp.status_code, resp.json())
-        return resp.json()
+        return cast(dict[str, Any], resp.json())
 
     async def get(self, path: str, **kwargs: Any) -> dict[str, Any]:
         """GET request, raises on error."""
         resp = await self._client.get(path, **kwargs)
         if not resp.is_success:
             raise APITestError(resp.status_code, resp.json())
-        return resp.json()
+        return cast(dict[str, Any], resp.json())
 
     async def put(self, path: str, **kwargs: Any) -> dict[str, Any]:
         """PUT request, raises on error."""
         resp = await self._client.put(path, **kwargs)
         if not resp.is_success:
             raise APITestError(resp.status_code, resp.json())
-        return resp.json()
+        return cast(dict[str, Any], resp.json())
 
     async def patch(self, path: str, **kwargs: Any) -> dict[str, Any]:
         """PATCH request, raises on error."""
         resp = await self._client.patch(path, **kwargs)
         if not resp.is_success:
             raise APITestError(resp.status_code, resp.json())
-        return resp.json()
+        return cast(dict[str, Any], resp.json())
 
     async def delete(self, path: str, **kwargs: Any) -> dict[str, Any]:
         """DELETE request, raises on error."""
         resp = await self._client.delete(path, **kwargs)
         if not resp.is_success:
             raise APITestError(resp.status_code, resp.json())
-        return resp.json()
+        return cast(dict[str, Any], resp.json())
 
     async def get_raw(self, path: str, **kwargs: Any) -> tuple[int, dict[str, Any]]:
         """GET request, returns (status_code, json) without raising on error.

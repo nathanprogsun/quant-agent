@@ -38,6 +38,16 @@ venv/
 *.sqlite
 *.sqlite3
 
+# jq_kb local artifacts
+data/models/
+data/jq_api/chroma_db/
+data/jq_api/bm25.pkl
+data/jq_dict/chroma_db/
+data/jq_dict/bm25.pkl
+data/jq_dict/raw/browser_export.json
+data/jq_strategy/chroma_db/
+data/jq_strategy/bm25.pkl
+
 # Committed DC42 knowledge base (exceptions — see repo root .gitignore)
 !data/
 !data/dc42/

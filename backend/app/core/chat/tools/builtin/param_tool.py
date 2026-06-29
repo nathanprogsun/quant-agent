@@ -1,15 +1,11 @@
-"""Parameter validation agent tool — DC42 range guard."""
+"""Parameter validation agent tool."""
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass, field
-from typing import Annotated, Any
+from typing import Any
 
 from langchain_core.tools import BaseTool, tool
-from langgraph.prebuilt import InjectedState
-
-from app.core.dc42.paths import DEFAULT_PARAMETER_LIMITS_PATH
 
 
 @dataclass(frozen=True)
@@ -26,73 +22,31 @@ def validation_result_to_dict(result: ParameterValidationResult) -> dict[str, An
     }
 
 
-def validate_parameters(
-    params: dict[str, Any],
-    dc42_ranges: dict[str, dict[str, float]],
-) -> ParameterValidationResult:
-    """Validate strategy parameters against DC42 ranges."""
+def validate_parameters(params: dict[str, Any]) -> ParameterValidationResult:
+    """Validate strategy parameters with basic sanity checks."""
     warnings: list[str] = []
     suggestions: list[str] = []
 
     for key, value in params.items():
-        if not isinstance(value, (int, float)):
+        if not isinstance(value, (int, float)) or isinstance(value, bool):
             continue
 
-        ranges = dc42_ranges.get(key)
-        if not ranges:
-            continue
-
-        p10 = ranges.get("P10", 0)
-        p90 = ranges.get("P90", float("inf"))
-
-        if value < p10:
-            warnings.append(f"参数 {key}={value} 低于 DC42 P10 ({p10})，建议调高")
-            suggestions.append(f"将 {key} 调整到 {p10}-{p90} 范围内")
-        elif value > p90:
-            warnings.append(f"参数 {key}={value} 超过 DC42 P90 ({p90})，建议调低")
-            suggestions.append(f"将 {key} 调整到 {p10}-{p90} 范围内")
+        if value < 0:
+            warnings.append(f"参数 {key}={value} 为负数，通常不合理")
+            suggestions.append(f"将 {key} 调整为非负数")
+        elif value == 0 and key in {"stock_count", "lookback", "window", "n"}:
+            warnings.append(f"参数 {key}={value} 为 0，可能导致策略无持仓或无计算样本")
+            suggestions.append(f"将 {key} 调整为正整数")
 
     return ParameterValidationResult(warnings=warnings, suggestions=suggestions)
 
 
-def load_default_dc42_ranges() -> dict[str, dict[str, float]]:
-    """Load committed DC42 parameter limits for agent tool validation."""
-    if not DEFAULT_PARAMETER_LIMITS_PATH.is_file():
-        return {}
-    data: dict[str, dict[str, float]] = json.loads(
-        DEFAULT_PARAMETER_LIMITS_PATH.read_text(encoding="utf-8")
-    )
-    return data
-
-
-def resolve_dc42_ranges(
-    state: dict[str, Any] | None,
-    *,
-    fallback: dict[str, dict[str, float]] | None = None,
-) -> dict[str, dict[str, float]]:
-    """Resolve DC42 ranges from graph state, then defaults."""
-    if state:
-        cached = state.get("dc42_ranges")
-        if isinstance(cached, dict) and cached:
-            return cached
-    if fallback is not None:
-        return fallback
-    return load_default_dc42_ranges()
-
-
-def make_validate_parameters_tool(
-    dc42_ranges: dict[str, dict[str, float]] | None = None,
-) -> BaseTool:
-    """Create a LangChain tool that validates params against DC42 ranges."""
-    factory_ranges = dc42_ranges
+def make_validate_parameters_tool() -> BaseTool:
+    """Create a LangChain tool that validates strategy parameters."""
 
     @tool
-    def validate_strategy_parameters(
-        params: dict[str, Any],
-        state: Annotated[dict[str, Any], InjectedState],
-    ) -> dict[str, Any]:
-        """Validate strategy parameters against DC42 historical percentile ranges."""
-        ranges = resolve_dc42_ranges(state, fallback=factory_ranges)
-        return validation_result_to_dict(validate_parameters(params, ranges))
+    def validate_strategy_parameters(params: dict[str, Any]) -> dict[str, Any]:
+        """Validate strategy parameters with basic sanity checks."""
+        return validation_result_to_dict(validate_parameters(params))
 
     return validate_strategy_parameters

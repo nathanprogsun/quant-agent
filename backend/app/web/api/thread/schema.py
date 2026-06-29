@@ -1,7 +1,14 @@
+from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    computed_field,
+    field_validator,
+)
 
 from app.common.runs.manager import MultitaskStrategy, RunRecord
 from app.common.runs.schemas import DisconnectMode
@@ -11,13 +18,48 @@ MAX_MESSAGES = 50
 MAX_MESSAGE_LENGTH = 32768  # 32KB
 
 
+class RunInput(BaseModel):
+    """Input payload for a run — wraps a list of messages."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    messages: list["MessageInput"] = Field(default_factory=list)
+
+
+class RunRequestConfig(BaseModel):
+    """Typed wrapper for the ``config`` field of a run request."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    configurable: dict[str, Any] = Field(default_factory=dict)
+    metadata: dict[str, Any] | None = None
+    context: dict[str, Any] | None = None
+    recursion_limit: int | None = Field(default=None, ge=1)
+    tags: list[str] | None = None
+
+
+class RunEventPayload(BaseModel):
+    """SSE event payload emitted to clients.
+
+    The data side of an SSE event is intentionally permissive (the LangGraph
+    SDK emits heterogeneous shapes for messages, values, state, etc.), so
+    we accept arbitrary JSON-compatible dicts.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    data: dict[str, Any] = Field(default_factory=dict)
+    id: str | None = None
+    event: str | None = None
+
+
 class ThreadResponse(BaseModel):
     id: UUID
     user_id: UUID
     title: str | None = None
     model_name: str | None = None
-    created_at: str | None = None
-    updated_at: str | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -33,6 +75,23 @@ class ThreadListResponse(BaseModel):
 class UpdateTitleRequest(BaseModel):
     title: str
 
+
+class CreateThreadRequest(BaseModel):
+    """Request body for creating a thread.
+
+    Both fields are optional. When ``title`` is omitted the server uses
+    ``DEFAULT_THREAD_TITLE`` as a placeholder; the chat agent rewrites the
+    title from the first user message via the thread-state update flow.
+    ``model_name`` pins the LLM used for runs started in this thread.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    title: str | None = None
+    model_name: str | None = None
+
+
+DEFAULT_THREAD_TITLE = "新对话"
 
 class RunResponse(BaseModel):
     run_id: UUID
@@ -59,7 +118,7 @@ class RunResponse(BaseModel):
             assistant_id=record.assistant_id,
             metadata=record.metadata,
             on_disconnect=record.on_disconnect,
-            multitask_strategy=record.multitask_strategy,
+            multitask_strategy=MultitaskStrategy(record.multitask_strategy),
             error=record.error,
             created_at=record.created_at,
             updated_at=record.updated_at,
@@ -68,6 +127,11 @@ class RunResponse(BaseModel):
 
 class RunListResponse(BaseModel):
     runs: list[RunResponse]
+
+
+class CancelResponse(BaseModel):
+    status: str
+    run_id: UUID
 
 
 class MessageInput(BaseModel):
@@ -162,3 +226,7 @@ class StateUpdateRequest(BaseModel):
     checkpoint: dict[str, Any] | None = None
     checkpoint_id: str | None = Field(default=None, validation_alias="checkpointId")
     as_node: str | None = Field(default=None, validation_alias="asNode")
+
+
+# Resolve the forward reference to MessageInput (defined above in this module).
+RunInput.model_rebuild()

@@ -1,25 +1,24 @@
 from __future__ import annotations
 
-import contextlib
 from typing import Annotated, Any
-from uuid import UUID, uuid4
+from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Body, Depends, Request
 from fastapi.responses import StreamingResponse
-from langgraph.checkpoint.base import RunnableConfig
 
 from app.core.chat.agent.lead_agent import make_lead_agent
-from app.core.chat.service.thread_service import ThreadService
+from app.core.chat.service.history_service import (
+    HistoryService,
+    history_service_from_request,
+)
+from app.core.chat.service.state_service import StateService, state_service_from_request
+from app.core.chat.service.thread_service import RunService, ThreadService
 from app.db.models.user import User
 from app.web.api.deps import get_current_user
-from app.web.api.thread.checkpoint_state import (
-    checkpoint_tuple_to_thread_state,
-    empty_thread_state,
-    new_checkpoint,
-    serialize_state_values,
-    thread_config,
-)
 from app.web.api.thread.schema import (
+    DEFAULT_THREAD_TITLE,
+    CancelResponse,
+    CreateThreadRequest,
     HistoryRequest,
     RunCreateRequest,
     RunListResponse,
@@ -30,7 +29,10 @@ from app.web.api.thread.schema import (
     UpdateTitleRequest,
 )
 from app.web.api.thread.services import sse_consumer, start_run
-from app.web.lifespan_service import thread_service_from_lifespan
+from app.web.lifespan_service import (
+    run_service_from_request,
+    thread_service_from_request,
+)
 
 router = APIRouter(prefix="/api/v1/threads", tags=["threads"])
 
@@ -38,7 +40,7 @@ router = APIRouter(prefix="/api/v1/threads", tags=["threads"])
 @router.get("", response_model=ThreadListResponse)
 async def list_threads(
     current_user: Annotated[User, Depends(get_current_user)],
-    thread_service: Annotated[ThreadService, Depends(thread_service_from_lifespan)],
+    thread_service: Annotated[ThreadService, Depends(thread_service_from_request)],
     limit: int = 50,
     offset: int = 0,
 ) -> ThreadListResponse:
@@ -53,7 +55,7 @@ async def list_threads(
                 user_id=t.user_id,
                 title=t.title,
                 model_name=t.model_name,
-                created_at=str(t.created_at) if t.created_at else None,
+                created_at=t.created_at,
                 updated_at=t.updated_at,
             )
             for t in threads
@@ -64,35 +66,29 @@ async def list_threads(
 @router.post("", response_model=ThreadResponse, status_code=201)
 async def create_thread(
     current_user: Annotated[User, Depends(get_current_user)],
-    thread_service: Annotated[ThreadService, Depends(thread_service_from_lifespan)],
-    request: Request,
+    thread_service: Annotated[ThreadService, Depends(thread_service_from_request)],
+    body: Annotated[CreateThreadRequest | None, Body()] = None,
 ) -> ThreadResponse:
-    """Create a new thread."""
+    """Create a new thread.
 
-    thread_id = uuid4()
-    body: dict[str, Any] = {}
-    with contextlib.suppress(Exception):
-        body = await request.json()
+    The body is fully optional. When the client omits ``title`` the service
+    uses ``DEFAULT_THREAD_TITLE`` as a placeholder; the chat agent rewrites
+    the title from the first user message via the thread-state flow.
+    """
 
-    # Use provided thread_id if given (for LangGraph SDK compatibility)
-    # SDK sends threadId (camelCase) but we also check thread_id (snake_case)
-    provided_id = body.get("thread_id") or body.get("threadId")
-    if provided_id:
-        with contextlib.suppress(ValueError):
-            thread_id = UUID(provided_id)
-
+    title = body.title if body is not None else None
+    model_name = body.model_name if body is not None else None
     thread = await thread_service.create(
-        thread_id=thread_id,
         user_id=current_user.id,
-        title=body.get("title"),
-        model_name=body.get("model_name"),
+        title=title or DEFAULT_THREAD_TITLE,
+        model_name=model_name,
     )
     return ThreadResponse(
         id=thread.id,
         user_id=thread.user_id,
         title=thread.title,
         model_name=thread.model_name,
-        created_at=str(thread.created_at) if thread.created_at else None,
+        created_at=thread.created_at,
         updated_at=thread.updated_at,
     )
 
@@ -101,7 +97,7 @@ async def create_thread(
 async def get_thread(
     thread_id: UUID,
     current_user: Annotated[User, Depends(get_current_user)],
-    thread_service: Annotated[ThreadService, Depends(thread_service_from_lifespan)],
+    thread_service: Annotated[ThreadService, Depends(thread_service_from_request)],
 ) -> ThreadResponse:
     """Get thread by ID."""
     thread = await thread_service.get(thread_id, current_user.id)
@@ -110,7 +106,7 @@ async def get_thread(
         user_id=thread.user_id,
         title=thread.title,
         model_name=thread.model_name,
-        created_at=str(thread.created_at) if thread.created_at else None,
+        created_at=thread.created_at,
         updated_at=thread.updated_at,
     )
 
@@ -120,18 +116,18 @@ async def update_thread(
     thread_id: UUID,
     body: UpdateTitleRequest,
     current_user: Annotated[User, Depends(get_current_user)],
-    thread_service: Annotated[ThreadService, Depends(thread_service_from_lifespan)],
+    thread_service: Annotated[ThreadService, Depends(thread_service_from_request)],
 ) -> ThreadResponse:
     """Update thread title."""
-    thread = await thread_service.update_title(thread_id, current_user.id, body.title)
-    if not thread:
-        raise HTTPException(status_code=404, detail="Thread not found")
+    thread = await thread_service.update_title_or_raise(
+        thread_id, current_user.id, body.title
+    )
     return ThreadResponse(
         id=thread.id,
         user_id=thread.user_id,
         title=thread.title,
         model_name=thread.model_name,
-        created_at=str(thread.created_at) if thread.created_at else None,
+        created_at=thread.created_at,
         updated_at=thread.updated_at,
     )
 
@@ -140,25 +136,23 @@ async def update_thread(
 async def delete_thread(
     thread_id: UUID,
     current_user: Annotated[User, Depends(get_current_user)],
-    thread_service: Annotated[ThreadService, Depends(thread_service_from_lifespan)],
+    thread_service: Annotated[ThreadService, Depends(thread_service_from_request)],
 ) -> None:
     """Soft delete a thread."""
-    deleted = await thread_service.delete(thread_id, current_user.id)
-    if not deleted:
-        raise HTTPException(status_code=404, detail="Thread not found")
+    await thread_service.delete_or_raise(thread_id, current_user.id)
 
 
 @router.get("/{thread_id}/runs", response_model=RunListResponse)
 async def list_runs(
     thread_id: UUID,
-    request: Request,
     current_user: Annotated[User, Depends(get_current_user)],
+    run_service: Annotated[RunService, Depends(run_service_from_request)],
 ) -> RunListResponse:
-    """List all runs for a thread."""
-    app_context = request.app.state.app_context
-    if app_context.run_manager is None:
-        raise HTTPException(status_code=503, detail="RunManager not available")
-    records = await app_context.run_manager.list_by_thread(thread_id)
+    """List all runs for a thread (owner-only).
+
+    Non-owners see the same response as no-runs; we don't disclose other users' runs.
+    """
+    records = await run_service.list_for_user(thread_id, current_user.id)
     return RunListResponse(runs=[RunResponse.from_run_record(r) for r in records])
 
 
@@ -166,51 +160,12 @@ async def list_runs(
 async def get_run(
     thread_id: UUID,
     run_id: UUID,
-    request: Request,
     current_user: Annotated[User, Depends(get_current_user)],
+    run_service: Annotated[RunService, Depends(run_service_from_request)],
 ) -> RunResponse:
     """Get a specific run by ID."""
-    app_context = request.app.state.app_context
-    if app_context.run_manager is None:
-        raise HTTPException(status_code=503, detail="RunManager not available")
-
-    record = await app_context.run_manager.get(run_id)
-    if not record or record.thread_id != thread_id:
-        raise HTTPException(status_code=404, detail="Run not found")
+    record = await run_service.get_for_user(run_id, thread_id, current_user.id)
     return RunResponse.from_run_record(record)
-
-
-@router.post("/{thread_id}/runs", response_model=RunResponse, status_code=201)
-async def create_run(
-    thread_id: UUID,
-    request: Request,
-    current_user: Annotated[User, Depends(get_current_user)],
-) -> RunResponse:
-    """Create a new run (non-streaming) - TODO: implement."""
-    raise HTTPException(
-        status_code=501, detail="Not implemented: use POST /api/v1/chat/stream instead"
-    )
-
-
-@router.post("/{thread_id}/runs/wait", response_model=RunResponse)
-async def wait_for_run(
-    thread_id: UUID,
-    request: Request,
-    current_user: Annotated[User, Depends(get_current_user)],
-) -> RunResponse:
-    """Block and wait for a run to complete - TODO: implement."""
-    raise HTTPException(status_code=501, detail="Not implemented")
-
-
-@router.get("/{thread_id}/runs/{run_id}/join")
-async def join_run(
-    thread_id: UUID,
-    run_id: UUID,
-    request: Request,
-    current_user: Annotated[User, Depends(get_current_user)],
-):
-    """Join an existing run's SSE stream - TODO: implement."""
-    raise HTTPException(status_code=501, detail="Not implemented")
 
 
 @router.post("/{thread_id}/runs/stream")
@@ -218,7 +173,8 @@ async def stream_run(
     thread_id: UUID,
     body: RunCreateRequest,
     current_user: Annotated[User, Depends(get_current_user)],
-    thread_service: Annotated[ThreadService, Depends(thread_service_from_lifespan)],
+    thread_service: Annotated[ThreadService, Depends(thread_service_from_request)],
+    run_service: Annotated[RunService, Depends(run_service_from_request)],
     request: Request,
 ) -> StreamingResponse:
     """Create a run and stream events via SSE."""
@@ -228,7 +184,7 @@ async def stream_run(
 
     record = await start_run(
         bridge=app_context.stream_bridge,
-        run_manager=app_context.run_manager,
+        run_manager=run_service.manager,
         thread_service=thread_service,
         checkpointer=app_context.checkpointer,
         body=body,
@@ -242,7 +198,7 @@ async def stream_run(
             bridge=app_context.stream_bridge,
             record=record,
             request=request,
-            run_manager=app_context.run_manager,
+            run_manager=run_service.manager,
         ),
         media_type="text/event-stream",
         headers={
@@ -254,43 +210,26 @@ async def stream_run(
     )
 
 
-@router.post("/{thread_id}/runs/{run_id}/cancel")
+@router.post("/{thread_id}/runs/{run_id}/cancel", response_model=CancelResponse)
 async def cancel_run(
     thread_id: UUID,
     run_id: UUID,
     current_user: Annotated[User, Depends(get_current_user)],
-    request: Request,
-) -> dict[str, Any]:
-    """Cancel a running run."""
-    app_context = request.app.state.app_context
-    cancelled = await app_context.run_manager.cancel(run_id)
-    if not cancelled:
-        raise HTTPException(status_code=404, detail="Run not found or already finished")
-    return {"status": "cancelled", "run_id": run_id}
+    run_service: Annotated[RunService, Depends(run_service_from_request)],
+) -> CancelResponse:
+    """Cancel a running run (owner-only)."""
+    await run_service.cancel_for_user(run_id, thread_id, current_user.id)
+    return CancelResponse(status="cancelled", run_id=run_id)
 
 
 @router.get("/{thread_id}/history")
 async def get_thread_history(
     thread_id: UUID,
     current_user: Annotated[User, Depends(get_current_user)],
-    thread_service: Annotated[ThreadService, Depends(thread_service_from_lifespan)],
-    request: Request,
+    history_service: Annotated[HistoryService, Depends(history_service_from_request)],
 ) -> dict[str, Any]:
     """Legacy GET history — returns latest checkpoint messages."""
-    await thread_service.get(thread_id, current_user.id)
-
-    app_context = request.app.state.app_context
-    checkpointer = app_context.checkpointer
-    if not checkpointer:
-        return {"messages": []}
-
-    config = thread_config(thread_id)
-    checkpoint = await checkpointer.aget(config)
-    if checkpoint and checkpoint.get("channel_values", {}).get("messages"):
-        values = serialize_state_values(checkpoint["channel_values"])
-        return {"messages": values.get("messages", [])}
-
-    return {"messages": []}
+    return await history_service.get_latest_messages(thread_id, current_user.id)
 
 
 @router.post("/{thread_id}/history")
@@ -298,56 +237,20 @@ async def post_thread_history(
     thread_id: UUID,
     body: HistoryRequest,
     current_user: Annotated[User, Depends(get_current_user)],
-    thread_service: Annotated[ThreadService, Depends(thread_service_from_lifespan)],
-    request: Request,
+    history_service: Annotated[HistoryService, Depends(history_service_from_request)],
 ) -> list[dict[str, Any]]:
     """Return checkpoint history in LangGraph SDK ThreadState shape."""
-    await thread_service.get(thread_id, current_user.id)
-
-    app_context = request.app.state.app_context
-    checkpointer = app_context.checkpointer
-    if not checkpointer:
-        return []
-
-    config = thread_config(thread_id)
-    before_config: RunnableConfig | None = None
-    if body.before is not None:
-        before_config = RunnableConfig(configurable=body.before)
-    elif body.checkpoint is not None:
-        before_config = RunnableConfig(configurable=body.checkpoint)
-
-    states: list[dict[str, Any]] = []
-    async for checkpoint_tuple in checkpointer.alist(
-        config,
-        before=before_config,
-        limit=body.limit,
-    ):
-        states.append(checkpoint_tuple_to_thread_state(checkpoint_tuple))
-
-    return states
+    return await history_service.list_history(thread_id, current_user.id, body)
 
 
 @router.get("/{thread_id}/state")
 async def get_thread_state(
     thread_id: UUID,
     current_user: Annotated[User, Depends(get_current_user)],
-    thread_service: Annotated[ThreadService, Depends(thread_service_from_lifespan)],
-    request: Request,
+    history_service: Annotated[HistoryService, Depends(history_service_from_request)],
 ) -> dict[str, Any]:
     """Return latest thread state in LangGraph SDK shape."""
-    await thread_service.get(thread_id, current_user.id)
-
-    app_context = request.app.state.app_context
-    checkpointer = app_context.checkpointer
-    if not checkpointer:
-        return empty_thread_state(thread_id)
-
-    config = thread_config(thread_id)
-    checkpoint_tuple = await checkpointer.aget_tuple(config)
-    if checkpoint_tuple is None:
-        return empty_thread_state(thread_id)
-
-    return checkpoint_tuple_to_thread_state(checkpoint_tuple)
+    return await history_service.get_state(thread_id, current_user.id)
 
 
 @router.post("/{thread_id}/state")
@@ -355,56 +258,7 @@ async def post_thread_state(
     thread_id: UUID,
     body: StateUpdateRequest,
     current_user: Annotated[User, Depends(get_current_user)],
-    thread_service: Annotated[ThreadService, Depends(thread_service_from_lifespan)],
-    request: Request,
+    state_service: Annotated[StateService, Depends(state_service_from_request)],
 ) -> dict[str, Any]:
     """Update thread state values and return the new ThreadState snapshot."""
-    if not body.values:
-        return await get_thread_state(
-            thread_id, current_user, thread_service, request
-        )
-
-    await thread_service.get(thread_id, current_user.id)
-
-    app_context = request.app.state.app_context
-    checkpointer = app_context.checkpointer
-    if not checkpointer:
-        return empty_thread_state(thread_id)
-
-    config = thread_config(thread_id)
-    if body.checkpoint is not None:
-        config = RunnableConfig(
-            configurable={
-                **(config.get("configurable") or {}),
-                **body.checkpoint,
-            }
-        )
-    if body.checkpoint_id is not None:
-        configurable = dict(config.get("configurable") or {})
-        configurable["checkpoint_id"] = body.checkpoint_id
-        config = RunnableConfig(configurable=configurable)
-
-    checkpoint_tuple = await checkpointer.aget_tuple(config)
-    if checkpoint_tuple is None:
-        checkpoint = new_checkpoint(dict(body.values))
-        metadata: dict[str, Any] = {}
-        write_config = config
-    else:
-        channel_values = dict(checkpoint_tuple.checkpoint.get("channel_values") or {})
-        channel_values.update(body.values)
-        checkpoint = dict(checkpoint_tuple.checkpoint)
-        checkpoint["channel_values"] = channel_values
-        metadata = checkpoint_tuple.metadata or {}
-        write_config = checkpoint_tuple.config
-
-    next_config = await checkpointer.aput(
-        write_config,
-        checkpoint,
-        metadata,
-        {},
-    )
-    next_tuple = await checkpointer.aget_tuple(next_config)
-    if next_tuple is None:
-        return empty_thread_state(thread_id)
-
-    return checkpoint_tuple_to_thread_state(next_tuple)
+    return await state_service.apply_update(thread_id, current_user.id, body)

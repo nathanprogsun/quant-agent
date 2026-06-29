@@ -1,8 +1,17 @@
-from app.db.models.core.base import Base
+"""ORM models — all inherit from Base (DeclarativeBase)."""
+from __future__ import annotations
 
-# Import all models to register them with Base
-from app.db.models.run import Run
-from app.db.models.thread import Thread
-from app.db.models.user import User
+from sqlalchemy.orm import DeclarativeBase
 
-__all__ = ["Base", "Run", "Thread", "User"]
+
+class Base(DeclarativeBase):
+    """Single declarative base for the whole data layer."""
+
+
+# Import order matters: leaf models first so relationships can resolve.
+from app.db.models.memory import MemoryFact, UserMemory  # noqa: E402
+from app.db.models.run import Run  # noqa: E402
+from app.db.models.thread import Thread  # noqa: E402
+from app.db.models.user import User  # noqa: E402
+
+__all__ = ["Base", "MemoryFact", "Run", "Thread", "User", "UserMemory"]

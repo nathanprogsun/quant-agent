@@ -7,7 +7,11 @@ from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
-from jqcli.errors import ApiError, NotAuthenticatedError, TimeoutError
+from jqcli.errors import (
+    ApiError,
+    NotAuthenticatedError,
+    TimeoutError,
+)
 
 from app.core.backtest.errors import BacktestError
 from app.core.backtest.service import BacktestService

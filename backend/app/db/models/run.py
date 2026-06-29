@@ -1,22 +1,31 @@
+"""Run ORM model."""
+from __future__ import annotations
+
 from datetime import datetime
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
-from app.db.models.core.base import Column, JsonColumn, TableModel
+from sqlalchemy import JSON, DateTime, String, func
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy.orm import Mapped, mapped_column
+
+from app.db.models import Base
 
 
-class Run(TableModel):
-    table_name = "runs"
-    schema_name = ""
-    ordered_primary_keys = ("id",)
+class Run(Base):
+    __tablename__ = "runs"
 
-    id: Column[UUID]
-    thread_id: Column[UUID]
-    user_id: Column[UUID]
-    status: Column[str]
-    model_name: Column[str | None] = None
-    assistant_id: Column[str | None] = None
-    error_message: Column[str | None] = None
-    token_usage: JsonColumn[dict[str, Any] | None] = None
-    created_at: Column[datetime]
-    finished_at: Column[datetime | None] = None
+    id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    thread_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), index=True, nullable=False)
+    user_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), index=True, nullable=False)
+    status: Mapped[str] = mapped_column(String(50), index=True, nullable=False)
+    model_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    assistant_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(String, nullable=True)
+    token_usage: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=False), nullable=False, server_default=func.now()
+    )
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)

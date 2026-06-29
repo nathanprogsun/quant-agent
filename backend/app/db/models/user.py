@@ -1,32 +1,30 @@
-"""User database model.
-
-Note: `user` is a reserved keyword in PostgreSQL. The `table_name = "user"`
-requires quoting in raw SQL queries (e.g., `FROM "user"`).
-
-Unlike SysTableModel, User does not use the framework-managed `sys_updated_at`
-field, so it inherits from TableModel directly.
-"""
+"""User ORM model."""
+from __future__ import annotations
 
 from datetime import datetime
-from uuid import UUID
+from uuid import UUID, uuid4
 
-from app.db.models.core.base import Column, TableModel
+from sqlalchemy import Boolean, DateTime, Integer, String, func
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy.orm import Mapped, mapped_column
+
+from app.db.models import Base
 
 
-class User(TableModel):
-    """User table model."""
+class User(Base):
+    __tablename__ = "users"
 
-    table_name = "users"
-    schema_name = ""  # Empty for SQLite compatibility
-    ordered_primary_keys = ("id",)
-
-    id: Column[UUID]
-    email: Column[str]
-    username: Column[str | None] = None
-    full_name: Column[str | None] = None
-    hashed_password: Column[str]
-    is_active: Column[bool] = True
-    is_superuser: Column[bool] = False
-    token_version: Column[int] = 0  # password change increments this, invalidating old tokens
-    created_at: Column[datetime]
-    updated_at: Column[str | None] = None
+    id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    email: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
+    username: Mapped[str | None] = mapped_column(String(100), unique=True, index=True, nullable=True)
+    full_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, index=True)
+    is_superuser: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    token_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=False), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)

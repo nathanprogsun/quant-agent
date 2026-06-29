@@ -10,6 +10,7 @@ from langchain_core.messages import HumanMessage
 
 from app.app_context.app_context import AppContext
 from app.web.api.thread.checkpoint_state import new_checkpoint, thread_config
+from app.web.application import get_app
 from tests.integration.client import APITestClient
 
 
@@ -129,8 +130,6 @@ class TestThreadStateAPI:
         self,
         test_app_context: AppContext,
     ) -> None:
-        from app.web.application import get_app
-
         app = get_app()
         app.state.app_context = test_app_context
         transport = ASGITransport(app=app)

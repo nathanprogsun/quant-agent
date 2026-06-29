@@ -1,14 +1,19 @@
-"""Auth middleware for cookie-based authentication."""
+"""Auth middleware for cookie-based authentication.
+
+Decodes the JWT access_token cookie and sets request.state.current_user_id
+for downstream dependencies (see app.web.api.deps.get_current_user_id).
+Uses the stateless decode_access_token — no AuthService instance required,
+since AuthService is constructed per-request and would create a circular
+dependency on session_factory setup.
+"""
 
 from collections.abc import Awaitable, Callable
-from typing import TYPE_CHECKING
 
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
-if TYPE_CHECKING:
-    from app.core.auth.service.auth_service import AuthService
+from app.core.auth.service.auth_service import decode_access_token
 
 # Paths that bypass authentication
 PUBLIC_PATHS = frozenset({
@@ -36,18 +41,6 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if request.url.path in PUBLIC_PATHS or request.url.path.startswith("/docs"):
             return await call_next(request)
 
-        # Get auth service from app context
-        app_context = getattr(request.app.state, "app_context", None)
-        auth_service: AuthService | None = None
-        if app_context:
-            lifespan_service = getattr(app_context, "lifespan_service", None)
-            if lifespan_service:
-                auth_service = getattr(lifespan_service, "auth_service", None)
-
-        if auth_service is None:
-            # Service not initialized — let request through (startup race)
-            return await call_next(request)
-
         # Read token from cookie
         token = request.cookies.get("access_token")
         if not token:
@@ -57,23 +50,17 @@ class AuthMiddleware(BaseHTTPMiddleware):
             )
 
         # Decode and validate
-        payload = auth_service.decode_token(token)
+        payload = decode_access_token(token)
         if payload is None:
             return JSONResponse(
                 status_code=401,
                 content={"detail": "认证失败或已过期"},
             )
 
-        user_id = payload.get("sub")
-        if not user_id:
-            return JSONResponse(
-                status_code=401,
-                content={"detail": "认证失败或已过期"},
-            )
-
         # Set user info on request state
-        request.state.current_user_id = user_id
-        request.state.current_user_email = payload.get("email")
-        request.state.token_ver = payload.get("ver", 0)  # Token version for revocation check
+        request.state.current_user_id = payload.sub
+        request.state.current_user_email = payload.email
+        # `ver` is an optional claim minted alongside exp/iss/aud
+        request.state.token_ver = getattr(payload, "ver", 0)
 
         return await call_next(request)

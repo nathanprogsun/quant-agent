@@ -35,6 +35,14 @@ class UserCreateDTO(BaseModel):
     password: str
 
 
+class UserCreateWithHashDTO(BaseModel):
+    """DTO for creating a user with a pre-hashed password (no plaintext)."""
+
+    email: EmailStr
+    hashed_password: str
+    full_name: str
+
+
 class UserUpdateDTO(BaseModel):
     """User update data transfer object."""
 
