@@ -5,9 +5,10 @@ from __future__ import annotations
 import json
 import logging
 import pickle
+from collections.abc import Sequence
 from datetime import date
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
 from llama_index.core import VectorStoreIndex
 from llama_index.core.ingestion import IngestionPipeline
@@ -36,7 +37,7 @@ from app.core.jq_kb.storage import _chroma_client, create_chroma_vector_store
 logger = logging.getLogger(__name__)
 
 
-class JqDictJsonReader(BaseReader):
+class JqDictJsonReader(BaseReader):  # type: ignore[misc]  # BaseReader typed as Any (stub missing)
     """Reader for jq_dict pilot.json / jq_dict.json crawl output."""
 
     def __init__(self, raw_dir: Path = JQ_DICT_RAW_DIR) -> None:
@@ -51,10 +52,7 @@ class JqDictJsonReader(BaseReader):
             files = [pilot_path]
         else:
             full_path = self.raw_dir / "full.json"
-            if full_path.is_file():
-                files = [full_path]
-            else:
-                files = sorted(self.raw_dir.glob("*.json"))
+            files = [full_path] if full_path.is_file() else sorted(self.raw_dir.glob("*.json"))
             if not files:
                 raise FileNotFoundError(f"No raw JSON under {self.raw_dir}")
 
@@ -82,7 +80,7 @@ def _merge_static_suffixes(records: list[dict[str, Any]]) -> list[dict[str, Any]
     return out
 
 
-class JqDictChunkToNode(TransformComponent):
+class JqDictChunkToNode(TransformComponent):  # type: ignore[misc]  # BaseReader typed as Any (stub missing)
     def __call__(self, nodes: Sequence[Document], **kwargs: Any) -> list[TextNode]:
         out: list[TextNode] = []
         for doc in nodes:
@@ -230,7 +228,7 @@ class JqDictStore:
             encoding="utf-8",
         )
 
-    def get_by_code(self, code: str) -> dict | None:
+    def get_by_code(self, code: str) -> dict[str, Any] | None:
         filters = MetadataFilters(
             filters=[MetadataFilter(key="code", value=code)],
             condition=FilterCondition.AND,

@@ -1,0 +1,70 @@
+{
+  "library": "jq_api",
+  "dataset": "/Users/jung/pro/quant-agent/backend/eval/datasets/jq_api_eval.jsonl",
+  "llm_model": "MiniMax-M3",
+  "count": 20,
+  "recall@5": 0.75,
+  "mrr": 0.6166666666666667,
+  "failures": [
+    {
+      "id": "q007",
+      "query": "设置佣金手续费",
+      "expected": "set_order_cost",
+      "got": [
+        "is_dangerous",
+        "get_factor_kanban_values",
+        "get_all_factors",
+        "get_billboard_list",
+        "macrorun_query"
+      ]
+    },
+    {
+      "id": "q008",
+      "query": "怎么判断股票是否停牌",
+      "expected": "get_current_data",
+      "got": [
+        "set_universehistory",
+        "get_industry",
+        "get_index_stocks",
+        "technical_analysis",
+        "g"
+      ]
+    },
+    {
+      "id": "q009",
+      "query": "获取股票中文名称",
+      "expected": "get_security_info",
+      "got": [
+        "get_concept",
+        "get_concept_stocks",
+        "get_industry",
+        "get_index_stocks",
+        "get_industry_stocks"
+      ]
+    },
+    {
+      "id": "q010",
+      "query": "获取最近5个交易日",
+      "expected": "get_trade_days",
+      "got": [
+        "Trade",
+        "get_billboard_list",
+        "get_index_stocks",
+        "get_industry_stocks",
+        "get_fundamentals_continuously"
+      ]
+    },
+    {
+      "id": "q017",
+      "query": "查询 is_st 状态",
+      "expected": "get_extras",
+      "got": [
+        "get_orders",
+        "is_dangerous",
+        "get_concept_stocks",
+        "get_billboard_list",
+        "get_index_stocks"
+      ]
+    }
+  ]
+}

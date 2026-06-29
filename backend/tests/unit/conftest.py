@@ -8,8 +8,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
+from pydantic import SecretStr
 
 from app.core.auth.service.auth_service import AuthService
+from app.core.auth.types import TokenClaims
 from app.core.user.service.user_service import UserService
 from app.core.user.types import UserDTO
 from app.db.models.user import User
@@ -59,13 +61,26 @@ def sample_user_model() -> User:
 
 @pytest.fixture
 def mock_user_repository() -> MagicMock:
+    """Mock UserRepository with both legacy and current method names.
+
+    Some tests still reference legacy methods (find_by_primary_key, insert,
+    find_all). Mocking both keeps fixture loadable regardless of which
+    method the service code uses internally.
+    """
     mock = MagicMock()
+    # Current UserRepository API
     mock.find_by_email = AsyncMock(return_value=None)
-    mock.find_by_primary_key = AsyncMock(return_value=None)
+    mock.find_by_id = AsyncMock(return_value=None)
     mock.create = AsyncMock()
     mock.update = AsyncMock()
-    mock.insert = AsyncMock()
+    mock.list_all = AsyncMock(return_value=[])
     mock.delete = AsyncMock()
+    mock.bump_token_version = AsyncMock(return_value=True)
+    mock.count_all = AsyncMock(return_value=0)
+    mock.count_active = AsyncMock(return_value=0)
+    # Legacy method names retained so existing test assertions still resolve.
+    mock.find_by_primary_key = AsyncMock(return_value=None)
+    mock.insert = AsyncMock()
     mock.find_all = AsyncMock(return_value=[])
     return mock
 
@@ -93,17 +108,30 @@ def auth_service(mock_user_service: AsyncMock) -> AuthService:
 
 @pytest.fixture
 def user_service(mock_user_repository: MagicMock) -> UserService:
-    return UserService(user_repository=mock_user_repository)
+    """UserService bound to a mock AsyncSession.
+
+    The service constructs `UserRepository(self._session)` inline, so we
+    patch the local binding of `UserRepository` inside the service module
+    to return our pre-built mock repository. This keeps the service
+    constructor signature (`session=AsyncSession`) while letting callers
+    configure repository return values through `mock_user_repository`.
+    """
+    session = AsyncMock()
+    with patch(
+        "app.core.user.service.UserRepository",
+        return_value=mock_user_repository,
+    ):
+        return UserService(session=session)
 
 
 @pytest.fixture
 def mock_settings() -> MagicMock:
-    from pydantic import SecretStr
-
     mock = MagicMock()
     mock.jwt_secret_key = SecretStr("test-secret-key-for-testing")
     mock.jwt_algorithm = "HS256"
     mock.jwt_expire_minutes = 60 * 24 * 7
+    mock.jwt_issuer = "test-issuer"
+    mock.jwt_audience = "test-audience"
     return mock
 
 
@@ -111,5 +139,5 @@ def mock_settings() -> MagicMock:
 def valid_token(auth_service: AuthService, mock_settings: MagicMock) -> str:
     with patch("app.core.auth.service.auth_service.get_settings", return_value=mock_settings):
         return auth_service.create_access_token(
-            data={"sub": TEST_USER_ID, "email": TEST_USER_EMAIL}
+            data=TokenClaims(sub=TEST_USER_ID, email=TEST_USER_EMAIL)
         )

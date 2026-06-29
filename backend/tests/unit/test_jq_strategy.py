@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
-import json
+import warnings
 from pathlib import Path
 
 import pytest
 
-from app.core.jq_kb.ast_parser import extract_entities, extract_function_code
-from app.core.jq_kb.chunkers.jq_strategy import chunk_jq_strategy_post
+from app.core.jq_kb.ast_parser import (
+    _parse_strategy_code,
+    extract_entities,
+    extract_function_code,
+)
+from app.core.jq_kb.chunkers.jq_strategy import chunk_jq_strategy_post, chunk_jq_strategy_posts
 from app.core.jq_kb.parser.strategy_txt import parse_strategy_txt
 from app.core.jq_kb.retrievers import JqStrategyRetriever
 from app.core.jq_kb.strategy_storage import JqStrategyStore
@@ -62,7 +66,6 @@ def test_get_tools_pr_phase_3() -> None:
 
 @pytest.mark.asyncio
 async def test_jq_strategy_retriever_pilot(tmp_path: Path) -> None:
-    from app.core.jq_kb.chunkers.jq_strategy import chunk_jq_strategy_posts
 
     chunks = chunk_jq_strategy_posts([SAMPLE_POST])
     store = JqStrategyStore(
@@ -78,10 +81,6 @@ async def test_jq_strategy_retriever_pilot(tmp_path: Path) -> None:
 
 
 def test_parse_strategy_code_suppresses_syntax_warnings() -> None:
-    import warnings
-
-    from app.core.jq_kb.ast_parser import _parse_strategy_code
-
     code = 'x = "\\*bad\\*"\n'
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always", SyntaxWarning)
@@ -91,7 +90,6 @@ def test_parse_strategy_code_suppresses_syntax_warnings() -> None:
 
 
 def test_dedupe_collision_post_ids() -> None:
-    from app.core.jq_kb.chunkers.jq_strategy import chunk_jq_strategy_posts
 
     posts = [
         {**SAMPLE_POST, "post_id": 99, "title": "A", "source_file": "/a.txt"},

@@ -20,11 +20,8 @@ def test_system_prompt_lists_builtin_and_jq_tools() -> None:
 
 def test_apply_prompt_template_appends_optional_sections() -> None:
     prompt = apply_prompt_template(
-        dc42_context="策略片段",
         memory_context="用户偏好",
     )
     assert SYSTEM_PROMPT.splitlines()[0] in prompt
-    assert "<dc42_knowledge>" in prompt
-    assert "策略片段" in prompt
     assert "<memory>" in prompt
     assert "用户偏好" in prompt

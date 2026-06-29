@@ -10,7 +10,7 @@ import pytest
 
 from app.common.exception.exception import ResourceNotFoundError
 from app.core.user.service.user_service import UserService
-from app.core.user.types import UserCreateDTO, UserDTO, UserUpdateDTO
+from app.core.user.types import UserCreateDTO, UserCreateWithHashDTO, UserDTO, UserUpdateDTO
 from app.db.models.user import User
 
 TEST_USER_EMAIL = "test@example.com"
@@ -27,17 +27,17 @@ class TestUserServiceGet:
         mock_user_repository: MagicMock,
         sample_user_model: MagicMock,
     ) -> None:
-        mock_user_repository.find_by_primary_key = AsyncMock(return_value=sample_user_model)
+        mock_user_repository.find_by_id = AsyncMock(return_value=sample_user_model)
         result = await user_service.get_by_id(TEST_USER_ID)
         assert result is not None
         assert result.email == sample_user_model.email
-        mock_user_repository.find_by_primary_key.assert_called_once()
+        mock_user_repository.find_by_id.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_get_by_id_not_found(
         self, user_service: UserService, mock_user_repository: MagicMock
     ) -> None:
-        mock_user_repository.find_by_primary_key = AsyncMock(return_value=None)
+        mock_user_repository.find_by_id = AsyncMock(return_value=None)
         with pytest.raises(ResourceNotFoundError):
             await user_service.get_by_id(TEST_USER_ID)
 
@@ -68,7 +68,7 @@ class TestUserServiceGet:
         mock_user_repository: MagicMock,
         sample_user_model: MagicMock,
     ) -> None:
-        mock_user_repository.find_by_primary_key = AsyncMock(return_value=sample_user_model)
+        mock_user_repository.find_by_id = AsyncMock(return_value=sample_user_model)
         result = await user_service.get_user_model_by_id(TEST_USER_ID)
         assert result is not None
         assert hasattr(result, "hashed_password")
@@ -127,16 +127,18 @@ class TestUserServiceCreate:
             is_superuser=False,
             created_at=datetime.now(UTC),
         )
-        mock_user_repository.insert = AsyncMock(return_value=created_user)
+        mock_user_repository.create = AsyncMock(return_value=created_user)
 
         result = await user_service.create_user_with_password(
-            email=TEST_USER_EMAIL,
-            hashed_password=hashed_password,
-            full_name=TEST_USER_FULL_NAME,
+            UserCreateWithHashDTO(
+                email=TEST_USER_EMAIL,
+                hashed_password=hashed_password,
+                full_name=TEST_USER_FULL_NAME,
+            )
         )
 
         assert result.email == TEST_USER_EMAIL
-        mock_user_repository.insert.assert_called_once()
+        mock_user_repository.create.assert_called_once()
 
 
 class TestUserServiceUpdate:
@@ -147,7 +149,7 @@ class TestUserServiceUpdate:
         mock_user_repository: MagicMock,
         sample_user_model: MagicMock,
     ) -> None:
-        mock_user_repository.find_by_primary_key = AsyncMock(return_value=sample_user_model)
+        mock_user_repository.find_by_id = AsyncMock(return_value=sample_user_model)
         updated_user = UserDTO(
             id=TEST_USER_ID,
             email="updated@example.com",
@@ -169,7 +171,7 @@ class TestUserServiceUpdate:
     async def test_update_user_not_found(
         self, user_service: UserService, mock_user_repository: MagicMock
     ) -> None:
-        mock_user_repository.find_by_primary_key = AsyncMock(return_value=None)
+        mock_user_repository.find_by_id = AsyncMock(return_value=None)
         update_data = UserUpdateDTO(email="updated@example.com")
         result = await user_service.update(TEST_USER_ID, update_data)
         assert result is None
@@ -181,7 +183,7 @@ class TestUserServiceUpdate:
         mock_user_repository: MagicMock,
         sample_user_model: MagicMock,
     ) -> None:
-        mock_user_repository.find_by_primary_key = AsyncMock(return_value=sample_user_model)
+        mock_user_repository.find_by_id = AsyncMock(return_value=sample_user_model)
         updated_user = UserDTO(
             id=TEST_USER_ID,
             email=sample_user_model.email,
@@ -206,7 +208,7 @@ class TestUserServiceUpdate:
         mock_user_repository: MagicMock,
         sample_user_model: MagicMock,
     ) -> None:
-        mock_user_repository.find_by_primary_key = AsyncMock(return_value=sample_user_model)
+        mock_user_repository.find_by_id = AsyncMock(return_value=sample_user_model)
         mock_user_repository.update = AsyncMock(return_value=sample_user_model)
 
         result = await user_service.update_password(TEST_USER_ID, "$2b$12$newpasswordhash")
@@ -216,7 +218,7 @@ class TestUserServiceUpdate:
     async def test_update_password_user_not_found(
         self, user_service: UserService, mock_user_repository: MagicMock
     ) -> None:
-        mock_user_repository.find_by_primary_key = AsyncMock(return_value=None)
+        mock_user_repository.find_by_id = AsyncMock(return_value=None)
         result = await user_service.update_password(TEST_USER_ID, "$2b$12$newpasswordhash")
         assert result is False
 
@@ -229,7 +231,7 @@ class TestUserServiceDelete:
         mock_user_repository: MagicMock,
         sample_user_model: MagicMock,
     ) -> None:
-        mock_user_repository.find_by_primary_key = AsyncMock(return_value=sample_user_model)
+        mock_user_repository.find_by_id = AsyncMock(return_value=sample_user_model)
         mock_user_repository.delete = AsyncMock()
 
         result = await user_service.delete(TEST_USER_ID)
@@ -241,7 +243,7 @@ class TestUserServiceDelete:
     async def test_delete_user_not_found(
         self, user_service: UserService, mock_user_repository: MagicMock
     ) -> None:
-        mock_user_repository.find_by_primary_key = AsyncMock(return_value=None)
+        mock_user_repository.find_by_id = AsyncMock(return_value=None)
         result = await user_service.delete(TEST_USER_ID)
         assert result is False
         mock_user_repository.delete.assert_not_called()
@@ -252,7 +254,7 @@ class TestUserServiceList:
     async def test_list_users_empty(
         self, user_service: UserService, mock_user_repository: MagicMock
     ) -> None:
-        mock_user_repository.find_all = AsyncMock(return_value=[])
+        mock_user_repository.list_all = AsyncMock(return_value=[])
         result = await user_service.list_users()
         assert result == []
 
@@ -276,7 +278,7 @@ class TestUserServiceList:
                 created_at=datetime.now(UTC),
             ),
         ]
-        mock_user_repository.find_all = AsyncMock(return_value=users)
+        mock_user_repository.list_all = AsyncMock(return_value=users)
 
         result = await user_service.list_users()
         assert len(result) == 2
@@ -285,10 +287,10 @@ class TestUserServiceList:
     async def test_list_users_with_pagination(
         self, user_service: UserService, mock_user_repository: MagicMock
     ) -> None:
-        mock_user_repository.find_all = AsyncMock(return_value=[])
+        mock_user_repository.list_all = AsyncMock(return_value=[])
         await user_service.list_users(limit=10, offset=5)
-        mock_user_repository.find_all.assert_called_once()
-        call_kwargs = mock_user_repository.find_all.call_args[1]
+        mock_user_repository.list_all.assert_called_once()
+        call_kwargs = mock_user_repository.list_all.call_args[1]
         assert call_kwargs["limit"] == 10
         assert call_kwargs["offset"] == 5
 

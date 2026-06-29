@@ -15,7 +15,6 @@ if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
 from llama_index.core.schema import Document, TextNode
-from llama_index.vector_stores.chroma import ChromaVectorStore
 
 from app.core.jq_kb.dict_storage import (
     JqDictJsonReader,
@@ -23,7 +22,7 @@ from app.core.jq_kb.dict_storage import (
     build_jq_dict_ingestion_pipeline,
     create_jq_dict_chroma_vector_store,
 )
-from app.core.jq_kb.embeddings import DEFAULT_EMBEDDING_MODEL, warm_up_models
+from app.core.jq_kb.embeddings import default_embedding_model_name, warm_up_models
 from app.core.jq_kb.paths import JQ_DICT_BM25_PATH, JQ_DICT_CHROMA_PATH
 from app.core.jq_kb.query_rewriter import reset_known_names_cache
 from app.core.jq_kb.schemas import DictType, JqDictChunk
@@ -90,7 +89,7 @@ async def run_ingestion_pipeline(
     store = JqDictStore()
     chunks = _documents_as_chunks(documents)
     store.persist_bm25(nodes, chunks)
-    model = os.environ.get("JQ_KB_EMBEDDING_MODEL", DEFAULT_EMBEDDING_MODEL)
+    model = os.environ.get("JQ_KB_EMBEDDING_MODEL", default_embedding_model_name())
     store.write_manifest(
         chunks_count=len(nodes),
         embedding_model=model,

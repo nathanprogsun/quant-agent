@@ -5,29 +5,27 @@ from __future__ import annotations
 from app.core.chat.tools.builtin.param_tool import validate_parameters
 
 
-def test_validate_in_range():
-    """Parameters within DC42 range should pass."""
-    result = validate_parameters(
-        params={"stock_count": 5},
-        dc42_ranges={"stock_count": {"P10": 3, "P50": 10, "P90": 30}},
-    )
+def test_validate_positive_param_has_no_warning() -> None:
+    """Sanity-checked positive parameters should pass."""
+    result = validate_parameters(params={"stock_count": 5})
     assert len(result.warnings) == 0
 
 
-def test_validate_out_of_range():
-    """Parameters outside DC42 range should warn."""
-    result = validate_parameters(
-        params={"stock_count": 100},
-        dc42_ranges={"stock_count": {"P10": 3, "P50": 10, "P90": 30}},
-    )
+def test_validate_negative_param_warns() -> None:
+    """Negative parameters should warn."""
+    result = validate_parameters(params={"lookback": -1})
+    assert len(result.warnings) > 0
+    assert "lookback" in result.warnings[0]
+
+
+def test_validate_zero_critical_param_warns() -> None:
+    """Zero for known critical params should warn."""
+    result = validate_parameters(params={"stock_count": 0})
     assert len(result.warnings) > 0
     assert "stock_count" in result.warnings[0]
 
 
-def test_validate_unknown_param():
+def test_validate_unknown_param_is_silent() -> None:
     """Unknown parameters should be noted but not warned."""
-    result = validate_parameters(
-        params={"custom_param": 42},
-        dc42_ranges={"stock_count": {"P10": 3, "P50": 10, "P90": 30}},
-    )
+    result = validate_parameters(params={"custom_param": 42})
     assert len(result.warnings) == 0

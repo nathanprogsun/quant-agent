@@ -131,9 +131,7 @@ class ExternalServiceError(ApplicationError):
     This exception wraps errors from external services (APIs, databases, etc.)
     and preserves the original HTTP status code and error code for debugging.
 
-    NOTE: add some special handling for ExternalServiceError
-          to prevent leaking out our vendor information
-          and to provide generic user friendly error message.
+    Prevents leaking vendor information to clients.
     """
 
     error_code = "EXTERNAL_SERVICE_ERROR"
@@ -164,16 +162,16 @@ class ExternalServiceError(ApplicationError):
 
         # With our sentry loguru config, this should be sent to Sentry as well
         if self._original_http_code < HTTPStatus.INTERNAL_SERVER_ERROR:
-            logger.warning(  # type: ignore[no-untyped-call]
-                "External service bad request",
-                **additional_error_details.model_dump(mode="python")
+            logger.warning(
+                "External service bad request: %s",
+                additional_error_details.model_dump(mode="python")
                 if additional_error_details
                 else {},
             )
         else:
-            logger.error(  # type: ignore[no-untyped-call]
-                "External service error",
-                **additional_error_details.model_dump(mode="python")
+            logger.error(
+                "External service error: %s",
+                additional_error_details.model_dump(mode="python")
                 if additional_error_details
                 else {},
             )

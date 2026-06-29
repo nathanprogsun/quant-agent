@@ -7,6 +7,7 @@ import asyncio
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 if str(BACKEND_ROOT) not in sys.path:
@@ -19,8 +20,8 @@ from app.core.jq_kb.strategy_storage import JqStrategyStore
 from app.settings import get_settings
 
 
-def _load_questions(path: Path) -> list[dict]:
-    rows: list[dict] = []
+def _load_questions(path: Path) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
     for line in path.read_text(encoding="utf-8").splitlines():
         line = line.strip()
         if line:
@@ -28,12 +29,12 @@ def _load_questions(path: Path) -> list[dict]:
     return rows
 
 
-def _recall_at_k(expected: int, hits: list, k: int) -> float:
+def _recall_at_k(expected: int, hits: list[Any], k: int) -> float:
     ids = [int(h.metadata.get("post_id", 0)) for h in hits[:k]]
     return 1.0 if expected in ids else 0.0
 
 
-def _mrr(expected: int, hits: list) -> float:
+def _mrr(expected: int, hits: list[Any]) -> float:
     for i, h in enumerate(hits):
         if int(h.metadata.get("post_id", 0)) == expected:
             return 1.0 / (i + 1)
@@ -44,13 +45,13 @@ def _build_eval_retriever() -> JqStrategyRetriever:
     return JqStrategyRetriever(JqStrategyStore(), llm=get_llm(temperature=0.0))
 
 
-async def _run_eval(dataset: Path, *, k: int = 5) -> dict:
+async def _run_eval(dataset: Path, *, k: int = 5) -> dict[str, Any]:
     settings = get_settings()
     retriever = _build_eval_retriever()
     questions = _load_questions(dataset)
     recalls: list[float] = []
     mrrs: list[float] = []
-    failures: list[dict] = []
+    failures: list[dict[str, Any]] = []
 
     for q in questions:
         hits = await retriever.retrieve(

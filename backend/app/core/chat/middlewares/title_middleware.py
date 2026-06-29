@@ -8,6 +8,7 @@ from typing import Any
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
+from pydantic import SecretStr
 
 from app.core.chat.middlewares.base import AgentMiddleware
 from app.settings import get_settings
@@ -60,7 +61,7 @@ class TitleMiddleware(AgentMiddleware):
             settings = get_settings()
             model = ChatOpenAI(
                 model=settings.model,
-                api_key=settings.openai_api_key.get_secret_value(),
+                api_key=SecretStr(settings.openai_api_key.get_secret_value()),
                 base_url=settings.openai_base_url,
                 temperature=0.2,
             )

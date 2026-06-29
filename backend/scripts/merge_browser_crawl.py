@@ -14,8 +14,9 @@ from __future__ import annotations
 import json
 import sys
 from collections import Counter
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 if str(BACKEND_ROOT) not in sys.path:
@@ -27,9 +28,9 @@ BROWSER_EXPORT = JQ_DICT_RAW_DIR / "browser_export.json"
 FULL_JSON = JQ_DICT_RAW_DIR / "full.json"
 
 
-def _dedupe(entities: list[dict]) -> list[dict]:
+def _dedupe(entities: list[dict[str, Any]]) -> list[dict[str, Any]]:
     seen: set[tuple[str, str]] = set()
-    out: list[dict] = []
+    out: list[dict[str, Any]] = []
     for e in entities:
         key = (e.get("type", ""), e.get("code", ""))
         if not e.get("code") or key in seen:
@@ -49,22 +50,22 @@ def _dedupe(entities: list[dict]) -> list[dict]:
     return out
 
 
-def merge_browser_export(export_path: Path = BROWSER_EXPORT) -> dict:
+def merge_browser_export(export_path: Path = BROWSER_EXPORT) -> dict[str, Any]:
     if not export_path.is_file():
         raise FileNotFoundError(export_path)
     browser_entities = json.loads(export_path.read_text(encoding="utf-8"))
     if isinstance(browser_entities, dict) and "entities" in browser_entities:
         browser_entities = browser_entities["entities"]
 
-    httpx_entities: list[dict] = []
+    httpx_entities: list[dict[str, Any]] = []
     if FULL_JSON.is_file():
         httpx_entities = json.loads(FULL_JSON.read_text()).get("entities", [])
 
     merged = _dedupe([*httpx_entities, *browser_entities])
-    payload = {
-        "version": f"browser-{datetime.now(timezone.utc).date().isoformat()}",
+    payload: dict[str, Any] = {
+        "version": f"browser-{datetime.now(UTC).date().isoformat()}",
         "source": "Chrome MCP crawl (logged-in) + httpx fallback",
-        "crawl_at": datetime.now(timezone.utc).isoformat(),
+        "crawl_at": datetime.now(UTC).isoformat(),
         "count": len(merged),
         "entities": merged,
     }

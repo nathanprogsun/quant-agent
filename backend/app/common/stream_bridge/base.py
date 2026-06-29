@@ -11,13 +11,7 @@ from uuid import UUID
 
 @dataclass(frozen=True)
 class StreamEvent:
-    """Immutable SSE event.
-
-    Attributes:
-        id: Monotonic event ID ("{timestamp_ms}-{seq}").
-        event: Event type (metadata | messages | values | updates | custom | error | end).
-        data: JSON-serializable payload.
-    """
+    """Immutable SSE event."""
 
     id: str
     event: str
@@ -36,12 +30,8 @@ SSE_MAX_LIFETIME_SECONDS = 1800
 class StreamBridge(ABC):
     """SSE event pub/sub abstraction.
 
-    Producers call publish() to emit events; consumers call subscribe()
-    to receive an async stream of events. Supports reconnection via
-    Last-Event-ID replay.
-
-    Constraint: single-process only (workers=1). Multi-process deployments
-    require a Redis-backed implementation.
+    Producers publish() and consumers subscribe() with Last-Event-ID replay.
+    Single-process only (workers=1).
     """
 
     @abstractmethod

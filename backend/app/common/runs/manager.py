@@ -10,6 +10,7 @@ from enum import StrEnum
 from typing import Any
 from uuid import UUID, uuid4
 
+from app.common.exception import ApplicationError
 from app.common.runs.schemas import DisconnectMode, RunStatus
 
 logger = logging.getLogger(__name__)
@@ -51,12 +52,24 @@ class RunRecord:
     updated_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
 
 
-class ConflictError(Exception):
-    """Raised when multitask_strategy=reject and thread has inflight runs."""
+class ConflictError(ApplicationError):
+    error_code = "CONFLICT"
+
+    def __init__(self, message: str = "Conflict") -> None:
+        super().__init__(message)
+
+    def http_code(self) -> int:
+        return 409
 
 
-class UnsupportedStrategyError(Exception):
-    """Raised for unknown multitask_strategy values."""
+class UnsupportedStrategyError(ApplicationError):
+    error_code = "UNSUPPORTED_STRATEGY"
+
+    def __init__(self, message: str = "Unsupported multitask strategy") -> None:
+        super().__init__(message)
+
+    def http_code(self) -> int:
+        return 400
 
 
 class RunStore:
@@ -230,6 +243,8 @@ class RunManager:
             run_id=uuid4(),
             thread_id=thread_id,
             user_id=user_id,
+            model_name=kwargs.get("model_name"),
+            assistant_id=kwargs.get("assistant_id"),
             multitask_strategy=kwargs.get("multitask_strategy", "reject"),
             on_disconnect=kwargs.get("on_disconnect", DisconnectMode.CANCEL),
             metadata=kwargs.get("metadata", {}),

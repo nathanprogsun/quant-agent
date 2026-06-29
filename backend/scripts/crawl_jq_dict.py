@@ -17,7 +17,7 @@ from __future__ import annotations
 import json
 import re
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
@@ -281,9 +281,9 @@ def crawl_jq_dict(*, output: Path = OUTPUT_PATH) -> dict[str, Any]:
     entities = _dedupe_entities(entities)
 
     payload = {
-        "version": f"real-{datetime.now(timezone.utc).date().isoformat()}",
+        "version": f"real-{datetime.now(UTC).date().isoformat()}",
         "source": "joinquant.com/data + help/api/plateData + data/dict/indexData",
-        "crawl_at": datetime.now(timezone.utc).isoformat(),
+        "crawl_at": datetime.now(UTC).isoformat(),
         "count": len(entities),
         "entities": entities,
     }

@@ -33,8 +33,8 @@ class ExceptionDictTransformer:
         """
         exc_type, exc_value, exc_tb = exc_info
         result: dict[str, Any] = {
-            "type": exc_type.__name__ if exc_type else None,
-            "message": str(exc_value) if exc_value else None,
+            "type": exc_type.__name__,
+            "message": str(exc_value),
         }
 
         if exc_tb and self.show_locals:

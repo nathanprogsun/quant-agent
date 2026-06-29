@@ -19,9 +19,10 @@ from __future__ import annotations
 import json
 import logging
 import pickle
+from collections.abc import Sequence
 from datetime import date
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
 import chromadb
 from llama_index.core import VectorStoreIndex
@@ -36,6 +37,7 @@ from llama_index.core.vector_stores import (
 from llama_index.retrievers.bm25 import BM25Retriever
 from llama_index.vector_stores.chroma import ChromaVectorStore
 
+from app.core.jq_kb.chunkers.jq_api import chunk_jq_api_records
 from app.core.jq_kb.embeddings import get_embedding_model
 from app.core.jq_kb.paths import (
     JQ_API_BM25_PATH,
@@ -43,13 +45,14 @@ from app.core.jq_kb.paths import (
     JQ_API_COLLECTION_NAME,
     JQ_API_MANIFEST_PATH,
     JQ_API_RAW_DIR,
+    PILOT_FUNCTIONS,
 )
 from app.core.jq_kb.schemas import JqApiChunk, Library, LibraryManifest, env_support_flags
 
 logger = logging.getLogger(__name__)
 
 
-class JqApiJsonReader(BaseReader):
+class JqApiJsonReader(BaseReader):  # type: ignore[misc]  # BaseReader typed as Any (stub missing)
     """LlamaIndex-compatible reader for our pilot.json / full.json shape.
 
     Output: one ``Document`` per raw record, with all metadata pre-populated.
@@ -65,9 +68,6 @@ class JqApiJsonReader(BaseReader):
         Each record becomes a Document with metadata mirroring the record
         fields, so the chunker transform can rebuild a JqApiChunk losslessly.
         """
-        from app.core.jq_kb.chunkers.jq_api import chunk_jq_api_records
-        from app.core.jq_kb.paths import PILOT_FUNCTIONS
-
         files: list[Path] = []
         pilot_path = self.raw_dir / "pilot.json"
         if pilot_only:
@@ -97,7 +97,7 @@ class JqApiJsonReader(BaseReader):
         return chunks_to_documents(chunks)
 
 
-class JqApiChunkToNode(TransformComponent):
+class JqApiChunkToNode(TransformComponent):  # type: ignore[misc]  # BaseReader typed as Any (stub missing)
     """IngestionPipeline transformation: Document → TextNode with stable id.
 
     LlamaIndex's default Document → TextNode just uses text + metadata, but
@@ -176,7 +176,7 @@ def create_chroma_vector_store(
     return ChromaVectorStore(chroma_collection=collection)
 
 
-def _chroma_client(chroma_path: Path) -> chromadb.ClientAPI:
+def _chroma_client(chroma_path: Path) -> chromadb.api.ClientAPI:
     chroma_path.mkdir(parents=True, exist_ok=True)
     return chromadb.PersistentClient(path=str(chroma_path))
 
@@ -290,7 +290,7 @@ class JqApiStore:
             encoding="utf-8",
         )
 
-    def get_by_function_name(self, function_name: str) -> dict | None:
+    def get_by_function_name(self, function_name: str) -> dict[str, Any] | None:
         """Exact-match shortcut: bypasses RAG, used when user names a function explicitly."""
         filters = MetadataFilters(
             filters=[MetadataFilter(key="function_name", value=function_name)],

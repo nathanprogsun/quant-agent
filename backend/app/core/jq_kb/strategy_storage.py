@@ -5,9 +5,10 @@ from __future__ import annotations
 import json
 import logging
 import pickle
+from collections.abc import Sequence
 from datetime import date
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
 from llama_index.core import VectorStoreIndex
 from llama_index.core.ingestion import IngestionPipeline
@@ -50,7 +51,7 @@ def _load_summaries_map(path: Path = JQ_STRATEGY_SUMMARIES_PATH) -> dict[int, di
     return out
 
 
-class JqStrategyJsonReader(BaseReader):
+class JqStrategyJsonReader(BaseReader):  # type: ignore[misc]  # BaseReader typed as Any (stub missing)
     """Reader for jq_strategy pilot.json / posts.json."""
 
     def __init__(self, raw_dir: Path = JQ_STRATEGY_RAW_DIR) -> None:
@@ -78,10 +79,26 @@ class JqStrategyJsonReader(BaseReader):
 
         logger.info("Reading %d posts from %s", len(merged), path.name)
         chunks = chunk_jq_strategy_posts(merged)
-        return strategy_chunks_to_documents(chunks)
+
+        # Dedupe by chunk id (Chroma requires unique node ids per batch).
+        seen: set[str] = set()
+        deduped: list[JqStrategyChunk] = []
+        for c in chunks:
+            if c.id in seen:
+                logger.warning("Dropping duplicate chunk id: %s", c.id)
+                continue
+            seen.add(c.id)
+            deduped.append(c)
+        if len(deduped) != len(chunks):
+            logger.info(
+                "Deduped %d → %d unique chunks (post_id collisions)",
+                len(chunks),
+                len(deduped),
+            )
+        return strategy_chunks_to_documents(deduped)
 
 
-class JqStrategyChunkToNode(TransformComponent):
+class JqStrategyChunkToNode(TransformComponent):  # type: ignore[misc]  # BaseReader typed as Any (stub missing)
     def __call__(self, nodes: Sequence[Document], **kwargs: Any) -> list[TextNode]:
         return [
             TextNode(
@@ -214,7 +231,7 @@ class JqStrategyStore:
             encoding="utf-8",
         )
 
-    def get_by_post_id(self, post_id: int, *, layer: str = "") -> dict | None:
+    def get_by_post_id(self, post_id: int, *, layer: str = "") -> dict[str, Any] | None:
         filters: list[MetadataFilter] = [MetadataFilter(key="post_id", value=post_id)]
         if layer:
             filters.append(MetadataFilter(key="layer", value=layer))

@@ -9,12 +9,12 @@ from langchain_core.runnables import RunnableConfig
 from langchain_openai import ChatOpenAI
 from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode
+from pydantic import SecretStr
 
 from app.core.chat.agent.prompt import apply_prompt_template
 from app.core.chat.agent.thread_state import ThreadState
 from app.core.chat.middlewares.base import AgentMiddleware
 from app.core.chat.middlewares.clarification_middleware import ClarificationMiddleware
-from app.core.chat.middlewares.dc42_context_middleware import DC42ContextMiddleware
 from app.core.chat.middlewares.dynamic_context_middleware import DynamicContextMiddleware
 from app.core.chat.middlewares.loop_detection_middleware import LoopDetectionMiddleware
 from app.core.chat.middlewares.memory_middleware import MemoryMiddleware
@@ -27,7 +27,7 @@ from app.core.chat.tools.builtin.param_tool import make_validate_parameters_tool
 from app.core.jq_kb.tools import get_tools
 from app.settings import get_settings
 
-_SYSTEM_SUFFIX_MARKERS = ("[系统上下文]", "[DC42 Knowledge]", "<dc42_knowledge>", "<memory>")
+_SYSTEM_SUFFIX_MARKERS = ("[系统上下文]", "<memory>")
 
 
 def _system_suffix(text: str) -> str:
@@ -75,9 +75,9 @@ def make_lead_agent(config: RunnableConfig) -> Any:
     # Model resolution: requested → config → global default
     model_name = configurable.get("model_name", settings.model)
 
-    model = ChatOpenAI(
+    model: Any = ChatOpenAI(
         model=model_name,
-        api_key=settings.openai_api_key.get_secret_value(),
+        api_key=SecretStr(settings.openai_api_key.get_secret_value()),
         base_url=settings.openai_base_url,
         streaming=True,
         extra_body={"reasoning_split": True},
@@ -189,14 +189,12 @@ def _build_middlewares(config: RunnableConfig) -> list[AgentMiddleware]:
     # Summarization enabled flag
     summarization_enabled = configurable.get("summarization_enabled", True)
     max_messages = configurable.get("max_messages", 50)
-    dc42_retriever = configurable.get("dc42_retriever")
 
     return [
         TitleMiddleware(),
         TokenUsageMiddleware(),
         SummarizationMiddleware(max_messages=max_messages, enabled=summarization_enabled),
         DynamicContextMiddleware(),
-        DC42ContextMiddleware(retriever=dc42_retriever),
         ClarificationMiddleware(),
         LoopDetectionMiddleware(),
         SubagentLimitMiddleware(),

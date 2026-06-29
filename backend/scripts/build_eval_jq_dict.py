@@ -13,7 +13,6 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Any
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 if str(BACKEND_ROOT) not in sys.path:

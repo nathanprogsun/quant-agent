@@ -3,11 +3,20 @@
 from __future__ import annotations
 
 import asyncio
-from uuid import uuid4
+from typing import Any, cast
+from unittest.mock import AsyncMock, MagicMock
+from uuid import UUID, uuid4
 
 import pytest
+from fastapi import Request
+from langgraph.checkpoint.base import BaseCheckpointSaver
 
+from app.common.runs.manager import RunManager
+from app.common.runs.schemas import DisconnectMode
+from app.common.stream_bridge.memory import MemoryStreamBridge
+from app.core.chat.service.thread_service import ThreadService
 from app.web.api.thread.schema import RunCreateRequest, ThreadResponse
+from app.web.api.thread.services import start_run
 
 
 def test_thread_response_serializes_id_and_thread_id() -> None:
@@ -34,17 +43,6 @@ def test_run_create_request_accepts_stream_mode_camel_case() -> None:
 
 @pytest.mark.asyncio
 async def test_start_run_forwards_stream_modes(monkeypatch: pytest.MonkeyPatch) -> None:
-    from unittest.mock import AsyncMock, MagicMock
-    from uuid import UUID
-
-    from fastapi import Request
-
-    from app.common.runs.manager import RunManager
-    from app.common.runs.schemas import DisconnectMode
-    from app.common.stream_bridge.memory import MemoryStreamBridge
-    from app.core.chat.service.thread_service import ThreadService
-    from app.web.api.thread.schema import RunCreateRequest
-    from app.web.api.thread.services import start_run
 
     captured: dict[str, list[str]] = {}
     started = asyncio.Event()
@@ -73,7 +71,7 @@ async def test_start_run_forwards_stream_modes(monkeypatch: pytest.MonkeyPatch) 
         bridge=bridge,
         run_manager=run_manager,
         thread_service=thread_service,
-        checkpointer=None,
+        checkpointer=cast(BaseCheckpointSaver[Any], None),
         body=body,
         thread_id=UUID(str(uuid4())),
         request=request,

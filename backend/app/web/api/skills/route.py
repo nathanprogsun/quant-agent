@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Any
+from typing import Annotated, cast
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 
+from app.common.exception import ResourceNotFoundError, ServiceError
 from app.core.chat.skills.registry import (
     SkillDefinition,
     SkillParameter,
-    get_skill_registry,
+    SkillRegistry,
 )
 from app.db.models.user import User
 from app.web.api.deps import get_current_user
@@ -18,9 +19,12 @@ from app.web.api.deps import get_current_user
 router = APIRouter(prefix="/api/skills", tags=["skills"])
 
 
-def skill_registry_from_request(request: Request) -> Any:
+def skill_registry_from_request(request: Request) -> SkillRegistry:
     """Get SkillRegistry from app context."""
-    return get_skill_registry()
+    app_context = getattr(request.app.state, "app_context", None)
+    if app_context is None or app_context.skill_registry is None:
+        raise ServiceError("Skill registry not initialized")
+    return cast(SkillRegistry, app_context.skill_registry)
 
 
 # ── Request models ───────────────────────────────────────────
@@ -30,7 +34,7 @@ class SkillCreateRequest(BaseModel):
     """Request to register a new skill."""
 
     name: str = Field(..., min_length=1, max_length=128, description="Unique skill name")
-    description: str = Field(..., min_length=1, max_length=1024, description="Skill description")
+    description: str = Field(..., min_length=1, max_length=1024, description="Human-readable description")
     version: str = Field(default="1.0.0", description="Semantic version")
     parameters: list[SkillParameter] = Field(default_factory=list, description="Input parameters")
     prompt_template: str = Field(..., min_length=1, description="Prompt template for LLM")
@@ -63,7 +67,7 @@ class SkillListResponse(BaseModel):
 @router.get("", response_model=SkillListResponse)
 async def list_skills(
     current_user: Annotated[User, Depends(get_current_user)],
-    registry: Annotated[Any, Depends(skill_registry_from_request)],
+    registry: Annotated[SkillRegistry, Depends(skill_registry_from_request)],
 ) -> SkillListResponse:
     """List all registered skills.
 
@@ -91,7 +95,7 @@ async def list_skills(
 async def get_skill(
     skill_name: str,
     current_user: Annotated[User, Depends(get_current_user)],
-    registry: Annotated[Any, Depends(skill_registry_from_request)],
+    registry: Annotated[SkillRegistry, Depends(skill_registry_from_request)],
 ) -> SkillResponse:
     """Get skill details by name.
 
@@ -106,7 +110,7 @@ async def get_skill(
     """
     skill = registry.get(skill_name)
     if not skill:
-        raise HTTPException(status_code=404, detail=f"Skill not found: {skill_name}")
+        raise ResourceNotFoundError(f"Skill not found: {skill_name}")
     return SkillResponse(
         name=skill.name,
         description=skill.description,
@@ -122,7 +126,7 @@ async def get_skill(
 async def create_skill(
     body: SkillCreateRequest,
     current_user: Annotated[User, Depends(get_current_user)],
-    registry: Annotated[Any, Depends(skill_registry_from_request)],
+    registry: Annotated[SkillRegistry, Depends(skill_registry_from_request)],
 ) -> SkillResponse:
     """Register a new skill.
 
@@ -159,18 +163,18 @@ async def create_skill(
 async def delete_skill(
     skill_name: str,
     current_user: Annotated[User, Depends(get_current_user)],
-    registry: Annotated[Any, Depends(skill_registry_from_request)],
+    registry: Annotated[SkillRegistry, Depends(skill_registry_from_request)],
 ) -> None:
     """Unregister a skill.
 
     Removes a skill from the registry.
 
     Args:
-        skill_name: Name of skill to unregister.
+        skill_name: Name of skill to remove.
 
     Raises:
         404: If skill not found.
     """
     deleted = registry.unregister(skill_name)
     if not deleted:
-        raise HTTPException(status_code=404, detail=f"Skill not found: {skill_name}")
+        raise ResourceNotFoundError(f"Skill not found: {skill_name}")

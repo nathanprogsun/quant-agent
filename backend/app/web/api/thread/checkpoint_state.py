@@ -7,7 +7,8 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from langchain_core.messages import BaseMessage, messages_to_dict
-from langgraph.checkpoint.base import Checkpoint, CheckpointTuple, RunnableConfig
+from langchain_core.runnables import RunnableConfig
+from langgraph.checkpoint.base import Checkpoint, CheckpointTuple
 
 
 def config_to_checkpoint(config: RunnableConfig) -> dict[str, Any]:
@@ -44,7 +45,7 @@ def checkpoint_tuple_to_thread_state(
     checkpoint_tuple: CheckpointTuple,
 ) -> dict[str, Any]:
     """Convert a CheckpointTuple into SDK-compatible ThreadState."""
-    checkpoint = checkpoint_tuple.checkpoint or {}
+    checkpoint = checkpoint_tuple.checkpoint
     channel_values = checkpoint.get("channel_values") or {}
 
     parent_checkpoint = None

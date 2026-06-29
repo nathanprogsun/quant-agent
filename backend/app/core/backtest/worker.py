@@ -42,10 +42,10 @@ async def run_backtest_worker(
 
             if result.status == BacktestStatus.RUNNING:
                 try:
-                    logs_payload = await service.fetch_logs_incremental(
+                    logs = await service.fetch_logs_incremental(
                         backtest_id, log_offset
                     )
-                    for line in logs_payload.get("logs", []):
+                    for line in logs.logs:
                         await _publish_event(
                             bridge,
                             run_id,
@@ -55,9 +55,7 @@ async def run_backtest_worker(
                                 "line": str(line),
                             },
                         )
-                    next_offset = logs_payload.get("next_offset")
-                    if isinstance(next_offset, int):
-                        log_offset = next_offset
+                    log_offset = logs.next_offset
                 except Exception:
                     logger.debug("Log fetch skipped for %s", backtest_id)
 

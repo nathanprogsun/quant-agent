@@ -5,7 +5,7 @@ from __future__ import annotations
 from app.core.chat.tools.builtin.lint_tool import LintResult, lint_code
 
 
-def test_lint_clean_code():
+def test_lint_clean_code() -> None:
     """Clean code should pass lint."""
     code = """
 import jqdatastd as jq
@@ -22,7 +22,7 @@ def handle_data(context, data):
     assert len(result.critical_issues) == 0
 
 
-def test_lint_detects_os_import():
+def test_lint_detects_os_import() -> None:
     """Code importing os should be flagged as CRITICAL."""
     code = """
 import os
@@ -36,7 +36,7 @@ def initialize(context):
     assert any("os" in issue for issue in result.critical_issues)
 
 
-def test_lint_detects_eval():
+def test_lint_detects_eval() -> None:
     """Code using eval should be flagged as CRITICAL."""
     code = """
 def initialize(context):
@@ -47,7 +47,7 @@ def initialize(context):
     assert any("eval" in issue for issue in result.critical_issues)
 
 
-def test_lint_detects_subprocess():
+def test_lint_detects_subprocess() -> None:
     """Code importing subprocess should be flagged as CRITICAL."""
     code = """
 import subprocess

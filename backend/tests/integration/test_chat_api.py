@@ -1,6 +1,7 @@
 """Integration tests for chat API."""
 from __future__ import annotations
 
+from collections.abc import AsyncGenerator
 from uuid import uuid4
 
 import pytest
@@ -52,7 +53,9 @@ class TestChatAPI:
         async def noop_run_agent(*_args: object, **_kwargs: object) -> None:
             return None
 
-        async def immediate_sse(*_args: object, **_kwargs: object):
+        async def immediate_sse(
+            *_args: object, **_kwargs: object
+        ) -> AsyncGenerator[None, None]:
             return
             yield  # pragma: no cover - makes this an async generator
 

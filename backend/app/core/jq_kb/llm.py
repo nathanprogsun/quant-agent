@@ -17,10 +17,10 @@ from __future__ import annotations
 
 from functools import lru_cache
 
+import tiktoken
 from llama_index.core.base.llms.types import LLMMetadata
 from llama_index.llms.openai import OpenAI as LlamaIndexOpenAI
 from llama_index.llms.openai.utils import (
-    is_chat_model,
     is_function_calling_model,
 )
 from openai import OpenAI as OpenAIClient
@@ -31,7 +31,7 @@ from app.settings import get_settings
 _DEFAULT_CONTEXT_WINDOW = 32_000
 
 
-class ProxyOpenAI(LlamaIndexOpenAI):
+class ProxyOpenAI(LlamaIndexOpenAI):  # type: ignore[misc]  # LlamaIndexOpenAI typed as Any (stub missing)
     """LlamaIndex OpenAI subclass that tolerates proxy-served model names.
 
     Upstream ``OpenAI.metadata`` calls ``openai_modelname_to_contextsize``
@@ -42,13 +42,11 @@ class ProxyOpenAI(LlamaIndexOpenAI):
     """
 
     @property
-    def _tokenizer(self):  # type: ignore[override]
+    def _tokenizer(self) -> tiktoken.Encoding:
         # Fall back to cl100k_base for any unknown proxy-served model.
         try:
-            import tiktoken
             return tiktoken.encoding_for_model(self._get_model_name())
         except KeyError:
-            import tiktoken
             return tiktoken.get_encoding("cl100k_base")
 
     @property

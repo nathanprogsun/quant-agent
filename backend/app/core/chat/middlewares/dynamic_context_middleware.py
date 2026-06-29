@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
+from langchain_core.messages import HumanMessage
+
 from app.core.chat.middlewares.base import AgentMiddleware
 
 
@@ -32,7 +34,6 @@ class DynamicContextMiddleware(AgentMiddleware):
             messages[0] = messages[0].__class__(content=system_content + context)
         else:
             # Prepend context message
-            from langchain_core.messages import HumanMessage
             messages.insert(1, HumanMessage(content=context))
 
         return {"messages": messages}

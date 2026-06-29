@@ -1,6 +1,7 @@
 """Pydantic types for time."""
 
 from datetime import datetime, time
+from email.utils import parsedate_to_datetime
 from typing import Annotated
 
 from pydantic import AfterValidator, AwareDatetime, BeforeValidator, Field
@@ -19,8 +20,6 @@ def zone_disallowed_time_validator(value: time) -> time:
 
 
 def validate_rfc2822(rfc2822_str: str) -> datetime:
-    from email.utils import parsedate_to_datetime
-
     try:
         return parsedate_to_datetime(rfc2822_str)
     except Exception:

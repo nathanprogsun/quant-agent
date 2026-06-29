@@ -1,0 +1,78 @@
+name: jq_kb CI
+
+on:
+  push:
+    branches: [main, dev]
+    paths:
+      - backend/app/core/jq_kb/**
+      - backend/app/core/chat/agent/**
+      - backend/scripts/jq_kb_pipeline.py
+      - backend/tests/**/test_jq_*.py
+      - backend/tests/integration/test_jq_kb*.py
+      - backend/eval/**
+      - backend/data/jq_*/manifest.json
+      - .github/workflows/jq-kb-ci.yml
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - backend/app/core/jq_kb/**
+      - backend/app/core/chat/agent/**
+      - backend/scripts/jq_kb_pipeline.py
+      - backend/tests/**/test_jq_*.py
+      - backend/tests/integration/test_jq_kb*.py
+      - backend/eval/**
+      - backend/data/jq_*/manifest.json
+      - .github/workflows/jq-kb-ci.yml
+  workflow_dispatch:
+
+concurrency:
+  group: jq-kb-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  jq-kb-smoke:
+    if: github.event.pull_request.draft != true
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v7
+      - run: uv sync --all-extras
+        working-directory: backend
+      - name: jq_kb unit tests
+        run: uv run pytest tests/unit/test_jq_api.py tests/unit/test_jq_dict.py tests/unit/test_jq_strategy.py tests/unit/test_jq_kb_inference.py tests/unit/test_agent_prompt.py -v --tb=short
+        working-directory: backend
+      - name: jq_kb integration smoke
+        run: uv run pytest tests/integration/test_jq_kb_artifacts_present.py tests/integration/test_jq_kb_agent_integration.py -v --tb=short
+        working-directory: backend
+
+  jq-kb-pipeline:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    needs: jq-kb-smoke
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      JQKB_EMBEDDING_BASE_URL: https://openrouter.ai/api/v1
+      JQKB_EMBEDDING_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      JQKB_EMBEDDING_MODEL: nvidia/llama-nemotron-embed-vl-1b-v2:free
+      JQKB_RERANK_BASE_URL: https://openrouter.ai/api/v1/rerank
+      JQKB_RERANK_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      JQKB_RERANK_MODEL: nvidia/llama-nemotron-rerank-vl-1b-v2:free
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v7
+      - run: uv sync --all-extras
+        working-directory: backend
+      - name: Full jq_kb ingest → eval
+        run: uv run python scripts/jq_kb_pipeline.py --reset
+        working-directory: backend

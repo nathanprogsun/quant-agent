@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from typing import Any
 from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from app.app_context.app_context import AppContext
 from app.core.backtest.service import BacktestService
 from app.core.backtest.types import BacktestMetrics, BacktestResult, BacktestStatus
 from app.web.api.backtest.views import get_backtest_service
@@ -17,7 +19,7 @@ from tests.integration.client import APITestClient
 
 @pytest.mark.asyncio
 async def test_full_loop_submit_backtest_and_analyze_mocked(
-    test_app_context,
+    test_app_context: AppContext,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("JQCLI_TOKEN", "test-token")
@@ -30,7 +32,7 @@ async def test_full_loop_submit_backtest_and_analyze_mocked(
         metrics=BacktestMetrics(annual_return=0.18, sharpe=1.3),
     )
 
-    async def fake_analyze(*_args, **_kwargs):
+    async def fake_analyze(*_args: object, **_kwargs: object) -> Any:
         yield "mock analysis"
 
     mock_analyzer = AsyncMock()

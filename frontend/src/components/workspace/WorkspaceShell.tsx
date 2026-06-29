@@ -8,7 +8,7 @@ import { LoginModal } from "@/components/auth/LoginModal";
 import { ThreadList } from "@/components/workspace/ThreadList";
 import { QuantAgentShell } from "@/components/workspace/QuantAgentShell";
 import { WorkspaceTopBar } from "@/components/workspace/WorkspaceTopBar";
-import { LoginModalProvider, useLoginModal } from "@/contexts/LoginModalContext";
+import { LoginModalProvider } from "@/contexts/LoginModalContext";
 import { WorkspaceShellContext } from "@/contexts/WorkspaceShellContext";
 import { useAuth } from "@/core/auth/AuthProvider";
 
@@ -39,7 +39,7 @@ function WorkspaceShellInner({ children }: WorkspaceShellProps) {
   const router = useRouter();
   const pathname = usePathname();
   const { user } = useAuth();
-  const [sidebarExpanded, setSidebarExpanded] = useState(true);
+  const [sidebarExpanded, setSidebarExpanded] = useState(false);
 
   const isGuestView = !user;
   const isChatPage = pathname.startsWith("/workspace/chats/");

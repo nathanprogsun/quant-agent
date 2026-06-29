@@ -5,21 +5,28 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from typing import Any
 from uuid import UUID
 
 from fastapi import HTTPException, Request
 from langchain_core.messages import convert_to_messages
 from langchain_core.messages.base import BaseMessage
-from langchain_core.runnables import RunnableConfig
+from langchain_core.runnables import Runnable, RunnableConfig
+from langgraph.checkpoint.base import BaseCheckpointSaver
 
-from app.common.runs.manager import ConflictError, RunManager
+from app.common.exception.exception import InvalidArgumentError
+from app.common.runs.manager import ConflictError, RunManager, RunRecord
 from app.common.runs.schemas import DisconnectMode
 from app.common.stream_bridge.base import StreamBridge
 from app.core.chat.service.stream_modes import normalize_request_stream_modes
 from app.core.chat.service.thread_service import ThreadService
+from app.core.chat.service.types import GraphInput
 from app.core.chat.service.worker import run_agent
+from app.web.api.thread.schema import (
+    RunCreateRequest,
+    RunEventPayload,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +48,12 @@ MAX_MESSAGE_LENGTH = 32768  # 32KB per message
 ALLOWED_ROLES = frozenset({"user", "assistant", "system", "tool"})
 
 
-def format_sse(event: str, data: Any, *, event_id: str | None = None) -> str:
+def format_sse(
+    event: str,
+    data: RunEventPayload | dict[str, Any] | None,
+    *,
+    event_id: str | None = None,
+) -> str:
     """Format a single SSE frame."""
     lines = [f"event: {event}"]
     data_str = json.dumps(data, ensure_ascii=False, default=str) if data is not None else "null"
@@ -76,28 +88,19 @@ def normalize_input(raw_input: dict[str, Any]) -> dict[str, Any]:
             role = msg.get("role", "")
             if role and role not in ALLOWED_ROLES:
                 logger.warning("Invalid role '%s' at message index %d", role, i)
-                raise HTTPException(
-                    status_code=400,
-                    detail="请求参数无效",
-                )
+                raise InvalidArgumentError("请求参数无效")
             # Validate length
             content = msg.get("content", "")
             if isinstance(content, str) and len(content) > MAX_MESSAGE_LENGTH:
                 logger.warning(
                     "Message at index %d exceeds %d chars", i, MAX_MESSAGE_LENGTH
                 )
-                raise HTTPException(
-                    status_code=400,
-                    detail="请求参数无效",
-                )
+                raise InvalidArgumentError("请求参数无效")
             try:
                 converted.extend(convert_to_messages([msg]))
             except Exception as e:
                 logger.warning("Invalid message at index %d: %s", i, e)
-                raise HTTPException(
-                    status_code=400,
-                    detail="请求参数无效",
-                )
+                raise InvalidArgumentError("请求参数无效")
         else:
             logger.warning(
                 "Unsupported message type at index %d: %s", i, type(msg)
@@ -151,12 +154,12 @@ async def start_run(
     bridge: StreamBridge,
     run_manager: RunManager,
     thread_service: ThreadService,
-    checkpointer: Any,
-    body: Any,
+    checkpointer: BaseCheckpointSaver[Any],
+    body: RunCreateRequest,
     thread_id: UUID,
     request: Request,
-    agent_factory: Any,
-) -> Any:
+    agent_factory: Callable[..., Runnable[Any, Any]],
+) -> RunRecord:
     """Create and start a run.
 
     Flow:
@@ -179,8 +182,8 @@ async def start_run(
             multitask_strategy=getattr(body, "multitask_strategy", "reject"),
             on_disconnect=DisconnectMode(getattr(body, "on_disconnect", "cancel")),
         )
-    except ConflictError as e:
-        raise HTTPException(status_code=409, detail=str(e))
+    except ConflictError:
+        raise
 
     # 3. Ensure thread exists
     await thread_service.create(
@@ -191,7 +194,12 @@ async def start_run(
 
     # 4. Normalize input
     raw_input = getattr(body, "input", {"messages": []})
-    graph_input = normalize_input(raw_input)
+    normalized_input = normalize_input(raw_input)
+    graph_input = GraphInput.from_langchain_messages(
+        normalized_input.get("messages", []),
+        thread_id=thread_id,
+        user_id=request.state.current_user_id,
+    )
 
     # 5. Build config
     request_config = getattr(body, "config", {}) or {}
@@ -236,7 +244,7 @@ async def start_run(
 
 async def sse_consumer(
     bridge: StreamBridge,
-    record: Any,
+    record: RunRecord,
     request: Request,
     run_manager: RunManager,
 ) -> AsyncIterator[str]:

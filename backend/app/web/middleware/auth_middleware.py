@@ -45,8 +45,10 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 auth_service = getattr(lifespan_service, "auth_service", None)
 
         if auth_service is None:
-            # Service not initialized — let request through (startup race)
-            return await call_next(request)
+            return JSONResponse(
+                status_code=503,
+                content={"detail": "服务未就绪"},
+            )
 
         # Read token from cookie
         token = request.cookies.get("access_token")
@@ -64,16 +66,12 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 content={"detail": "认证失败或已过期"},
             )
 
-        user_id = payload.get("sub")
-        if not user_id:
-            return JSONResponse(
-                status_code=401,
-                content={"detail": "认证失败或已过期"},
-            )
+        user_id = payload.sub
 
         # Set user info on request state
         request.state.current_user_id = user_id
-        request.state.current_user_email = payload.get("email")
-        request.state.token_ver = payload.get("ver", 0)  # Token version for revocation check
+        request.state.current_user_email = payload.email
+        # `ver` is an optional claim minted alongside exp/iss/aud
+        request.state.token_ver = getattr(payload, "ver", 0)
 
         return await call_next(request)

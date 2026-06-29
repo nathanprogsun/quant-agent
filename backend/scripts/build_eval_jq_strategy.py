@@ -6,6 +6,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 if str(BACKEND_ROOT) not in sys.path:
@@ -13,7 +14,7 @@ if str(BACKEND_ROOT) not in sys.path:
 
 from app.core.jq_kb.paths import EVAL_DATA_DIR, JQ_STRATEGY_RAW_DIR
 
-PILOT_QUESTIONS: list[dict] = [
+PILOT_QUESTIONS: list[dict[str, Any]] = [
     {"id": "s001", "query": "ETF轮动策略入门", "expected_post_id": 0, "category": "etf", "difficulty": "easy"},
     {"id": "s002", "query": "ETF动量轮动 MA乖离择时", "expected_post_id": 0, "category": "etf", "difficulty": "medium"},
     {"id": "s003", "query": "国债ETF增强控制回撤", "expected_post_id": 0, "category": "etf", "difficulty": "medium"},
@@ -45,9 +46,9 @@ def _resolve_post_ids() -> dict[str, int]:
     return {p["title"]: int(p["post_id"]) for p in posts}
 
 
-def build_questions() -> list[dict]:
+def build_questions() -> list[dict[str, Any]]:
     title_to_pid = _resolve_post_ids()
-    out: list[dict] = []
+    out: list[dict[str, Any]] = []
     for q in PILOT_QUESTIONS:
         row = dict(q)
         for title, qid in TITLE_TO_QID.items():
@@ -60,7 +61,7 @@ def build_questions() -> list[dict]:
     return out
 
 
-def _write_jsonl(path: Path, rows: list[dict]) -> None:
+def _write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(json.dumps(r, ensure_ascii=False) for r in rows) + "\n", encoding="utf-8")
 

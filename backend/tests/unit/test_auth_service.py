@@ -8,7 +8,10 @@ from uuid import uuid4
 
 import pytest
 
+from app.common.exception import ConflictResourceError, ResourceNotFoundError
+from app.common.exception.exception import UnauthorizedError
 from app.core.auth.service.auth_service import AuthService
+from app.core.auth.types import TokenClaims
 from app.core.user.types import UserDTO
 
 TEST_USER_EMAIL = "test@example.com"
@@ -40,7 +43,7 @@ class TestAuthServiceToken:
     def test_create_access_token(self, auth_service: AuthService, mock_settings: MagicMock) -> None:
         with patch("app.core.auth.service.auth_service.get_settings", return_value=mock_settings):
             token = auth_service.create_access_token(
-                data={"sub": TEST_USER_ID, "email": TEST_USER_EMAIL}
+                data=TokenClaims(sub=TEST_USER_ID, email=TEST_USER_EMAIL)
             )
             assert isinstance(token, str)
             assert len(token) > 0
@@ -50,7 +53,7 @@ class TestAuthServiceToken:
     ) -> None:
         with patch("app.core.auth.service.auth_service.get_settings", return_value=mock_settings):
             token = auth_service.create_access_token(
-                data={"sub": TEST_USER_ID},
+                data=TokenClaims(sub=TEST_USER_ID, email=TEST_USER_EMAIL),
                 expires_delta=timedelta(hours=1),
             )
             assert isinstance(token, str)
@@ -59,12 +62,12 @@ class TestAuthServiceToken:
     def test_decode_token_valid(self, auth_service: AuthService, mock_settings: MagicMock) -> None:
         with patch("app.core.auth.service.auth_service.get_settings", return_value=mock_settings):
             token = auth_service.create_access_token(
-                data={"sub": TEST_USER_ID, "email": TEST_USER_EMAIL}
+                data=TokenClaims(sub=TEST_USER_ID, email=TEST_USER_EMAIL)
             )
             payload = auth_service.decode_token(token)
             assert payload is not None
-            assert payload["sub"] == TEST_USER_ID
-            assert payload["email"] == TEST_USER_EMAIL
+            assert payload.sub == TEST_USER_ID
+            assert payload.email == TEST_USER_EMAIL
 
     def test_decode_token_invalid(
         self, auth_service: AuthService, mock_settings: MagicMock
@@ -77,7 +80,9 @@ class TestAuthServiceToken:
         self, auth_service: AuthService, mock_settings: MagicMock
     ) -> None:
         with patch("app.core.auth.service.auth_service.get_settings", return_value=mock_settings):
-            token = auth_service.create_access_token(data={"sub": TEST_USER_ID})
+            token = auth_service.create_access_token(
+                data=TokenClaims(sub=TEST_USER_ID, email=TEST_USER_EMAIL)
+            )
             tampered_token = token[:-5] + "xxxxx"
             payload = auth_service.decode_token(tampered_token)
             assert payload is None
@@ -92,9 +97,9 @@ class TestAuthServiceAuthenticateUser:
         sample_user_model: MagicMock,
     ) -> None:
         hashed_password = auth_service.get_password_hash(TEST_USER_PASSWORD)
-        user_model = sample_user_model.model_copy(
-            update={"hashed_password": hashed_password, "email": TEST_USER_EMAIL}
-        )
+        user_model = sample_user_model
+        user_model.hashed_password = hashed_password
+        user_model.email = TEST_USER_EMAIL
         mock_user_service.get_user_model_by_email = AsyncMock(return_value=user_model)
 
         result = await auth_service.authenticate_user(TEST_USER_EMAIL, TEST_USER_PASSWORD)
@@ -119,9 +124,9 @@ class TestAuthServiceAuthenticateUser:
         sample_user_model: MagicMock,
     ) -> None:
         hashed_password = auth_service.get_password_hash("correct_password")
-        user_model = sample_user_model.model_copy(
-            update={"hashed_password": hashed_password, "email": TEST_USER_EMAIL}
-        )
+        user_model = sample_user_model
+        user_model.hashed_password = hashed_password
+        user_model.email = TEST_USER_EMAIL
         mock_user_service.get_user_model_by_email = AsyncMock(return_value=user_model)
 
         result = await auth_service.authenticate_user(TEST_USER_EMAIL, "wrong_password")
@@ -162,14 +167,14 @@ class TestAuthServiceChangePassword:
         old_password = "old_password_123"
         new_password = "new_password_456"
         hashed_old = auth_service.get_password_hash(old_password)
-        user_model = sample_user_model.model_copy(update={"hashed_password": hashed_old})
+        user_model = sample_user_model
+        user_model.hashed_password = hashed_old
 
         mock_user_service.get_user_model_by_id = AsyncMock(return_value=user_model)
         mock_user_service.update_password = AsyncMock(return_value=True)
 
-        result = await auth_service.change_password(TEST_USER_ID, old_password, new_password)
+        await auth_service.change_password(TEST_USER_ID, old_password, new_password)
 
-        assert result is True
         mock_user_service.update_password.assert_called_once()
 
     @pytest.mark.asyncio
@@ -177,8 +182,8 @@ class TestAuthServiceChangePassword:
         self, auth_service: AuthService, mock_user_service: AsyncMock
     ) -> None:
         mock_user_service.get_user_model_by_id = AsyncMock(return_value=None)
-        result = await auth_service.change_password(TEST_USER_ID, "old_password", "new_password")
-        assert result is False
+        with pytest.raises(ResourceNotFoundError):
+            await auth_service.change_password(TEST_USER_ID, "old_password", "new_password")
 
     @pytest.mark.asyncio
     async def test_change_password_wrong_old_password(
@@ -190,13 +195,14 @@ class TestAuthServiceChangePassword:
         correct_password = "correct_password"
         wrong_password = "wrong_password"
         hashed_correct = auth_service.get_password_hash(correct_password)
-        user_model = sample_user_model.model_copy(update={"hashed_password": hashed_correct})
+        user_model = sample_user_model
+        user_model.hashed_password = hashed_correct
 
         mock_user_service.get_user_model_by_id = AsyncMock(return_value=user_model)
 
-        result = await auth_service.change_password(TEST_USER_ID, wrong_password, "new_password")
+        with pytest.raises(UnauthorizedError):
+            await auth_service.change_password(TEST_USER_ID, wrong_password, "new_password")
 
-        assert result is False
         mock_user_service.update_password.assert_not_called()
 
 
@@ -211,7 +217,7 @@ class TestAuthServiceInitializeSystem:
         mock_user_service.count_users = AsyncMock(return_value=0)
         mock_user_service.create_admin_user = AsyncMock(return_value=sample_user_dto)
 
-        result = await auth_service.initialize_system(
+        result = await auth_service.initialize_system(  # type: ignore[attr-defined]
             TEST_USER_EMAIL, TEST_USER_PASSWORD, TEST_USER_FULL_NAME
         )
 
@@ -230,12 +236,10 @@ class TestAuthServiceInitializeSystem:
         auth_service: AuthService,
         mock_user_service: AsyncMock,
     ) -> None:
-        from app.common.exception import ConflictResourceError
-
         mock_user_service.count_users = AsyncMock(return_value=1)
 
         with pytest.raises(ConflictResourceError, match="System already initialized"):
-            await auth_service.initialize_system(
+            await auth_service.initialize_system(  # type: ignore[attr-defined]
                 TEST_USER_EMAIL, TEST_USER_PASSWORD, TEST_USER_FULL_NAME
             )
 

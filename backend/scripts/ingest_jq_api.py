@@ -33,15 +33,17 @@ import os
 import shutil
 import sys
 from pathlib import Path
+from typing import cast
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
+from llama_index.core.ingestion import IngestionPipeline
 from llama_index.core.schema import Document, TextNode
 from llama_index.vector_stores.chroma import ChromaVectorStore
 
-from app.core.jq_kb.embeddings import DEFAULT_EMBEDDING_MODEL, warm_up_models
+from app.core.jq_kb.embeddings import default_embedding_model_name, warm_up_models
 from app.core.jq_kb.paths import JQ_API_BM25_PATH, JQ_API_CHROMA_PATH
 from app.core.jq_kb.query_rewriter import reset_known_names_cache
 from app.core.jq_kb.schemas import JqApiChunk
@@ -126,7 +128,7 @@ async def run_ingestion_pipeline(
     vector_store = create_chroma_vector_store()
 
     # d) Build and run pipeline (async parallel embedding)
-    pipeline = build_pipeline(vector_store)
+    pipeline = cast("IngestionPipeline", build_pipeline(vector_store))
     logger.info(
         "Running ingestion pipeline (num_workers=%d)...",
         num_workers,
@@ -145,7 +147,7 @@ async def run_ingestion_pipeline(
     chunks = _documents_as_chunks(documents)
     store.persist_bm25(nodes, chunks)
 
-    model = os.environ.get("JQ_KB_EMBEDDING_MODEL", DEFAULT_EMBEDDING_MODEL)
+    model = os.environ.get("JQ_KB_EMBEDDING_MODEL", default_embedding_model_name())
     store.write_manifest(
         chunks_count=len(nodes),
         embedding_model=model,

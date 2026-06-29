@@ -6,8 +6,9 @@ import argparse
 import json
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 if str(BACKEND_ROOT) not in sys.path:
@@ -19,7 +20,7 @@ from app.core.jq_kb.paths import JQ_STRATEGY_RAW_DIR
 DEFAULT_DATA_DIR = Path(
     os.environ.get(
         "JQ_STRATEGY_DATA_DIR",
-        "/Users/jung/Desktop/DC42-2022年度精选策略",
+        "/Users/jung/Desktop/聚宽策略库",
     )
 )
 
@@ -35,9 +36,9 @@ PILOT_GLOBS = (
 )
 
 
-def _write_payload(path: Path, posts: list[dict], *, label: str) -> None:
+def _write_payload(path: Path, posts: list[dict[str, Any]], *, label: str) -> None:
     payload = {
-        "version": f"{label}-{datetime.now(timezone.utc).date().isoformat()}",
+        "version": f"{label}-{datetime.now(UTC).date().isoformat()}",
         "source": str(DEFAULT_DATA_DIR),
         "count": len(posts),
         "posts": posts,
@@ -57,7 +58,7 @@ def main() -> None:
         raise FileNotFoundError(f"JQ_STRATEGY_DATA_DIR not found: {args.data_dir}")
 
     if args.pilot:
-        posts: list[dict] = []
+        posts: list[dict[str, Any]] = []
         for pattern in PILOT_GLOBS:
             matches = sorted(args.data_dir.glob(pattern))
             if not matches:

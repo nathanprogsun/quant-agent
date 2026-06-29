@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from app.core.jq_kb.schemas import DictType, JqDictChunk, Library, Source
+from app.core.jq_kb.schemas import DictType, JqDictChunk
 
 BASE_URL = "https://www.joinquant.com/data"
 

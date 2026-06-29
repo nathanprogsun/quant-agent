@@ -1,27 +1,26 @@
-"""Memory repository with domain-specific operations."""
-
+"""Memory ORM repository (UserMemory + MemoryFact)."""
 from __future__ import annotations
 
+from typing import cast
 from uuid import UUID
 
-from sqlalchemy import text
+from sqlalchemy import delete, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.dao.generic_repository import GenericRepository
-from app.db.dbengine.core import DatabaseEngine
-from app.db.models.memory import MemoryFact, UserMemory
+from app.db.models import MemoryFact, UserMemory
 
 
-class MemoryRepository(GenericRepository):
-    """Repository for memory operations."""
+class MemoryRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
 
-    def __init__(self, engine: DatabaseEngine) -> None:
-        super().__init__(engine=engine)
-
-    # ── UserMemory operations ─────────────────────────────────
+    # ---- UserMemory ----
 
     async def create_memory(self, memory: UserMemory) -> UserMemory:
-        """Create a new user memory."""
-        return await self.insert(memory)
+        self.session.add(memory)
+        await self.session.flush()
+        await self.session.refresh(memory)
+        return memory
 
     async def find_memories_by_user(
         self,
@@ -31,38 +30,32 @@ class MemoryRepository(GenericRepository):
         limit: int = 50,
         offset: int = 0,
     ) -> list[UserMemory]:
-        """Find memories by user_id with optional type filter."""
-        if memory_type:
-            stmt = text("""
-                SELECT * FROM user_memories
-                WHERE user_id = :user_id AND memory_type = :memory_type
-                ORDER BY created_at DESC
-                LIMIT :limit OFFSET :offset
-            """).bindparams(user_id=user_id, memory_type=memory_type, limit=limit, offset=offset)
-        else:
-            stmt = text("""
-                SELECT * FROM user_memories
-                WHERE user_id = :user_id
-                ORDER BY created_at DESC
-                LIMIT :limit OFFSET :offset
-            """).bindparams(user_id=user_id, limit=limit, offset=offset)
-        rows = await self.engine.all(stmt)
-        return [UserMemory.from_row(row) for row in rows]
+        stmt = (
+            select(UserMemory)
+            .where(UserMemory.user_id == user_id)
+            .order_by(UserMemory.created_at.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+        if memory_type is not None:
+            stmt = stmt.where(UserMemory.memory_type == memory_type)
+        return list((await self.session.execute(stmt)).scalars())
 
     async def delete_memory(self, memory_id: UUID, user_id: UUID) -> bool:
-        """Delete a memory by ID with user_id filter."""
-        stmt = text("""
-            DELETE FROM user_memories
-            WHERE id = :id AND user_id = :user_id
-        """).bindparams(id=memory_id, user_id=user_id)
-        result = await self.engine.execute(stmt)
-        return result.rowcount > 0  # type: ignore[no-any-return, attr-defined]
+        result = await self.session.execute(
+            delete(UserMemory).where(
+                UserMemory.id == memory_id, UserMemory.user_id == user_id
+            )
+        )
+        return (result.rowcount or 0) > 0
 
-    # ── MemoryFact operations ──────────────────────────────────
+    # ---- MemoryFact ----
 
     async def create_fact(self, fact: MemoryFact) -> MemoryFact:
-        """Create a new memory fact."""
-        return await self.insert(fact)
+        self.session.add(fact)
+        await self.session.flush()
+        await self.session.refresh(fact)
+        return fact
 
     async def find_facts_by_user(
         self,
@@ -72,38 +65,31 @@ class MemoryRepository(GenericRepository):
         limit: int = 50,
         offset: int = 0,
     ) -> list[MemoryFact]:
-        """Find facts by user_id with optional type filter."""
-        if fact_type:
-            stmt = text("""
-                SELECT * FROM memory_facts
-                WHERE user_id = :user_id AND fact_type = :fact_type
-                ORDER BY created_at DESC
-                LIMIT :limit OFFSET :offset
-            """).bindparams(user_id=user_id, fact_type=fact_type, limit=limit, offset=offset)
-        else:
-            stmt = text("""
-                SELECT * FROM memory_facts
-                WHERE user_id = :user_id
-                ORDER BY created_at DESC
-                LIMIT :limit OFFSET :offset
-            """).bindparams(user_id=user_id, limit=limit, offset=offset)
-        rows = await self.engine.all(stmt)
-        return [MemoryFact.from_row(row) for row in rows]
+        stmt = (
+            select(MemoryFact)
+            .where(MemoryFact.user_id == user_id)
+            .order_by(MemoryFact.created_at.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+        if fact_type is not None:
+            stmt = stmt.where(MemoryFact.fact_type == fact_type)
+        return list((await self.session.execute(stmt)).scalars())
 
     async def find_fact_by_id(self, fact_id: UUID, user_id: UUID) -> MemoryFact | None:
-        """Find a fact by ID with user_id filter."""
-        stmt = text("""
-            SELECT * FROM memory_facts
-            WHERE id = :id AND user_id = :user_id
-        """).bindparams(id=fact_id, user_id=user_id)
-        row = await self.engine.at_most_one(stmt)
-        return MemoryFact.from_row(row) if row else None
+        return cast(
+            MemoryFact | None,
+            await self.session.scalar(
+                select(MemoryFact).where(
+                    MemoryFact.id == fact_id, MemoryFact.user_id == user_id
+                )
+            ),
+        )
 
     async def delete_fact(self, fact_id: UUID, user_id: UUID) -> bool:
-        """Delete a fact by ID with user_id filter."""
-        stmt = text("""
-            DELETE FROM memory_facts
-            WHERE id = :id AND user_id = :user_id
-        """).bindparams(id=fact_id, user_id=user_id)
-        result = await self.engine.execute(stmt)
-        return result.rowcount > 0  # type: ignore[no-any-return, attr-defined]
+        result = await self.session.execute(
+            delete(MemoryFact).where(
+                MemoryFact.id == fact_id, MemoryFact.user_id == user_id
+            )
+        )
+        return (result.rowcount or 0) > 0

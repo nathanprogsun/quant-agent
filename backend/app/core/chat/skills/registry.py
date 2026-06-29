@@ -48,6 +48,7 @@ class SkillRegistry:
 
     def __init__(self) -> None:
         self._skills: dict[str, SkillDefinition] = {}
+        _register_default_skills(self)
 
     def register(self, skill: SkillDefinition) -> None:
         """Register a new skill or overwrite existing one.
@@ -100,23 +101,6 @@ class SkillRegistry:
             True if skill exists, False otherwise.
         """
         return name in self._skills
-
-
-# Singleton instance
-_registry: SkillRegistry | None = None
-
-
-def get_skill_registry() -> SkillRegistry:
-    """Get the global SkillRegistry singleton.
-
-    Returns:
-        Global SkillRegistry instance.
-    """
-    global _registry
-    if _registry is None:
-        _registry = SkillRegistry()
-        _register_default_skills(_registry)
-    return _registry
 
 
 def _register_default_skills(registry: SkillRegistry) -> None:

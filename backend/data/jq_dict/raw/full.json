@@ -1,7 +1,7 @@
 {
-  "version": "browser-2026-06-25",
-  "source": "Chrome MCP crawl (logged-in joinquant.com/data) + technicalanalysis tree",
-  "crawl_at": "2026-06-25T07:10:41.100168+00:00",
+  "version": "browser-2026-06-29",
+  "source": "Chrome MCP crawl (logged-in) + httpx fallback",
+  "crawl_at": "2026-06-29T05:57:59.859226+00:00",
   "count": 14271,
   "entities": [
     {

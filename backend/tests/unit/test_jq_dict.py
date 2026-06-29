@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -16,7 +17,7 @@ PILOT_RAW_PATH = Path(__file__).resolve().parents[2] / "data/jq_dict/raw/pilot.j
 
 
 @pytest.fixture
-def industry_record() -> dict:
+def industry_record() -> dict[str, Any]:
     return {
         "code": "HY001",
         "name": "农林牧渔",
@@ -25,7 +26,7 @@ def industry_record() -> dict:
     }
 
 
-def test_chunk_jq_dict_record(industry_record: dict) -> None:
+def test_chunk_jq_dict_record(industry_record: dict[str, Any]) -> None:
     chunk = chunk_jq_dict_record(industry_record)
     assert chunk is not None
     assert chunk.code == "HY001"

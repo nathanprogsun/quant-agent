@@ -2,17 +2,29 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import re
 from typing import Any
 
+from app.core.jq_kb.ast_parser import extract_entities, extract_function_code
+from app.core.jq_kb.parser.strategy_txt import stable_hash
+from app.core.jq_kb.schemas import JqStrategyChunk, StrategyLayer, StrategySummary
 from app.core.jq_kb.utils import json_safe_value
 
-from app.core.jq_kb.ast_parser import extract_entities, extract_function_code
-from app.core.jq_kb.schemas import JqStrategyChunk, Source, StrategyLayer, StrategySummary
-
 logger = logging.getLogger(__name__)
+
+
+def _sanitize_token(text: str, max_len: int = 80) -> str:
+    """Sanitize text for use in chunk ids (keep word chars, replace others)."""
+    cleaned = re.sub(r"[^\w.-]", "_", text)
+    return cleaned[:max_len] if len(cleaned) > max_len else cleaned
+
+
+def _id_suffix(*parts: Any) -> str:
+    """Stable short suffix to make ids unique even when labels collide."""
+    return hashlib.sha1("\u0001".join(str(p) for p in parts).encode("utf-8")).hexdigest()[:8]
 
 _STRATEGY_TYPE_HINTS: list[tuple[str, str]] = [
     ("etf", "ETF 轮动"),
@@ -128,7 +140,7 @@ def chunk_jq_strategy_post(post: dict[str, Any]) -> list[JqStrategyChunk]:
         body = f"策略《{title}》使用 API: {api}"
         chunks.append(
             JqStrategyChunk(
-                id=f"strategy::{post_id}::api::{api}",
+                id=f"strategy::{post_id}::api::{_sanitize_token(api)}::{_id_suffix(post_id, 'api', api)}",
                 post_id=post_id,
                 year=year,
                 title=title,
@@ -139,7 +151,7 @@ def chunk_jq_strategy_post(post: dict[str, Any]) -> list[JqStrategyChunk]:
                 entity_name=api,
                 strategy_type=summary.strategy_type,
                 content=body,
-                contextual_content=f"{_build_header(StrategyLayer.ENTITY, post, f'API: {api}')}\n\n{body}",
+                contextual_content=_build_header(StrategyLayer.ENTITY, post, "API: " + api) + "\n\n" + body,
             )
         )
 
@@ -151,7 +163,7 @@ def chunk_jq_strategy_post(post: dict[str, Any]) -> list[JqStrategyChunk]:
         body = f"策略《{title}》涉及因子: {factor}"
         chunks.append(
             JqStrategyChunk(
-                id=f"strategy::{post_id}::factor::{re.sub(r'[^\\w.-]', '_', factor)}",
+                id=f"strategy::{post_id}::factor::{_sanitize_token(factor)}::{_id_suffix(post_id, 'factor', factor)}",
                 post_id=post_id,
                 year=year,
                 title=title,
@@ -176,7 +188,7 @@ def chunk_jq_strategy_post(post: dict[str, Any]) -> list[JqStrategyChunk]:
         body = func_code[:4000]
         chunks.append(
             JqStrategyChunk(
-                id=f"strategy::{post_id}::code::{func_name}",
+                id=f"strategy::{post_id}::code::{_sanitize_token(func_name)}::{_id_suffix(post_id, 'code', func_name)}",
                 post_id=post_id,
                 year=year,
                 title=title,
@@ -210,8 +222,6 @@ def chunk_jq_strategy_posts(posts: list[dict[str, Any]]) -> list[JqStrategyChunk
 
 def _dedupe_posts_by_id(posts: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Reassign post_id when the same id appears with different titles (bad clone headers)."""
-    from app.core.jq_kb.parser.strategy_txt import stable_hash
-
     seen: dict[int, str] = {}
     out: list[dict[str, Any]] = []
     for post in posts:

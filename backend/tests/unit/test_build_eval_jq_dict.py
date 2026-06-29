@@ -12,10 +12,10 @@ BACKEND_ROOT = Path(__file__).resolve().parents[2]
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
-from scripts.build_eval_jq_dict import (
+from scripts.build_eval_jq_dict import (  # noqa: E402
     FULL_EXTRA_QUESTIONS,
-    FULL_OUT,
     FULL_JSON,
+    FULL_OUT,
     PILOT_OUT,
     PILOT_QUESTIONS,
     build_full,

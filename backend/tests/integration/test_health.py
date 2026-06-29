@@ -2,12 +2,13 @@
 from __future__ import annotations
 
 import pytest
+from httpx import AsyncClient
 
 from tests.integration.client import APITestClient
 
 
 @pytest.fixture
-def health_client(api_client) -> APITestClient:
+def health_client(api_client: AsyncClient) -> APITestClient:
     """Health check client (no auth needed)."""
     return APITestClient(api_client)
 

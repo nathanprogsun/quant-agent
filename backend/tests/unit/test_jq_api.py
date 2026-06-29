@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -16,7 +17,7 @@ PILOT_RAW_PATH = Path(__file__).resolve().parents[2] / "data/jq_api/raw/pilot.js
 
 
 @pytest.fixture
-def pilot_record() -> dict:
+def pilot_record() -> dict[str, Any]:
     return {
         "function_name": "get_price",
         "module": "Stock",
@@ -28,9 +29,9 @@ def pilot_record() -> dict:
     }
 
 
-def test_chunk_jq_api_record(pilot_record: dict) -> None:
+def test_chunk_jq_api_record(pilot_record: dict[str, Any]) -> None:
     chunks = chunk_jq_api_record(pilot_record)
-    assert isinstance(chunks, list) and len(chunks) == 1
+    assert len(chunks) == 1
     chunk = chunks[0]
     assert chunk.function_name == "get_price"
     assert "get_price" in chunk.contextual_content

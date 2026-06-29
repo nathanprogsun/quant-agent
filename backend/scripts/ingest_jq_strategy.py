@@ -17,7 +17,7 @@ if str(BACKEND_ROOT) not in sys.path:
 
 from llama_index.core.schema import Document, TextNode
 
-from app.core.jq_kb.embeddings import DEFAULT_EMBEDDING_MODEL, warm_up_models
+from app.core.jq_kb.embeddings import default_embedding_model_name, warm_up_models
 from app.core.jq_kb.paths import JQ_STRATEGY_BM25_PATH, JQ_STRATEGY_CHROMA_PATH
 from app.core.jq_kb.query_rewriter import reset_known_names_cache
 from app.core.jq_kb.schemas import JqStrategyChunk, StrategyLayer
@@ -66,7 +66,7 @@ async def run_ingestion_pipeline(*, pilot: bool, reset: bool) -> None:
     store.persist_bm25(nodes, chunks)
     by_layer = dict(Counter(c.layer.value for c in chunks))
     post_ids = sorted({c.post_id for c in chunks})
-    model = os.environ.get("JQ_KB_EMBEDDING_MODEL", DEFAULT_EMBEDDING_MODEL)
+    model = os.environ.get("JQ_KB_EMBEDDING_MODEL", default_embedding_model_name())
     store.write_manifest(
         chunks_count=len(nodes),
         embedding_model=model,

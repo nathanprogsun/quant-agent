@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import AsyncGenerator
 from typing import Any
 from unittest.mock import AsyncMock, patch
 from uuid import uuid4
@@ -30,7 +31,9 @@ def _parse_sse_messages(body: str) -> list[dict[str, Any]]:
 
 
 @pytest.fixture
-async def backtest_stream_client(test_app_context: Any, monkeypatch: pytest.MonkeyPatch):
+async def backtest_stream_client(
+    test_app_context: Any, monkeypatch: pytest.MonkeyPatch
+) -> AsyncGenerator[tuple[APITestClient, AsyncMock], None]:
     """Authenticated client with mocked BacktestService and jqcli env."""
     monkeypatch.setenv("JQCLI_TOKEN", "test-token")
     reload_settings()

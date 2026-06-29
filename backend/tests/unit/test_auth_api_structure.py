@@ -4,16 +4,17 @@ from __future__ import annotations
 
 import pytest
 
+from app.core.auth.types import AuthResponse, ChangePasswordRequest, LoginRequest, RegisterRequest
+from app.web.api.auth.views import router
+
 
 class TestAuthAPIStructure:
     def test_auth_router_exists(self) -> None:
-        from app.web.api.auth.views import router
 
         assert router is not None
         assert router.prefix == "/api/v1/auth"
 
     def test_auth_endpoints_registered(self) -> None:
-        from app.web.api.auth.views import router
 
         routes: set[str] = set()
         for route in router.routes:
@@ -26,14 +27,11 @@ class TestAuthAPIStructure:
             "/api/v1/auth/signout",
             "/api/v1/auth/change-password",
             "/api/v1/auth/me",
-            "/api/v1/auth/initialize",
-            "/api/v1/auth/setup-status",
         }
         for expected_path in expected_routes:
             assert expected_path in routes, f"Missing route: {expected_path}"
 
     def test_login_request_model(self) -> None:
-        from app.core.auth.types import LoginRequest
 
         valid = LoginRequest(email="test@example.com", password="password123")
         assert valid.email == "test@example.com"
@@ -42,7 +40,6 @@ class TestAuthAPIStructure:
             LoginRequest(email="not-an-email", password="password")
 
     def test_register_request_model(self) -> None:
-        from app.core.auth.types import RegisterRequest
 
         valid = RegisterRequest(
             email="test@example.com", password="password123", full_name="Test User"
@@ -57,16 +54,12 @@ class TestAuthAPIStructure:
             RegisterRequest(email="test@example.com", full_name="Test User")  # type: ignore[call-arg]
 
     def test_change_password_request_model(self) -> None:
-        from app.core.auth.types import ChangePasswordRequest
 
-        valid = ChangePasswordRequest(
-            old_password="oldpass", new_password="newpass"
-        )
+        valid = ChangePasswordRequest(old_password="oldpass", new_password="newpass")
         assert valid.old_password == "oldpass"
         assert valid.new_password == "newpass"
 
     def test_auth_response_model(self) -> None:
-        from app.core.auth.types import AuthResponse
 
         response = AuthResponse(message="Success", user_id="123")
         assert response.message == "Success"

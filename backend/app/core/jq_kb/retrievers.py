@@ -57,10 +57,10 @@ from llama_index.core.vector_stores import (
 )
 from llama_index.retrievers.bm25 import BM25Retriever
 
+from app.core.jq_kb.dict_storage import JqDictStore
 from app.core.jq_kb.embeddings import get_reranker
 from app.core.jq_kb.llm import get_llm
 from app.core.jq_kb.schemas import JqApiEnvConstraint
-from app.core.jq_kb.dict_storage import JqDictStore
 from app.core.jq_kb.storage import JqApiStore
 from app.core.jq_kb.strategy_storage import JqStrategyStore
 

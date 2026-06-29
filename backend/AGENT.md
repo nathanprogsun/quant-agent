@@ -1,184 +1,323 @@
-# quant-agent 项目架构规范
+# quant-agent backend Architecture Specification
 
-## 概述
+quant-agent is a layered FastAPI + SQLAlchemy 2.0 async ORM backend following unidirectional dependency and domain-driven design (DDD).
 
-quant-agent 是一个基于 FastAPI + SQLAlchemy 的分层架构后端项目，遵循领域驱动设计（DDD）原则。
-
-## 分层架构
+## 1. Architecture Overview
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                           web/                               │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐ │
-│  │   api/      │  │ middleware/ │  │  application.py     │ │
-│  │  (路由)     │  │ (认证/指标) │  │        (FastAPI)    │ │
-│  └─────────────┘  └─────────────┘  └─────────────────────┘ │
-├─────────────────────────────────────────────────────────────┤
-│                       app_context/                           │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │              AppContext / 依赖容器                    │   │
-│  └─────────────────────────────────────────────────────┘   │
-├─────────────────────────────────────────────────────────────┤
-│                           core/                              │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │         {domain}/service/ 和 types.py               │   │
-│  └─────────────────────────────────────────────────────┘   │
-├─────────────────────────────────────────────────────────────┤
-│                           db/                                │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐ │
-│  │    dao/     │  │   models/   │  │     dbengine/       │ │
-│  │  (数据访问)  │  │ (数据库模型) │  │    (数据库引擎)      │ │
-│  └─────────────┘  └─────────────┘  └─────────────────────┘ │
-│  ┌─────────────┐                                            │
-│  │  migrations/│                                            │
-│  │ (数据库迁移)  │                                           │
-│  └─────────────┘                                            │
-├─────────────────────────────────────────────────────────────┤
-│                          common/                             │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐ │
-│  │ exception/  │  │   stats/    │  │      type/          │ │
-│  │  (异常定义)  │  │   (统计)    │  │   (类型定义)         │ │
-│  └─────────────┘  └─────────────┘  └─────────────────────┘ │
-├─────────────────────────────────────────────────────────────┤
-│                           util/                              │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐ │
-│  │   time.py   │  │ enum_util   │  │  pydantic_types/    │ │
-│  │  (时间工具)  │  │ (枚举工具)   │  │   (Pydantic类型)    │ │
-│  └─────────────┘  └─────────────┘  └─────────────────────┘ │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐ │
-│  │ validation/ │  │ asyncio_util│  │  traceback_utils    │ │
-│  │  (验证工具)  │  │ (异步工具)   │  │   (堆栈追踪)        │ │
-│  └─────────────┘  └─────────────┘  └─────────────────────┘ │
-└─────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────┐
+│                             web/                                   │
+│  api/ (routes)   middleware/ (auth/exception)   lifespan.py      │
+│  application.py   __main__.py   lifespan_service.py               │
+├────────────────────────────────────────────────────────────────────┤
+│                          app_context/                               │
+│                            AppContext                               │
+├────────────────────────────────────────────────────────────────────┤
+│                             core/                                   │
+│  auth/   user/   chat/   backtest/   jq_kb/   generation/        │
+│  {domain}/service/  +  types.py                                   │
+├────────────────────────────────────────────────────────────────────┤
+│                              db/                                    │
+│             dao/   +   models/   +   session.py                    │
+├────────────────────────────────────────────────────────────────────┤
+│                            common/                                  │
+│         exception/   runs/   stream_bridge/   serialization/      │
+├────────────────────────────────────────────────────────────────────┤
+│                             util/                                   │
+│      time.py   enum_util.py   pydantic_types/   asyncio_util/    │
+│      validation.py   traceback_utils.py                           │
+└────────────────────────────────────────────────────────────────────┘
 ```
 
-## 层级职责
+- Dependency direction: `web → core → db` (unidirectional), no reverse imports
+- Web layer must not directly access `db/dao`
+- Core layer must not import `web`
+- Cross-layer calls must go through Service or dependency injection
 
-| 层级 | 目录 | 职责 | AGENT.md |
-|------|------|------|----------|
-| **web** | `web/` | API 层，处理 HTTP 请求/响应、中间件 | `quant-agent/web/AGENT.md` |
-| **app_context** | `app_context/` | 应用生命周期管理和依赖容器 | `quant-agent/app_context/AGENT.md` |
-| **core** | `core/{domain}/` | 业务领域层，核心业务逻辑和服务 | `quant-agent/core/AGENT.md` |
-| **db** | `db/` | 数据访问层，包含 DAO、Models、Migrations | `quant-agent/db/AGENT.md` |
-| **common** | `common/` | 通用组件，异常、错误码、统计、类型 | `quant-agent/common/AGENT.md` |
-| **util** | `util/` | 工具函数，时间、枚举、类型定义 | `quant-agent/util/AGENT.md` |
-
-## 核心域（core）
-
-`core/` 包含以下业务域示例：
-- `user` — 用户管理
-- `auth` — 认证授权
-
-## 数据流向
-
-```
-HTTP Request
-    ↓
-web/api/views.py (接收请求、Schema 验证)
-    ↓
-core/{domain}/service/*.py (业务逻辑)
-    ↓
-db/dao/*.py (数据访问)
-    ↓
-db/dbengine/core.py (数据库引擎)
-    ↓
-PostgreSQL Database
-```
-
-## 目录结构
-
-```
-quant-agent/
-├── app_context/                 # 应用上下文容器
-│   └── app_context.py
-├── common/                      # 通用层
-│   ├── error_code.py            # 错误码定义
-│   ├── exception/               # 异常类定义
-│   ├── lifespan.py              # DI 依赖声明
-│   ├── stats/                   # 统计指标
-│   ├── type/                    # 通用类型
-│   └── util.py                  # 环境工具函数
-├── core/                        # 业务领域层
-│   ├── auth/                    # 认证域
-│   │   ├── types.py             # DTO 定义
-│   │   └── service/             # 服务类
-│   └── user/                    # 用户域
-│       ├── types.py             # DTO 定义
-│       └── service/             # 服务类
-├── db/                          # 数据访问层
-│   ├── dao/                     # 数据访问对象
-│   ├── models/                  # 数据库模型
-│   │   └── core/                # 模型基类
-│   ├── dbengine/                # 数据库引擎
-│   └── migrations/              # 数据库迁移
-├── util/                        # 工具函数
-│   ├── asyncio_util/            # 异步工具
-│   ├── enum_util.py             # 枚举工具
-│   ├── pydantic_types/          # Pydantic 类型
-│   ├── time.py                  # 时间工具
-│   ├── traceback_utils.py       # 堆栈追踪工具
-│   └── validation.py            # 验证工具
-└── web/                         # API 层
-    ├── api/                     # API 路由
-    ├── middleware/               # 中间件
-    ├── application.py           # 应用入口
-    ├── __main__.py              # 启动入口
-    ├── api_router_ext.py        # 路由扩展
-    ├── lifespan.py              # 生命周期管理
-    └── lifespan_service.py      # 服务工厂
-```
-
-## 正确示例
-
-### 层级调用顺序
+### Anti-patterns quick reference
 
 ```python
-# web/api/user/views.py
-from quant_agent.core.user.service.user_service import UserService
-
-@router.get("/{user_id}", response_model=UserDTO)
-async def get_user(user_id: UUID, service: UserService = Depends()):
-    return await service.get_user(user_id)
-
-# core/user/service/user_service.py
-from quant_agent.db.dao.user_repository import UserRepository
-
-class UserService:
-    def __init__(self, user_repository: UserRepository = Depends()):
-        self.user_repo = user_repository
-
-    async def get_user(self, user_id: UUID) -> UserDTO | None:
-        return await self.user_repo.find_by_primary_key(User, id=user_id)
-```
-
-## 错误示例
-
-```python
-# ❌ 在 web 层直接访问数据库
+# ❌ Web layer directly accessing the database
 @router.get("/{user_id}")
-async def get_user(user_id: UUID, engine = Depends(get_db)):
-    result = await engine.one(text("SELECT * FROM users WHERE id = :id"), ...)
-    return result
+async def get_user(user_id: UUID, engine=Depends(get_db)):
+    result = await engine.one(text("SELECT * FROM users WHERE id=:id"), ...)
 
-# ❌ 在 core 层直接处理 HTTP 请求
+# ❌ Core layer handling HTTP concerns
 class UserService:
-    def get_user(self, request: Request):  # 错误！
+    def get_user(self, request: Request):  # Wrong!
         return request.query_params.get("id")
 
-# ❌ 在 core 层直接调用外部 API
+# ❌ Core layer making external API calls directly
 class UserService:
     async def create_user(self, user_data):
-        async with httpx.AsyncClient() as client:  # 错误！应通过 Service 层封装
+        async with httpx.AsyncClient() as client:
             await client.post("https://api.example.com/users", json=user_data)
 ```
 
-## 注意事项
+## 2. AppContext & Dependency Injection
 
-1. **单向依赖原则**：web → core → db，只能上层依赖下层
-2. **禁止跨层调用**：web 层不应直接访问 db/dao
-3. **使用依赖注入**：通过 FastAPI Depends 管理服务依赖
-4. **遵循领域划分**：每个 domain 是独立的业务边界
-5. **异常处理**：使用 common/exception 中的异常类，不抛原始 DB 异常
-6. **模型不可变**：所有模型实例不可变，更新操作返回新实例
-7. **输入校验**：所有输入通过 Pydantic Schema 验证
-8. **日志规范**：使用结构化日志，统一 app_logging 工具
+- `AppContext` is a `frozen=True` dataclass stored at `app.state.app_context`
+- Defined in `app/app_context/app_context.py`, exported via `__init__.py`
+- Fields:
+  - `session_factory: async_sessionmaker[AsyncSession]` — core dependency, replaces old `DatabaseEngine`
+  - `checkpointer: BaseCheckpointSaver[Any] | None` — LangGraph checkpoint backend
+  - `stream_bridge: StreamBridge | None` — inter-process streaming bridge
+  - `run_manager: RunManager | None` — run lifecycle registry
+  - `skill_registry: SkillRegistry | None` — registered agentic skills
+  - `lifespan_exit_stack: AsyncExitStack | None` — clean exit stack for checkpointers
+- Provides `db` property alias (-> `session_factory`)
+- `app_context.close()`: disposes `AsyncEngine`, closes `stream_bridge` and `lifespan_exit_stack`
+- Services are instantiated **per-request** via factory functions in `app/web/lifespan_service.py`:
+  - `session_from_app_context()` — yields one `AsyncSession` per request; commits on success, rolls back on exception
+  - `user_service_from_request(session)` -> `UserService`
+  - `thread_service_from_request(session)` -> `ThreadService`
+  - `run_service_from_request(app_context)` -> `RunService` (uses `RunManager`, not session)
+  - `auth_service_from_request(user_service)` -> `AuthService`
+  - `memory_service_from_request(session)` -> `MemoryService`
+- Route injection: `Depends(thread_service_from_request)` — no singleton `LifeSpanService` class
+- Shared cross-domain dependencies in `web/api/deps.py`: `get_current_user_id`, `get_current_user`
+- Lifespan setup: `web/lifespan.py` constructs `AppContext` on startup, calls `close_app_context()` on shutdown
+
+## 3. Data Layer (ORM)
+
+- `Base(DeclarativeBase)` defined in `app/db/models/__init__.py`, shared by all models
+- 5 models: `User`, `Thread`, `Run`, `UserMemory`, `MemoryFact`
+- Column declarations use `Mapped[T]` + `mapped_column` (SQLAlchemy 2.0 typed style)
+- JSON columns: `Run.token_usage`, `MemoryFact.embedding` via `from sqlalchemy import JSON`
+- UUID columns: `PG_UUID(as_uuid=True)` (imported from `sqlalchemy.dialects.postgresql`; compiles to `UUID` type under SQLite)
+- Soft delete: `Thread.deleted_at` + `Thread.not_deleted()` class method filter
+- Audit immunity: `created_at` excluded in `UserRepository.update()`
+- **Schema init**: `Base.metadata.create_all()` runs at lifespan startup (no alembic)
+- `app/db/session.py`:
+  - `make_engine(url, *, echo=False)`
+  - `make_session_factory(engine)` -> `async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)`
+  - `get_session(session_factory)` dependency function
+- Service receives `AsyncSession` as constructor parameter (per-request session managed by `session_from_app_context`)
+- Each Service method uses `self.session` and instantiates repository on demand: `UserRepository(self.session)`
+
+## 4. DAO Convention
+
+- Each DAO constructor receives `AsyncSession`: `def __init__(self, session: AsyncSession)`
+- Data access via `session.scalar(select(...))`, `session.execute(...)`, `session.get(Model, pk)`
+- `find_by_*` returns `Model | None`; `_or_fail` variants (e.g. `find_by_id_and_user_or_fail`) raise `ResourceNotFoundError`
+- `IntegrityError` (e.g. duplicate email) -> `ConflictResourceError`: `await self.session.rollback()` then `raise ... from exc`
+- ORM uses parameterized queries by default; string concatenation SQL is forbidden
+- Repository returns ORM model instances; Service layer converts to DTOs; DAO never returns raw `Row`
+
+### DAO reference structure (`app/db/dao/`)
+
+```
+db/dao/
+├── __init__.py
+├── user_repository.py     # UserRepository - find_by_email, find_by_id, create, update, delete
+├── thread_repository.py   # ThreadRepository - soft-delete aware + not_deleted() filter
+└── memory_repository.py   # MemoryRepository - UserMemory + MemoryFact two-table operations
+```
+
+## 5. Exception System
+
+- `ApplicationError(Exception, ABC)` base class (`app/common/exception/exception.py`)
+- 13 subclasses:
+
+| Exception | error_code | HTTP |
+|-----------|------------|------|
+| `DatabaseError` | `DB_ERROR` | 500 |
+| `ConcurrentModificationError` | `CONCURRENT_MODIFICATION` | 409 |
+| `ResourceNotFoundError` | `RESOURCE_NOT_FOUND` | 404 |
+| `InvalidArgumentError` | `INVALID_ARGUMENT` | 400 |
+| `ConflictResourceError` | `CONFLICT` | 409 |
+| `IllegalStateError` | `ILLEGAL_STATE` | 500 |
+| `ServiceError` | `SERVICE_ERROR` | 500 |
+| `UnauthorizedError` | `UNAUTHORIZED` | 401 |
+| `ForbiddenError` | `FORBIDDEN` | 403 |
+| `ClientError` | `CLIENT_ERROR` | 400 |
+| `ExternalServiceError` | `EXTERNAL_SERVICE_ERROR` | 500 (vendor info hidden) |
+| `RequestEntityTooLargeError` | `REQUEST_ENTITY_TOO_LARGE` | 413 |
+| `UnprocessableEntity` | `UNPROCESSABLE_ENTITY` | 422 |
+
+- `ErrorDetails(code: str, details: str = "", reference_id: str | None = None)` structured payload
+- Error codes are `UPPER_SNAKE`
+- DAO layer must convert `SQLAlchemyError` / `IntegrityError` to domain exceptions
+- Error messages must not contain passwords, tokens, or other sensitive info
+- `ApplicationError.to_json_response()` outputs unified envelope: `{"error": {"code", "message", "details"}}`
+
+## 6. Core Convention
+
+- Must not import `web`
+- Service class receives `AsyncSession` as constructor parameter (per-request session)
+- Transaction boundary managed by `session_from_app_context` — Service does not commit/rollback
+- DTO/ORM conversion: `model_config = ConfigDict(from_attributes=True)`
+- Domain isolation: `{domain}/types.py` + `{domain}/service/`
+- Business domain directories:
+  - `auth/` — authentication
+  - `user/` — user management
+  - `chat/` — chat engine (agent/middlewares/tools/service/skills/memory)
+  - `backtest/` — backtesting
+  - `jq_kb/` — knowledge base (chunkers/parser/embedding/retrieval)
+  - `generation/` — generation service
+
+### Core anti-patterns
+
+```python
+# ❌ Service handling HTTP request/Header
+class UserService:
+    async def create_user(
+        self,
+        user_id: UUID = Header(...),  # Wrong! HTTP headers don't belong here
+    ): ...
+
+# ❌ DTO leaking database internals
+class UserDTO(BaseModel):
+    id: UUID
+    _internal_column: str = None  # Wrong!
+
+# ❌ Business logic in DTO
+class UserDTO(BaseModel):
+    def authenticate(self, password: str):  # Wrong!
+        return self.password_hash == hash(password)
+```
+
+## 7. Web Convention
+
+- FastAPI app / routers / middleware / DI live under `app/web/`
+- Routes use `APIRouter(prefix="/api/v1/...")`, each domain declares its own prefix
+- Route DI accepts only Service (no Repository)
+- Every endpoint declares `response_model`
+- API interacts with DTOs only; never returns ORM models
+- Exceptions handled by registered exception handlers; no `try/except` leaking tracebacks in routes
+- Response schemas must never expose `password_hash` / `hashed_password`
+- Public paths (`/docs`, `/openapi.json`, `/health`) bypass auth
+
+### Web reference structure
+
+```
+web/
+├── __main__.py              # uvicorn entry point
+├── application.py           # FastAPI app factory (routers + middleware + exception handlers)
+├── lifespan.py              # Startup/shutdown: AppContext construction, schema init, cleanup
+├── lifespan_service.py      # Per-request DI factory functions (session, services)
+├── api/
+│   ├── deps.py              # Cross-domain dependencies (get_current_user_id, get_current_user)
+│   ├── auth/views.py        # Auth routes (login, register, me, change-password)
+│   ├── thread/              # views.py + schema.py + services.py + checkpoint_state.py
+│   ├── backtest/            # views.py + schemas.py + stream.py
+│   ├── memory/route.py      # Memory routes
+│   └── skills/route.py      # Skills routes
+└── middleware/
+    ├── auth_middleware.py    # Cookie-based JWT auth
+    └── exception/exception_handler.py  # ApplicationError + HTTPException + ValidationError handlers
+```
+
+## 8. Middleware Convention
+
+- `AuthMiddleware` (`app/web/middleware/auth_middleware.py`):
+  - Uses `PUBLIC_PATHS` frozenset to skip public endpoints
+  - Parses JWT from `access_token` cookie
+  - Sets `request.state.current_user_id` / `current_user_email` / `token_ver`
+- Exception handlers registered via `add_exception_handler` in `application.py` (not middleware stack)
+- Middleware must NOT write to DB
+- Middleware must NOT `try/except` business exceptions (let exception_handler handle them)
+- Structured log fields: `http_path`, `http_method`, `http_status`, `error_code`
+- 4xx logs at WARNING, 5xx at ERROR
+- Do not import business models in middleware; keep cross-cutting concerns clean
+- Middleware registration order: CORS -> Auth (`add_middleware` order in `application.py`)
+
+## 9. Models (DB)
+
+- All models inherit `Base(DeclarativeBase)` (defined in `app/db/models/__init__.py`)
+- Use `Mapped[T]` + `mapped_column(...)` annotations
+- UUID PK: `mapped_column(PG_UUID(as_uuid=True), primary_key=True)` (imported from `sqlalchemy.dialects.postgresql`; compiles to `UUID` under SQLite)
+- JSON columns: `mapped_column(JSON)`, e.g. `Run.token_usage`, `MemoryFact.embedding`
+- Nullable column ordering: `func.coalesce(Thread.updated_at, Thread.created_at).desc()`
+- Models are imported at the end of `app/db/models/__init__.py` (ensures metadata registration order)
+
+### Models anti-patterns
+
+```python
+# ❌ Business logic in model
+class Organization(Base):
+    table_name = "organization"
+    def validate(self):  # Wrong!
+        pass
+
+# ❌ Wrong column declaration (dict/list won't be recognized as JSON/array)
+class Config(Base):
+    metadata: dict           # Wrong! use mapped_column(JSON)
+    items: list[str]         # Wrong!
+```
+
+## 10. Util Rules
+
+- `util/` contains only pure functions: no project module imports, no I/O, no global mutable state
+- Files: `time.py`, `enum_util.py`, `pydantic_types/`, `asyncio_util/`, `validation.py`, `traceback_utils.py`
+- No business coupling: util must not contain domain rules, read `settings`, or call external APIs
+
+### Util anti-patterns
+
+```python
+# ❌ Util depends on other project modules
+from app.db.models.user import User  # Wrong!
+
+# ❌ Util with side effects
+def generate_id():
+    global counter
+    counter += 1
+    return counter
+
+# ❌ Accessing config from util
+def get_db_timeout():
+    from app.settings import settings  # Wrong!
+    return settings.db_timeout
+```
+
+## 11. Testing
+
+- `pytest-asyncio` in auto mode (`asyncio_mode = "auto"` in `pyproject.toml`): no `@pytest.mark.asyncio` needed
+- Unit tests: mock at DAO boundary
+- Integration tests: `httpx.AsyncClient` + `ASGITransport`, in-process FastAPI app
+- DAO unit tests live in `tests/unit/dao/`, use engine + session fixtures, **each test** `drop_all` + `create_all`
+- Integration tests use session-scoped `setup_test_db` fixture, calling `Base.metadata.create_all()`
+- Test database: `sqlite+aiosqlite:///./test.db` (cleaned per session, kept for inspection)
+- Coverage target: 80%
+- Unit tests are fully independent, no shared mutable state
+- File naming: `test_{module}.py` or `test_{feature}_flow.py`
+- Function naming: `test_{function}_{scenario}`
+
+### Test directory structure
+
+```
+tests/
+├── conftest.py                       # Root config (minimal)
+├── unit/
+│   ├── conftest.py                   # Unit fixtures
+│   └── dao/                          # Repository unit tests
+└── integration/
+    ├── conftest.py                   # Integration fixtures
+    └── test_*_flow.py                # End-to-end flows
+```
+
+## 12. Migration Strategy
+
+- **No alembic** (`alembic>=1.13` in `pyproject.toml` is a stale unused dependency; no migration code exists)
+- Schema created via `Base.metadata.create_all()` at lifespan startup
+- Schema change workflow:
+  1. Modify ORM model
+  2. Restart application; `create_all` creates new tables but **does not** alter existing ones (SQLite limitation)
+- Destructive migration: manually DROP tables or delete `data.db`
+- If migrating to Postgres for production, add alembic; current SQLite is for dev/test only
+
+## Data Flow (Complete Call Chain)
+
+```
+HTTP Request
+    |
+web/api/{domain}/views.py          (Pydantic validation, response_model)
+    |
+core/{domain}/service/*.py         (Business orchestration, DTO conversion)
+    |
+db/dao/{domain}_repository.py      (ORM session operations)
+    |
+db/models/{domain}.py              (DeclarativeBase model)
+    |
+AsyncEngine (sqlite | postgres)
+```
