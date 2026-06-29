@@ -41,10 +41,10 @@ jobs:
       - uses: actions/setup-python@v6
         if: steps.has-tests.outputs.has_tests == 'true'
         with:
-          python-version: "3.12"
+          python-version: "3.13"
       - uses: astral-sh/setup-uv@v7
         if: steps.has-tests.outputs.has_tests == 'true'
-      - run: uv sync --all-extras
+      - run: uv sync --group dev
         if: steps.has-tests.outputs.has_tests == 'true'
         working-directory: backend
       - name: Start backend for E2E
@@ -57,8 +57,7 @@ jobs:
           JWT_SECRET_KEY: e2e-jwt-secret
           SESSION_SECRET_KEY: e2e-session-secret
         run: |
-          uv run alembic upgrade head
-          nohup uv run uvicorn app.web.application:app --host 127.0.0.1 --port 8000 > /tmp/e2e-backend.log 2>&1 &
+                    nohup uv run uvicorn app.web.application:app --host 127.0.0.1 --port 8000 > /tmp/e2e-backend.log 2>&1 &
           for i in $(seq 1 60); do
             if curl -sf http://127.0.0.1:8000/health > /dev/null; then
               echo "Backend ready"
