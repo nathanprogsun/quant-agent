@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from llama_index.core.llms.mock import MockLLM
 
 from app.core.jq_kb.chunkers.jq_dict import chunk_jq_dict_record, chunk_jq_dict_records
 from app.core.jq_kb.dict_storage import JqDictStore
@@ -42,7 +43,7 @@ def test_get_tools_pr_phase_2() -> None:
 
 
 @pytest.mark.asyncio
-async def test_jq_dict_retriever_pilot(tmp_path: Path) -> None:
+async def test_jq_dict_retriever_pilot(tmp_path: Path, mock_jq_kb_embeddings: MockLLM) -> None:
     raw = json.loads(PILOT_RAW_PATH.read_text(encoding="utf-8"))
     chunks = chunk_jq_dict_records(raw["entities"][:10])
     store = JqDictStore(
@@ -50,7 +51,7 @@ async def test_jq_dict_retriever_pilot(tmp_path: Path) -> None:
         bm25_path=tmp_path / "bm25.pkl",
     )
     store.upsert_chunks(chunks)
-    retriever = JqDictRetriever(store)
+    retriever = JqDictRetriever(store, llm=mock_jq_kb_embeddings, num_queries=1)
 
     # Hybrid retrieval without reranker is non-deterministic across embedding
     # API responses — assert HY001 is *somewhere* in the top-k rather than

@@ -6,6 +6,7 @@ import warnings
 from pathlib import Path
 
 import pytest
+from llama_index.core.llms.mock import MockLLM
 
 from app.core.jq_kb.ast_parser import (
     _parse_strategy_code,
@@ -18,14 +19,14 @@ from app.core.jq_kb.retrievers import JqStrategyRetriever
 from app.core.jq_kb.strategy_storage import JqStrategyStore
 from app.core.jq_kb.tools import get_tools
 
-SAMPLE_CODE = '''
+SAMPLE_CODE = """
 def initialize(context):
     set_benchmark('000300.XSHG')
     g.stock_count = 20
 
 def handle_data(context, data):
     order_target('000001.XSHE', 100)
-'''
+"""
 
 SAMPLE_POST = {
     "post_id": 12345,
@@ -65,7 +66,7 @@ def test_get_tools_pr_phase_3() -> None:
 
 
 @pytest.mark.asyncio
-async def test_jq_strategy_retriever_pilot(tmp_path: Path) -> None:
+async def test_jq_strategy_retriever_pilot(tmp_path: Path, mock_jq_kb_embeddings: MockLLM) -> None:
 
     chunks = chunk_jq_strategy_posts([SAMPLE_POST])
     store = JqStrategyStore(
@@ -73,7 +74,7 @@ async def test_jq_strategy_retriever_pilot(tmp_path: Path) -> None:
         bm25_path=tmp_path / "bm25.pkl",
     )
     store.upsert_chunks(chunks)
-    retriever = JqStrategyRetriever(store, llm=None, num_queries=1)
+    retriever = JqStrategyRetriever(store, llm=mock_jq_kb_embeddings, num_queries=1)
 
     hits = await retriever.retrieve("ETF轮动", top_k=3)
     assert hits
@@ -101,10 +102,7 @@ def test_dedupe_collision_post_ids() -> None:
 
 
 def test_chunk_with_set_key_params() -> None:
-    code = (
-        "def initialize(context):\n"
-        "    g.symbols = {1, 2, 3}\n"
-    )
+    code = "def initialize(context):\n    g.symbols = {1, 2, 3}\n"
     post = {**SAMPLE_POST, "code": code}
     chunks = chunk_jq_strategy_post(post)
     assert any(c.layer.value == "summary" for c in chunks)

@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from llama_index.core.llms.mock import MockLLM
 
 from app.core.jq_kb.chunkers.jq_api import chunk_jq_api_record, chunk_jq_api_records
 from app.core.jq_kb.retrievers import JqApiRetriever
@@ -45,7 +46,7 @@ def test_get_tools_pr_phase_1() -> None:
 
 
 @pytest.mark.asyncio
-async def test_jq_api_retriever_pilot(tmp_path: Path) -> None:
+async def test_jq_api_retriever_pilot(tmp_path: Path, mock_jq_kb_embeddings: MockLLM) -> None:
     raw = json.loads(PILOT_RAW_PATH.read_text(encoding="utf-8"))
     chunks = chunk_jq_api_records(raw["functions"][:5])
     store = JqApiStore(
@@ -56,7 +57,7 @@ async def test_jq_api_retriever_pilot(tmp_path: Path) -> None:
     # num_queries=1 disables LLM query-gen so BM25 + vector ranking is the
     # only thing under test. With more queries the reranker can re-order
     # ``get_price`` below ``get_fundamentals`` non-deterministically.
-    retriever = JqApiRetriever(store, num_queries=1)
+    retriever = JqApiRetriever(store, llm=mock_jq_kb_embeddings, num_queries=1)
 
     hits = await retriever.retrieve("get_price 怎么用", top_k=3)
     assert hits

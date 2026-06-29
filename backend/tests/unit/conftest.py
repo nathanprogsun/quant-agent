@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
+from llama_index.core.llms.mock import MockLLM
 from pydantic import SecretStr
 
 from app.core.auth.service.auth_service import AuthService
@@ -144,3 +145,16 @@ def valid_token(auth_service: AuthService, mock_settings: MagicMock) -> str:
         return auth_service.create_access_token(
             data=TokenClaims(sub=TEST_USER_ID, email=TEST_USER_EMAIL)
         )
+
+
+@pytest.fixture
+def mock_jq_kb_embeddings() -> MockLLM:
+    """Deterministic fake embeddings so jq_kb pilot tests run without API keys."""
+
+    def _fake_embed(texts: list[str]) -> list[list[float]]:
+        return [[float((hash(text) % 997) + 1) / 998.0, 0.5, 0.5] for text in texts]
+
+    mock_llm = MockLLM(max_tokens=1)
+
+    with patch("app.core.jq_kb.embedding_model.embed_texts", side_effect=_fake_embed):
+        yield mock_llm
