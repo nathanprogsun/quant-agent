@@ -20,7 +20,8 @@ from app.common.runs.manager import RunManager
 from app.common.stream_bridge.memory import MemoryStreamBridge
 from app.core.backtest.jqcli_auth import JqcliNotConfiguredError, resolve_jqcli_credentials
 from app.core.backtest.registry import BacktestRegistry
-from app.core.chat.middlewares.memory_middleware import set_memory_middleware_session_factory
+from app.core.chat.memory.queue import MemoryUpdateQueue
+from app.core.chat.memory.wiring import install_memory_subsystem, shutdown_memory_subsystem
 from app.core.chat.skills.registry import SkillRegistry
 from app.core.jq_kb.embeddings import warm_up_models
 from app.db.models import Base
@@ -57,16 +58,20 @@ def get_app_context(app: FastAPI) -> AppContext | None:
     return cast("AppContext | None", getattr(app.state, "app_context", None))
 
 
-async def setup_app_context(app: FastAPI) -> None:
+async def setup_app_context(app: FastAPI) -> MemoryUpdateQueue | None:
     """Set up application context at startup.
 
     Creates:
     - AsyncEngine + session factory with schema auto-create
     - Shared HTTP AsyncClient
     - All services via LifeSpanService
+    - Memory evolution subsystem (P4)
 
     Args:
         app: FastAPI application.
+
+    Returns:
+        The process-wide MemoryUpdateQueue (for shutdown), or None.
     """
     cfg = get_settings()
 
@@ -93,7 +98,8 @@ async def setup_app_context(app: FastAPI) -> None:
     # BacktestRegistry — process-level ownership registry shared across requests
     backtest_registry = BacktestRegistry()
 
-    set_memory_middleware_session_factory(session_factory)
+    # Memory evolution subsystem (P4): debounced update queue + summarization hook.
+    memory_queue = install_memory_subsystem(cfg, session_factory)
 
     # Create and store app context
     app_context = AppContext(
@@ -107,6 +113,7 @@ async def setup_app_context(app: FastAPI) -> None:
     )
     set_app_context(app=app, app_context=app_context)
     logger.info("Application context initialized")
+    return memory_queue
 
 
 async def close_app_context(app: FastAPI) -> None:
@@ -136,10 +143,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, Any]:
     Yields:
         Control to application.
     """
+    memory_queue = None
     try:
         # Initialize middleware stack before context setup
         app.middleware_stack = None
-        await setup_app_context(app=app)
+        memory_queue = await setup_app_context(app=app)
         app.middleware_stack = app.build_middleware_stack()
 
         try:
@@ -166,6 +174,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, Any]:
         raise
     finally:
         # Cleanup
+        shutdown_memory_subsystem(memory_queue)
         await close_app_context(app=app)
 
         logger.info("Application lifespan ended")

@@ -15,12 +15,10 @@ from app.app_context.app_context import AppContext, create_checkpointer
 from app.common.runs.manager import RunManager
 from app.common.stream_bridge.memory import MemoryStreamBridge
 from app.core.backtest.registry import BacktestRegistry
-from app.core.chat.middlewares.memory_middleware import (
-    set_memory_middleware_session_factory,
-)
+from app.core.chat.memory.wiring import install_memory_subsystem, shutdown_memory_subsystem
 from app.db.models import Base
 from app.db.session import make_engine, make_session_factory
-from app.settings import reload_settings
+from app.settings import get_settings, reload_settings
 from app.web.application import get_app
 from tests.integration.client import APITestClient
 
@@ -84,8 +82,9 @@ async def test_app_context(
         connection_string=str(checkpoint_db),
     )
 
-    # Wire memory middleware global
-    set_memory_middleware_session_factory(session_factory)
+    # Wire memory evolution subsystem (P4): debounced update queue + hook.
+    cfg = get_settings()
+    memory_queue = install_memory_subsystem(cfg, session_factory)
 
     run_manager = RunManager()
     stream_bridge = MemoryStreamBridge(queue_maxsize=100)
@@ -102,6 +101,7 @@ async def test_app_context(
 
     yield app_context
 
+    shutdown_memory_subsystem(memory_queue)
     await app_context.close()
 
 

@@ -13,6 +13,7 @@ import asyncio
 import logging
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import wait as _wait_futures
 from typing import Any, Protocol
 
 from app.config.memory_config import MemoryConfig
@@ -77,8 +78,13 @@ class MemoryUpdateQueue:
             self._timers[thread_id] = timer
         timer.start()
 
-    def flush(self) -> None:
-        """Cancel all pending timers and drain every thread immediately."""
+    def flush(self, *, wait: bool = False) -> None:
+        """Cancel all pending timers and drain every thread immediately.
+
+        Args:
+            wait: If True, block until all submitted drain tasks complete.
+                Useful for tests and deterministic shutdown.
+        """
         timers: list[threading.Timer] = []
         pending: list[tuple[str, Any, list[Any]]] = []
         with self._lock:
@@ -89,8 +95,12 @@ class MemoryUpdateQueue:
             self._pending.clear()
         for timer in timers:
             timer.cancel()
-        for thread_id, user_id, messages in pending:
+        futures = [
             self._executor.submit(self._run, thread_id, user_id, messages, self._session_factory)
+            for thread_id, user_id, messages in pending
+        ]
+        if wait:
+            _wait_futures(futures)
 
     def _drain(self, thread_id: str) -> None:
         with self._lock:

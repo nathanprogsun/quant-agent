@@ -203,5 +203,5 @@ def _build_middlewares(config: RunnableConfig) -> list[AgentMiddleware]:
         ClarificationMiddleware(),
         LoopDetectionMiddleware(),
         SubagentLimitMiddleware(),
-        MemoryMiddleware(),
+        MemoryMiddleware(max_messages=max_messages),
     ]
