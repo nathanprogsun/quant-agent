@@ -20,6 +20,9 @@ wheels/
 # Database
 *.db
 *.sqlite3
+# SQLite WAL/SHM journal siblings (langgraph AsyncSqliteSaver)
+*.db-shm
+*.db-wal
 
 # Committed DC42 knowledge base artifacts
 !backend/data/
