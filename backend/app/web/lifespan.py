@@ -101,6 +101,18 @@ async def setup_app_context(app: FastAPI) -> MemoryUpdateQueue | None:
     # Memory evolution subsystem (P4): debounced update queue + summarization hook.
     memory_queue = install_memory_subsystem(cfg, session_factory)
 
+    # MCP tools — initialize the in-memory cache once at startup.
+    # ``initialize_mcp_tools`` returns an empty list when no enabled servers
+    # exist (the common case at first boot) so the call is cheap and safe
+    # to await unconditionally.
+    from app.mcp import initialize_mcp_tools
+
+    try:
+        mcp_tools = await initialize_mcp_tools()
+    except Exception:
+        logger.exception("MCP tool initialization failed; continuing with empty tool list")
+        mcp_tools = []
+
     # Create and store app context
     app_context = AppContext(
         session_factory=session_factory,
@@ -109,6 +121,7 @@ async def setup_app_context(app: FastAPI) -> MemoryUpdateQueue | None:
         run_manager=run_manager,
         skill_registry=SkillRegistry(),
         backtest_registry=backtest_registry,
+        mcp_tools=mcp_tools,
         lifespan_exit_stack=lifespan_exit_stack,
     )
     set_app_context(app=app, app_context=app_context)

@@ -7,6 +7,14 @@ ignore = ["E501", "ISC001", "RUF012", "RUF001", "RUF006"]
 
 [lint.per-file-ignores]
 "scripts/*.py" = ["E402", "PLC0415"]
+# Lazy in-function imports are intentional inside the MCP subsystem
+# (langchain-mcp-adapters + httpx + mcp.types are heavy and only needed on
+# the cold init path) and the agent contexts (avoid loading app.mcp at chat
+# import time, etc.). Suppress PLC0415 there explicitly.
+"app/mcp/**/*.py" = ["PLC0415"]
+"app/app_context/app_context.py" = ["PLC0415"]
+"app/web/lifespan.py" = ["PLC0415"]
+"app/config/**/*.py" = ["PLC0415"]
 
 [lint.isort]
 known-first-party = []

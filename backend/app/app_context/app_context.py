@@ -6,6 +6,7 @@ import dataclasses
 from contextlib import AsyncExitStack
 from typing import Any, Literal
 
+from langchain_core.tools import BaseTool
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
@@ -51,6 +52,7 @@ class AppContext:
     run_manager: RunManager | None = None
     skill_registry: SkillRegistry | None = None
     backtest_registry: BacktestRegistry | None = None
+    mcp_tools: list[BaseTool] | None = None
     lifespan_exit_stack: AsyncExitStack | None = dataclasses.field(
         default=None,
         compare=False,
@@ -73,3 +75,12 @@ class AppContext:
             await self.lifespan_exit_stack.aclose()
         elif self.checkpointer is not None and hasattr(self.checkpointer, "close"):
             await self.checkpointer.close()
+        # MCP tools hold persistent stdio sessions via app.mcp.session_pool;
+        # closing them on shutdown prevents leaked subprocesses.
+        if self.mcp_tools:
+            try:
+                from app.mcp import reset_mcp_tools_cache
+
+                reset_mcp_tools_cache()
+            except Exception:
+                pass
