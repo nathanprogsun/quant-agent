@@ -72,11 +72,15 @@ class RecordingMiddleware(AgentMiddleware):
         self.before_model_calls: list[dict[str, Any]] = []
         self.after_model_calls: list[dict[str, Any]] = []
 
-    async def before_model(self, state: dict[str, Any], config: dict[str, Any]) -> dict[str, Any] | None:
+    async def before_model(
+        self, state: dict[str, Any], config: dict[str, Any]
+    ) -> dict[str, Any] | None:
         self.before_model_calls.append(state)
         return None
 
-    async def after_model(self, state: dict[str, Any], config: dict[str, Any]) -> dict[str, Any] | None:
+    async def after_model(
+        self, state: dict[str, Any], config: dict[str, Any]
+    ) -> dict[str, Any] | None:
         self.after_model_calls.append(state)
         return None
 
@@ -100,12 +104,13 @@ async def test_agent_node_calls_middlewares() -> None:
 
     assert len(mw.before_model_calls) == 1
     assert len(mw.after_model_calls) == 1
-    assert result["messages"][0].content == "response"
+    # D9: agent_node persists the patched message list + response (not just the response)
+    assert result["messages"][-1].content == "response"
 
 
 @pytest.mark.asyncio
 async def test_agent_node_passes_full_history_to_after_model() -> None:
-    """after_model hooks should see prior messages, not only the latest AI reply."""
+    """after_model hooks should see the full patched list + response (D9)."""
     mw = RecordingMiddleware()
     mock_model = AsyncMock()
     mock_model.ainvoke = AsyncMock(return_value=AIMessage(content="response"))
@@ -120,9 +125,13 @@ async def test_agent_node_passes_full_history_to_after_model() -> None:
     await node(state)
 
     after_state = mw.after_model_calls[0]
-    assert len(after_state["messages"]) == 2
-    assert after_state["messages"][0].content == "hi"
-    assert after_state["messages"][1].content == "response"
+    # D9: after_model sees [SystemMessage, HumanMessage, AIMessage] — the full
+    # patched list (entry-point _ensure_system_message) plus the response.
+    assert len(after_state["messages"]) == 3
+    assert isinstance(after_state["messages"][0], SystemMessage)
+    assert after_state["messages"][0].content == "test prompt"
+    assert after_state["messages"][1].content == "hi"
+    assert after_state["messages"][2].content == "response"
 
 
 @pytest.mark.asyncio
