@@ -139,18 +139,23 @@ def _make_agent_node(
                     else:
                         state_patches[key] = value
 
-        messages = _ensure_system_message(messages, system_prompt)
+        # NOTE: do NOT call _ensure_system_message again here.
+        # DynamicContextMiddleware performs an ID-swap (first HumanMessage ->
+        # SystemMessage reminder + {id}__user). Re-running _ensure_system_message
+        # would rebuild the SystemMessage and break the frozen-snapshot prefix
+        # cache. System message identity is preserved from the entry-point call.
 
-        # LLM call
+        # LLM call — `messages` is the full patched list (id-swap applied)
         response = await model.ainvoke(messages)
 
-        # after_model hooks
-        state_update: dict[str, Any] = {"messages": [response], **state_patches}
-        preview_state = {**dict(state), **state_update}
-        preview_state["messages"] = [
-            *list(state.get("messages", [])),
-            *state_update.get("messages", []),
-        ]
+        # D9: persist the patched message list. Returning [*messages, response]
+        # lets the add_messages reducer replace-in-place by id (the swapped
+        # SystemMessage) and append the new {id}__user message + response.
+        # Without this the ID-swap is ephemeral and prefix-cache reuse across
+        # turns is impossible. Idempotent because add_messages assigns ids to
+        # all checkpointed messages.
+        state_update: dict[str, Any] = {"messages": [*messages, response], **state_patches}
+        preview_state = {**working_state, "messages": [*messages, response]}
         for mw in middlewares:
             modified = await mw.after_model(preview_state, {})
             if modified:
