@@ -12,6 +12,7 @@ from pydantic import AliasChoices, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.config.memory_config import MemoryConfig
+from app.config.subagents_config import SubagentsAppConfig
 
 
 class Settings(BaseSettings):
@@ -132,6 +133,21 @@ class Settings(BaseSettings):
 
     # ==================== Memory evolution (P4) ====================
     memory: MemoryConfig = Field(default_factory=MemoryConfig)
+
+    # ==================== Subagent (P3) ====================
+    subagent_enabled: bool = Field(
+        default=True,
+        validation_alias="SUBAGENT_ENABLED",
+        description=(
+            "Channel-level gate for the 'task' tool. When False the LLM cannot "
+            "dispatch subagents via the task tool (per-request override via "
+            "configurable.subagent_enabled)."
+        ),
+    )
+    subagents: SubagentsAppConfig = Field(
+        default_factory=SubagentsAppConfig,
+        description="Boot-time subagent settings (timeout, max_turns, custom agents).",
+    )
 
     # ==================== RunManager ====================
     run_manager_max_runs: int = 1000
