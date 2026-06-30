@@ -27,7 +27,10 @@ from app.core.chat.tools.builtin.param_tool import make_validate_parameters_tool
 from app.core.jq_kb.tools import get_tools
 from app.settings import get_settings
 
-_SYSTEM_SUFFIX_MARKERS = ("[系统上下文]", "<memory>")
+# P4.3: "<memory>" is no longer a system-prompt suffix — memory is injected by
+# DynamicContextMiddleware (P4.2) as a separate HumanMessage, not appended to
+# the system prompt.
+_SYSTEM_SUFFIX_MARKERS = ("[系统上下文]",)
 
 
 def _system_suffix(text: str) -> str:

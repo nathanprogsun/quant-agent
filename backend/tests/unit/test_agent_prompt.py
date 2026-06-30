@@ -1,5 +1,7 @@
 """Unit tests for lead agent system prompt."""
 
+import inspect
+
 from app.core.chat.agent.prompt import SYSTEM_PROMPT, apply_prompt_template
 
 
@@ -18,10 +20,21 @@ def test_system_prompt_lists_builtin_and_jq_tools() -> None:
     assert "禁止编造" in SYSTEM_PROMPT or "禁止" in SYSTEM_PROMPT
 
 
-def test_apply_prompt_template_appends_optional_sections() -> None:
-    prompt = apply_prompt_template(
-        memory_context="用户偏好",
-    )
-    assert SYSTEM_PROMPT.splitlines()[0] in prompt
-    assert "<memory>" in prompt
-    assert "用户偏好" in prompt
+def test_static_system_prompt_has_no_per_user_memory_segment() -> None:
+    # P4.3: per-user <memory> is injected only by DynamicContextMiddleware
+    # (P4.2) as a separate HumanMessage; the static system prompt must not
+    # carry a <memory> block.
+    assert "<memory>" not in SYSTEM_PROMPT
+
+
+def test_apply_prompt_template_returns_static_prompt_unchanged() -> None:
+    prompt = apply_prompt_template()
+    assert prompt == SYSTEM_PROMPT
+    assert "<memory>" not in prompt
+
+
+def test_apply_prompt_template_has_no_memory_context_param() -> None:
+    # P4.3: per-user memory must not be injectable via the static prompt;
+    # memory injection is DynamicContextMiddleware's job (P4.2).
+    params = inspect.signature(apply_prompt_template).parameters
+    assert "memory_context" not in params
