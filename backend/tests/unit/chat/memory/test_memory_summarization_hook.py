@@ -52,8 +52,8 @@ async def test_summarization_middleware_dispatches_hook_on_threshold() -> None:
     try:
         mw = SummarizationMiddleware(max_messages=5, enabled=True)
         messages = [HumanMessage(content=str(i)) for i in range(6)]
-        await mw.before_model({"messages": messages}, {})
-        await mw.after_model(
+        await mw.abefore_model({"messages": messages}, {})
+        await mw.aafter_model(
             {"messages": messages}, Runtime(context=SimpleNamespace(thread_id="test", user_id="u1"))
         )
     finally:
@@ -69,8 +69,8 @@ async def test_summarization_middleware_no_dispatch_under_threshold() -> None:
     try:
         mw = SummarizationMiddleware(max_messages=50, enabled=True)
         messages = [HumanMessage(content="hi")]
-        await mw.before_model({"messages": messages}, {})
-        await mw.after_model(
+        await mw.abefore_model({"messages": messages}, {})
+        await mw.aafter_model(
             {"messages": messages}, Runtime(context=SimpleNamespace(thread_id="test", user_id="u1"))
         )
     finally:

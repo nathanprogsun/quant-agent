@@ -59,8 +59,8 @@ async def test_after_model_fires_when_threshold_met(
     state = {"messages": messages}
     runtime = Runtime(context=SimpleNamespace(thread_id="t1", user_id=uuid4()))
 
-    await mw.before_model(state, runtime)
-    result = await mw.after_model(state, runtime)
+    await mw.abefore_model(state, runtime)
+    result = await mw.aafter_model(state, runtime)
 
     assert result is None  # no state patch, no message mutation
     # Flush immediately so the drain runs synchronously.
@@ -78,7 +78,7 @@ async def test_after_model_no_fire_under_threshold(
     state = {"messages": messages}
     runtime = Runtime(context=SimpleNamespace(thread_id="t1", user_id=uuid4()))
 
-    await mw.after_model(state, runtime)
+    await mw.aafter_model(state, runtime)
     recording_queue.flush()
     assert len(recording_queue._updater.calls) == 0
 
@@ -93,8 +93,8 @@ async def test_after_model_does_not_mutate_messages(
     state = {"messages": messages}
     runtime = Runtime(context=SimpleNamespace(thread_id="t1", user_id=uuid4()))
 
-    await mw.before_model(state, runtime)
-    await mw.after_model(state, runtime)
+    await mw.abefore_model(state, runtime)
+    await mw.aafter_model(state, runtime)
 
     assert [m.id for m in messages] == original_ids
     assert len(messages) == 2
@@ -104,5 +104,5 @@ async def test_after_model_does_not_mutate_messages(
 async def test_before_model_is_noop(recording_queue: MemoryUpdateQueue) -> None:
     mw = MemoryMiddleware(max_messages=3)
     state = {"messages": [HumanMessage(content="hi")]}
-    out = await mw.before_model(state, {"configurable": {"user_id": uuid4()}})
+    out = await mw.abefore_model(state, {"configurable": {"user_id": uuid4()}})
     assert out is None

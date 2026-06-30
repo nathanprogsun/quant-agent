@@ -12,13 +12,14 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from langchain.agents.middleware import AgentMiddleware
+from langgraph.runtime import Runtime
 from langchain_core.messages import BaseMessage
 
 from app.core.chat.memory.summarization_hook import (
     SummarizationEvent,
     get_summarization_flush_hook,
 )
-from app.core.chat.middlewares.base import AgentMiddleware
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +33,7 @@ class SummarizationMiddleware(AgentMiddleware):
         self._should_summarize = False
         self._pending_message_count = 0
 
-    async def before_model(self, state: dict[str, Any], runtime: Runtime) -> dict[str, Any] | None:
+    async def abefore_model(self, state: dict[str, Any], runtime: Runtime) -> dict[str, Any] | None:
         if not self._enabled:
             return None
         messages = state.get("messages", [])
@@ -43,7 +44,7 @@ class SummarizationMiddleware(AgentMiddleware):
             return {"should_summarize": True, "message_count": count}
         return None
 
-    async def after_model(self, state: dict[str, Any], runtime: Runtime) -> dict[str, Any] | None:
+    async def aafter_model(self, state: dict[str, Any], runtime: Runtime) -> dict[str, Any] | None:
         if not self._should_summarize:
             return None
         self._should_summarize = False

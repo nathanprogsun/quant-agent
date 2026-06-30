@@ -51,7 +51,7 @@ async def test_memory_human_message_emitted_when_injection_enabled(
         memory_config=MemoryConfig(injection_enabled=True),
         memory_provider=provider,
     )
-    out = await mw.before_model(_state_with_first_user(), Runtime())
+    out = await mw.abefore_model(_state_with_first_user(), Runtime())
     assert out is not None
     msgs = out["messages"]
 
@@ -76,7 +76,7 @@ async def test_no_memory_human_message_when_injection_disabled(
         memory_config=MemoryConfig(injection_enabled=False),
         memory_provider=provider,
     )
-    out = await mw.before_model(_state_with_first_user(), Runtime())
+    out = await mw.abefore_model(_state_with_first_user(), Runtime())
     assert out is not None
     msgs = out["messages"]
     assert not any(isinstance(m, HumanMessage) and m.id == "u1__memory" for m in msgs)
@@ -96,7 +96,7 @@ async def test_memory_message_absent_when_provider_returns_none(
         memory_config=MemoryConfig(injection_enabled=True),
         memory_provider=_FakeProvider(block=None),
     )
-    out = await mw.before_model(_state_with_first_user(), Runtime())
+    out = await mw.abefore_model(_state_with_first_user(), Runtime())
     msgs = out["messages"]
     assert not any(isinstance(m, HumanMessage) and m.id == "u1__memory" for m in msgs)
     # Date reminder + __user still present.
@@ -116,7 +116,7 @@ async def test_memory_message_ordering_between_reminder_and_user(
         memory_config=MemoryConfig(injection_enabled=True),
         memory_provider=_FakeProvider(),
     )
-    out = await mw.before_model(_state_with_first_user(), Runtime())
+    out = await mw.abefore_model(_state_with_first_user(), Runtime())
     msgs = out["messages"]
     ids = [m.id for m in msgs]
     # Reminder (u1) -> memory (u1__memory) -> user (u1__user), in that order.

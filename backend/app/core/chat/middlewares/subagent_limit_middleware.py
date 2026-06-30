@@ -16,7 +16,9 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from app.core.chat.middlewares.base import AgentMiddleware
+from langchain.agents.middleware import AgentMiddleware
+from langgraph.runtime import Runtime
+
 from app.core.chat.tools.builtin.task_tool import _subagent_usage_cache
 
 logger = logging.getLogger(__name__)
@@ -58,7 +60,7 @@ class SubagentLimitMiddleware(AgentMiddleware):
         # mutated by the heuristic path.
         self._active_subagents = 0
 
-    async def before_model(self, state: dict[str, Any], runtime: Runtime) -> dict[str, Any] | None:
+    async def abefore_model(self, state: dict[str, Any], runtime: Runtime) -> dict[str, Any] | None:
         """Before model — check the cache size against the concurrency limit."""
         active = _active_subagent_count()
         self._active_subagents = active

@@ -12,8 +12,7 @@ from typing import Any
 from unittest.mock import AsyncMock
 
 import pytest
-
-from app.core.chat.middlewares.base import AgentMiddleware
+from langchain.agents.middleware import AgentMiddleware
 
 
 class _IdentityMW(AgentMiddleware):

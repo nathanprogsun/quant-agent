@@ -5,7 +5,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from app.core.chat.middlewares.base import AgentMiddleware
+from langchain.agents.middleware import AgentMiddleware
+from langgraph.runtime import Runtime
 
 
 class ClarificationMiddleware(AgentMiddleware):
@@ -39,7 +40,7 @@ class ClarificationMiddleware(AgentMiddleware):
         """Check if text contains clarification request patterns."""
         return any(pattern.search(text) for pattern in self._patterns)
 
-    async def after_model(self, state: dict[str, Any], runtime: Runtime) -> dict[str, Any] | None:
+    async def aafter_model(self, state: dict[str, Any], runtime: Runtime) -> dict[str, Any] | None:
         """Detect clarification requests in model response."""
         messages = state.get("messages", [])
         if not messages:

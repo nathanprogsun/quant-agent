@@ -6,11 +6,12 @@ import logging
 import re
 from typing import Any
 
+from langchain.agents.middleware import AgentMiddleware
+from langgraph.runtime import Runtime
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 from pydantic import SecretStr
 
-from app.core.chat.middlewares.base import AgentMiddleware
 from app.settings import get_settings
 
 logger = logging.getLogger(__name__)
@@ -33,7 +34,7 @@ class TitleMiddleware(AgentMiddleware):
     def __init__(self, *, max_chars: int = 20) -> None:
         self._max_chars = max_chars
 
-    async def after_model(self, state: dict[str, Any], runtime: Runtime) -> dict[str, Any] | None:
+    async def aafter_model(self, state: dict[str, Any], runtime: Runtime) -> dict[str, Any] | None:
         if state.get("title"):
             return None
 

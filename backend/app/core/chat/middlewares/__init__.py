@@ -1,6 +1,7 @@
 """Chat middlewares."""
 
-from app.core.chat.middlewares.base import AgentMiddleware
+from langchain.agents.middleware import AgentMiddleware
+
 from app.core.chat.middlewares.clarification_middleware import ClarificationMiddleware
 from app.core.chat.middlewares.dynamic_context_middleware import DynamicContextMiddleware
 from app.core.chat.middlewares.loop_detection_middleware import LoopDetectionMiddleware

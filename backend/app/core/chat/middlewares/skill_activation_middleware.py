@@ -17,10 +17,10 @@ import hashlib
 import re
 from typing import Any
 
+from langchain.agents.middleware import AgentMiddleware
 from langchain_core.messages import BaseMessage, HumanMessage
 
 from app.core.chat.agent.model_call import ModelCallRequest
-from app.core.chat.middlewares.base import AgentMiddleware
 from app.skills.exceptions import SkillPathTraversalError
 from app.skills.storage.local_skill_storage import LocalSkillStorage
 from app.skills.types import Skill

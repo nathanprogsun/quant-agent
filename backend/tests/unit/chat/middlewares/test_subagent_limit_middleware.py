@@ -93,7 +93,7 @@ def test_before_model_allows_under_limit(main_event_loop: Any) -> None:
         "total_tokens": 2,
     }
     mw = SubagentLimitMiddleware(max_concurrent=3)
-    out = main_event_loop.run_until_complete(mw.before_model({"messages": []}, Runtime()))
+    out = main_event_loop.run_until_complete(mw.abefore_model({"messages": []}, Runtime()))
     assert out is None
 
 
@@ -107,7 +107,7 @@ async def test_before_model_blocks_when_cache_at_limit() -> None:
             "total_tokens": 2,
         }
     mw = SubagentLimitMiddleware(max_concurrent=3)
-    out = await mw.before_model({"messages": []}, Runtime())
+    out = await mw.abefore_model({"messages": []}, Runtime())
     assert out is not None
     assert out.get("subagent_limit_reached") is True
     assert out.get("max_concurrent") == 3
@@ -122,7 +122,7 @@ async def test_before_model_allows_just_under_limit() -> None:
             "total_tokens": 2,
         }
     mw = SubagentLimitMiddleware(max_concurrent=3)
-    out = await mw.before_model({"messages": []}, Runtime())
+    out = await mw.abefore_model({"messages": []}, Runtime())
     assert out is None
 
 

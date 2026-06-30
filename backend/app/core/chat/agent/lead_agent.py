@@ -6,18 +6,19 @@ import json
 from pathlib import Path
 from typing import Any
 
+from langchain.agents.middleware import AgentMiddleware
 from langchain_core.messages import AIMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
 from langchain_openai import ChatOpenAI
 from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode
+from langgraph.runtime import Runtime
 from pydantic import SecretStr
 
 from app.config.extensions_config import ExtensionsConfig
 from app.core.chat.agent.model_call import ModelCallRequest
 from app.core.chat.agent.prompt import apply_prompt_template
 from app.core.chat.agent.thread_state import ThreadState
-from app.core.chat.middlewares.base import AgentMiddleware, Runtime
 from app.core.chat.middlewares.clarification_middleware import ClarificationMiddleware
 from app.core.chat.middlewares.dangling_tool_call_middleware import (
     DanglingToolCallMiddleware,
@@ -197,7 +198,7 @@ def _make_agent_node(
         # before_model hooks — must see the system prompt so middlewares do not drop it
         state_patches: dict[str, Any] = {}
         for mw in middlewares:
-            modified = await mw.before_model(working_state, Runtime())
+            modified = await mw.abefore_model(working_state, Runtime())
             if modified:
                 for key, value in modified.items():
                     if key == "messages":
@@ -247,7 +248,7 @@ def _make_agent_node(
         state_update: dict[str, Any] = {"messages": [*messages, response], **state_patches}
         preview_state = {**working_state, "messages": [*messages, response]}
         for mw in middlewares:
-            modified = await mw.after_model(preview_state, Runtime())
+            modified = await mw.aafter_model(preview_state, Runtime())
             if modified:
                 state_update.update(modified)
 
@@ -332,14 +333,15 @@ async def _run_awrap_model_call(
 ) -> Any:
     """Chain ``awrap_model_call`` hooks around the model invocation.
 
+    Only middlewares that actually override ``awrap_model_call`` are
+    included in the chain (langchain's default raises NotImplementedError).
     Middlewares are wrapped so the FIRST in the list is outermost
-    (mirrors before_model ordering). The default ABC implementation is a
-    no-op delegate, so middlewares that do not override the hook are
-    transparent.
+    (mirrors before_model ordering).
     """
     wrapped = handler
     for mw in reversed(middlewares):
-        wrapped = _bind_awrap(mw, wrapped)
+        if type(mw).awrap_model_call is not AgentMiddleware.awrap_model_call:
+            wrapped = _bind_awrap(mw, wrapped)
     return await wrapped(request)
 
 

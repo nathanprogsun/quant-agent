@@ -9,9 +9,10 @@ from __future__ import annotations
 
 from typing import Any
 
+from langchain.agents.middleware import AgentMiddleware
+from langgraph.runtime import Runtime
 from langchain_core.messages import AIMessage, ToolMessage
 
-from app.core.chat.middlewares.base import AgentMiddleware
 from app.core.chat.tools.builtin.task_tool import pop_cached_subagent_usage
 
 
@@ -107,7 +108,7 @@ class TokenUsageMiddleware(AgentMiddleware):
         self._completion_tokens = 0
         self._turn_count = 0
 
-    async def after_model(self, state: dict[str, Any], runtime: Runtime) -> dict[str, Any] | None:
+    async def aafter_model(self, state: dict[str, Any], runtime: Runtime) -> dict[str, Any] | None:
         """Extract usage from the latest model response and bridge subagent usage."""
         messages = state.get("messages", [])
         if not messages:

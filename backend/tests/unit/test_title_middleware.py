@@ -22,7 +22,7 @@ async def test_title_middleware_generates_after_first_exchange() -> None:
         "_generate_title",
         new=AsyncMock(return_value="稳健型 ETF 策略咨询"),
     ):
-        result = await middleware.after_model(state, Runtime())
+        result = await middleware.aafter_model(state, Runtime())
 
     assert result == {"title": "稳健型 ETF 策略咨询"}
 
@@ -37,7 +37,7 @@ async def test_title_middleware_skips_when_title_exists() -> None:
         ],
     }
 
-    result = await middleware.after_model(state, Runtime())
+    result = await middleware.aafter_model(state, Runtime())
 
     assert result is None
 
@@ -46,7 +46,7 @@ async def test_title_middleware_waits_for_assistant_reply() -> None:
     middleware = TitleMiddleware()
     state = {"messages": [HumanMessage(content="稳健型ETF策略")]}
 
-    result = await middleware.after_model(state, Runtime())
+    result = await middleware.aafter_model(state, Runtime())
 
     assert result is None
 
@@ -83,7 +83,7 @@ async def test_title_middleware_generates_after_tool_loop() -> None:
         "_generate_title",
         new=AsyncMock(return_value="参数校验"),
     ):
-        result = await middleware.after_model(state, Runtime())
+        result = await middleware.aafter_model(state, Runtime())
 
     assert result == {"title": "参数校验"}
 
@@ -97,6 +97,6 @@ async def test_title_middleware_ignores_tool_call_only_reply() -> None:
         ]
     }
 
-    result = await middleware.after_model(state, Runtime())
+    result = await middleware.aafter_model(state, Runtime())
 
     assert result is None

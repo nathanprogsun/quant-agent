@@ -15,11 +15,12 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from langchain.agents.middleware import AgentMiddleware
+from langgraph.runtime import Runtime
 from langchain_core.messages import BaseMessage
 
 from app.core.chat.memory.queue import get_memory_update_queue
 from app.core.chat.memory.summarization_hook import SummarizationEvent, memory_flush_hook
-from app.core.chat.middlewares.base import AgentMiddleware
 
 logger = logging.getLogger(__name__)
 
@@ -34,11 +35,11 @@ class MemoryMiddleware(AgentMiddleware):
     def __init__(self, max_messages: int = 50) -> None:
         self._max_messages = max_messages
 
-    async def before_model(self, state: dict[str, Any], runtime: Runtime) -> dict[str, Any] | None:
+    async def abefore_model(self, state: dict[str, Any], runtime: Runtime) -> dict[str, Any] | None:
         """No-op. Memory injection lives in DynamicContextMiddleware (P4.2)."""
         return None
 
-    async def after_model(self, state: dict[str, Any], runtime: Runtime) -> dict[str, Any] | None:
+    async def aafter_model(self, state: dict[str, Any], runtime: Runtime) -> dict[str, Any] | None:
         """Dispatch a flush trigger to the MemoryUpdateQueue when over threshold."""
         messages: list[BaseMessage] = list(state.get("messages", []))
         if len(messages) < self._max_messages:
