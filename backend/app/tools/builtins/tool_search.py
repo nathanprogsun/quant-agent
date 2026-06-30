@@ -194,7 +194,7 @@ def build_tool_search_tool(catalog: DeferredToolCatalog) -> BaseTool:
     # InjectedToolCallId is a sentinel that LangChain resolves to the
     # current tool_call_id at invocation time; the mypy type for the
     # StructuredTool kwargs is ``dict[..., Any]`` so the kwarg flows
-    # through cleanly. ``# noqa: ERA001`` keeps ruff quiet.
+    # through cleanly. ``# noqa: E501`` keeps ruff quiet.
     return StructuredTool(
         name="tool_search",
         description=(

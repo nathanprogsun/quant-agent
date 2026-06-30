@@ -19,6 +19,9 @@ from app.core.chat.agent.prompt import apply_prompt_template
 from app.core.chat.agent.thread_state import ThreadState
 from app.core.chat.middlewares.base import AgentMiddleware
 from app.core.chat.middlewares.clarification_middleware import ClarificationMiddleware
+from app.core.chat.middlewares.dangling_tool_call_middleware import (
+    DanglingToolCallMiddleware,
+)
 from app.core.chat.middlewares.deferred_tool_filter_middleware import (
     DeferredToolFilterMiddleware,
 )
@@ -276,15 +279,20 @@ def _build_middlewares(
 
     Assembles middlewares in order per DeerFlow convention, plus P2.3's
     ``DeferredToolFilterMiddleware`` (appended last so it operates on the
-    final tool list with the rest of the chain's messages resolved):
+    final tool list with the rest of the chain's messages resolved),
+    plus P2.4's ``DanglingToolCallMiddleware`` at index 3 (after Title,
+    TokenUsage, Summarization — before content-changing
+    ``DynamicContextMiddleware``):
     1. TitleMiddleware - generates conversation title
     2. TokenUsageMiddleware - tracks token usage
     3. SummarizationMiddleware - handles long conversation summarization
-    4. DynamicContextMiddleware - injects current datetime/timezone
-    5. ClarificationMiddleware - detects clarification requests
-    6. LoopDetectionMiddleware - detects repeated tool call patterns
-    7. SubagentLimitMiddleware - limits concurrent subagent calls
-    8. DeferredToolFilterMiddleware - hides MCP tools until promoted
+    4. DanglingToolCallMiddleware - patches dangling tool_call ids
+       (P2.4; prevents 400s on OpenAI-compatible reasoning models)
+    5. DynamicContextMiddleware - injects current datetime/timezone
+    6. ClarificationMiddleware - detects clarification requests
+    7. LoopDetectionMiddleware - detects repeated tool call patterns
+    8. SubagentLimitMiddleware - limits concurrent subagent calls
+    9. DeferredToolFilterMiddleware - hides MCP tools until promoted
     """
     configurable = config.get("configurable", {})
     settings = get_settings()
@@ -298,6 +306,7 @@ def _build_middlewares(
         TitleMiddleware(),
         TokenUsageMiddleware(),
         SummarizationMiddleware(max_messages=max_messages, enabled=summarization_enabled),
+        DanglingToolCallMiddleware(),
         DynamicContextMiddleware(),
         ClarificationMiddleware(),
         LoopDetectionMiddleware(),
