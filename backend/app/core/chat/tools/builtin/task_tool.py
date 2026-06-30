@@ -10,6 +10,10 @@ Ports deer-flow's tools/builtins/task_tool.py:33-51, 187, 340, 351:
   ``task_running``, ``task_completed`` (etc.)
 - on ``CancelledError``, ``_subagent_usage_cache`` entry is popped so
   the parent ``TokenUsageMiddleware`` does not accumulate a phantom bucket
+- config resolution uses the real ``SubagentsAppConfig`` (P3.5 port of
+  deer-flow's ``config/subagents_config.py:71-143``) so per-agent timeout /
+  max-turns overrides are honored
+- channel-level ``subagent_enabled`` is honored via ``Settings.subagent_enabled``
 
 Adapter: quant-agent does not run a runtime ``deerflow.tools.types.Runtime``
 injected into the langchain tool call; instead we accept the standard
@@ -20,11 +24,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from dataclasses import dataclass
 from typing import Annotated, Any
 
 from langchain_core.tools import InjectedToolCallId, tool
 from langgraph.config import get_stream_writer
 
+from app.config.subagents_config import SubagentsAppConfig
 from app.core.chat.subagents.executor import (
     MAX_CONCURRENT_SUBAGENTS,
     SubagentExecutor,
@@ -33,6 +39,7 @@ from app.core.chat.subagents.executor import (
     cleanup_background_task,
     get_background_task_result,
 )
+from app.settings import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -63,17 +70,40 @@ def _summarize_usage(records: list[dict[str, Any]] | None) -> dict[str, int] | N
     }
 
 
-class _ResolvedSubagentConfig:
-    """Minimal duck-typed SubagentConfig used by the tool body."""
+@dataclass(frozen=True)
+class ResolvedSubagentConfig:
+    """Resolved effective settings for a subagent invocation.
 
-    timeout_seconds: int = 1800
-    max_turns: int | None = None
+    Mirrors the field set SubagentExecutor cares about (timeout, max_turns)
+    plus the model name to bind. Resolution rules:
+    - per-agent override (SubagentsAppConfig.agents[name]) wins over global
+    - if neither override is set, builtin defaults apply
+    """
+
+    timeout_seconds: int
+    max_turns: int | None
+    model: str | None
 
 
-def _resolve_subagent_config(name: str) -> _ResolvedSubagentConfig:
-    """Return a minimal config. Real SubagentsAppConfig lookup is added in P3.5."""
-    _ = name
-    return _ResolvedSubagentConfig()
+def _resolve_subagent_config(name: str) -> ResolvedSubagentConfig:
+    """Resolve the effective config for ``name`` using live settings."""
+    settings = get_settings()
+    app_cfg: SubagentsAppConfig = settings.subagents
+    return ResolvedSubagentConfig(
+        timeout_seconds=app_cfg.get_timeout_for(name),
+        max_turns=app_cfg.get_max_turns_for(name, builtin_default=25),
+        model=app_cfg.get_model_for(name),
+    )
+
+
+def _channel_subagent_enabled() -> bool:
+    """Return the channel-level gate from settings.
+
+    Per-request overrides via ``configurable.subagent_enabled`` are read by
+    the lead-agent middleware chain; this tool only consults the global
+    channel-level flag so the boot-time default applies uniformly.
+    """
+    return bool(get_settings().subagent_enabled)
 
 
 async def _run_task_body(
@@ -81,7 +111,7 @@ async def _run_task_body(
     executor: SubagentExecutor,
     prompt: str,
     tool_call_id: str,
-    config: _ResolvedSubagentConfig,
+    config: ResolvedSubagentConfig,
     description: str,
     subagent_type: str,
 ) -> str:
@@ -188,7 +218,15 @@ async def task_tool(
         subagent_type: The subagent type to use (e.g. ``general-purpose``).
         tool_call_id: Injected by the framework — the parent dispatch tool id
             reused as the subagent task id for downstream attribution.
+
+    Honors the channel-level ``Settings.subagent_enabled`` gate: when False
+    the tool returns an explanatory error instead of dispatching. Per-agent
+    overrides (timeout, max_turns, model) are resolved through
+    ``SubagentsAppConfig`` rather than the previous duck-typed stub.
     """
+    if not _channel_subagent_enabled():
+        return "Error: Subagents are disabled for this session (Settings.subagent_enabled=False)."
+
     config = _resolve_subagent_config(subagent_type)
     executor = SubagentExecutor(
         name=subagent_type,
@@ -212,6 +250,7 @@ TaskTool = task_tool
 
 __all__ = [
     "MAX_CONCURRENT_SUBAGENTS",
+    "ResolvedSubagentConfig",
     "SubagentExecutor",
     "SubagentResult",
     "SubagentStatus",

@@ -1,26 +1,28 @@
-"""Subagent execution engine — persistent isolated event loop scaffolding.
+"""Subagent execution engine — real astream/LLM run path.
 
-Ports deer-flow's subagents/executor.py:148-201 + :204-245 (loop and scheduler
-plumbing) — the per-execution ``astream`` / tools / state machine integration
-is intentionally kept minimal for P3. Subagents are wired through:
+Ports deer-flow's subagents/executor.py:148-201 (loop plumbing), :204-245
+(scheduler pool), and the body of execute_async / _aexecute which drive the
+real ``graph.astream(...)`` -> ``get_stream_writer()`` flow.
 
-- ``TaskTool`` rewrites (task_tool.py) call ``SubagentExecutor.execute_async``
-- The persistent loop guarantees shared async clients (httpx, MCP sessions)
-  stay bound to one long-lived loop rather than being recreated per task
-- ``atexit`` shuts the loop down cleanly so containers / SIGTERM scenarios
-  don't leak the daemon thread
-- ``_submit_to_isolated_loop_in_context`` propagates ``ContextVar`` state
-  across the thread boundary using ``contextvars.copy_context()`` so tracing
-  tokens and settings stay consistent
-
-Filesystem / LLM integration (deferred to subagent_runtime integration tests
-in P3-P5 once the loop plumbing is in place).
+Subagent runtime:
+- Each ``SubagentExecutor.execute_async`` call schedules a background task
+  on the persistent isolated loop (3.1) with cooperative cancellation via
+  ``SubagentResult.cancel_event``.
+- The graph is built with ``checkpointer=False`` (3.3) so a parent
+  checkpointer cannot leak into the subagent's state.
+- ``SubagentTokenCollector`` (3.4) is registered as a callback so each LLM
+  end yields one usage record (deduped by ``run_id``).
+- Stream events tagged by ``task_id`` are emitted via
+  ``langgraph.config.get_stream_writer()`` so the parent TaskTool can
+  forward ``task_started`` / ``task_running`` / ``task_completed`` /
+  ``task_failed`` to its own stream consumer.
 """
 
 from __future__ import annotations
 
 import asyncio
 import atexit
+import contextlib
 import logging
 import threading
 import uuid
@@ -31,11 +33,15 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
+from langgraph.config import get_stream_writer
 from langgraph.graph import END, StateGraph
 from pydantic import SecretStr
 
 from app.core.chat.agent.thread_state import ThreadState
+from app.core.chat.subagents.token_collector import SubagentTokenCollector
+from app.settings import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -267,6 +273,137 @@ def cleanup_background_task(task_id: str) -> None:
 MAX_CONCURRENT_SUBAGENTS = 3
 
 
+# ---- Subagent model resolution --------------------------------------------
+
+# Default subagent system prompt — overridable per-executor for custom agents.
+DEFAULT_SUBAGENT_SYSTEM_PROMPT = (
+    "You are a subagent delegated by a parent agent. Complete the given task "
+    "concisely and return only the result. Do not call tools unless necessary."
+)
+
+
+def _resolve_subagent_model() -> ChatOpenAI:
+    """Build the subagent's ChatOpenAI model from global settings.
+
+    Uses the same factory shape as ``lead_agent.make_lead_agent`` so the
+    subagent and lead agent share provider configuration. Tests can monkeypatch
+    the ``ChatOpenAI`` symbol imported by this module to substitute a fake.
+    """
+    settings = get_settings()
+    return ChatOpenAI(
+        model=settings.model,
+        api_key=SecretStr(settings.openai_api_key.get_secret_value()),
+        base_url=settings.openai_base_url,
+        streaming=True,
+        extra_body={"reasoning_split": True},
+    )
+
+
+# ---- checkpointer=False enforcement (P3.3) ---------------------------------
+
+# quant-agent does not use ``langchain.agents.create_agent``; subagents are
+# built with a manual ``StateGraph(...).compile(checkpointer=...)``. We
+# isolate subagent state by hardcoding ``checkpointer=False`` here so a
+# parent checkpointer cannot accidentally leak into the subagent graph
+# (which would inherit permission/state).
+_PARENT_CHECKPOINTER_MSG = (
+    "Subagents must be compiled with checkpointer=False; passing a parent "
+    "checkpointer would let subagent writes leak into the parent thread's "
+    "state. See P3.3 in docs/superpowers/plans/2026-06-30-p0-p4-...md."
+)
+
+
+def _extract_ai_text(message: Any) -> str | None:
+    """Best-effort text extraction from an AI message for streaming events.
+
+    Handles str content, list-of-blocks content (text parts), and falls back
+    to ``str(message.content)`` for any other shape.
+    """
+    content = getattr(message, "content", None)
+    if content is None:
+        return None
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for block in content:
+            if isinstance(block, str):
+                parts.append(block)
+            elif isinstance(block, dict):
+                text_val = block.get("text")
+                if isinstance(text_val, str):
+                    parts.append(text_val)
+        return "".join(parts) if parts else None
+    return str(content)
+
+
+def _build_subagent_state_graph(model_name: str) -> tuple[Any, ChatOpenAI]:
+    """Build a minimal real StateGraph for a subagent.
+
+    The graph is a single ``model`` node that invokes the resolved model
+    and returns its response as a state delta. P3.6+ layers middlewares /
+    tools onto this base; for now the contract under test is that
+    ``compile()`` is invoked with ``checkpointer=False`` and the model is
+    resolved from settings rather than a hardcoded placeholder key.
+
+    Args:
+        model_name: Resolved model name; passed through for parity with
+            the previous helper signature but the actual factory call uses
+            the live ``get_settings()`` so the subagent inherits the same
+            provider as the lead agent.
+
+    Returns:
+        ``(graph, model)`` tuple — the uncompiled ``StateGraph`` plus the
+        ``ChatOpenAI`` model bound to it.
+    """
+    _ = model_name  # settings owns the live model resolution
+    model = _resolve_subagent_model()
+    graph = StateGraph(ThreadState)
+
+    async def model_node(state: ThreadState) -> dict[str, Any]:
+        """Invoke the model with the current message list and return the AIMessage."""
+        messages = list(state.get("messages", []))
+        if not messages:
+            return {"messages": [AIMessage(content="No input provided to subagent.")]}
+        # Ensure system prompt precedes the task
+        if not any(isinstance(m, SystemMessage) for m in messages):
+            messages = [SystemMessage(content=DEFAULT_SUBAGENT_SYSTEM_PROMPT), *messages]
+        response = await model.ainvoke(messages)
+        return {"messages": [response]}
+
+    graph.add_node("model", model_node)
+    graph.set_entry_point("model")
+    graph.add_edge("model", END)
+    return graph, model
+
+
+def compile_subagent_graph(
+    *,
+    model_name: str,
+    checkpointer: Any = None,
+) -> Any:
+    """Compile a subagent graph with ``checkpointer=False`` enforced.
+
+    Adapted from deer-flow's executor.py:375 — the hazard documented there
+    is that a parent checkpointer silently inherits into the subagent graph.
+    This guard makes the regression loud.
+
+    Args:
+        model_name: Resolved model for the subagent (passed through for API
+            parity; the live factory uses ``get_settings()``).
+        checkpointer: If non-None, raises ``NotImplementedError``. Subagents
+            always compile with ``checkpointer=False``.
+
+    Returns:
+        The compiled subagent graph (a ``CompiledStateGraph``).
+    """
+    if checkpointer is not None:
+        raise NotImplementedError(_PARENT_CHECKPOINTER_MSG)
+
+    graph, _model = _build_subagent_state_graph(model_name)
+    return graph.compile(checkpointer=False)
+
+
 class SubagentExecutor:
     """Executor for running subagents via the persistent isolated loop."""
 
@@ -278,6 +415,7 @@ class SubagentExecutor:
         timeout_seconds: int = 1800,
         max_turns: int | None = None,
         trace_id: str | None = None,
+        system_prompt: str | None = None,
     ) -> None:
         """Initialize the executor.
 
@@ -287,18 +425,23 @@ class SubagentExecutor:
             timeout_seconds: Wall-clock timeout (default 1800 = 30 min).
             max_turns: Optional turn limit (None = inherit / unbounded).
             trace_id: Optional trace id; auto-generated if absent.
+            system_prompt: Optional per-subagent system prompt override.
         """
         self.name = name
         self.prompt = prompt
         self.timeout_seconds = timeout_seconds
         self.max_turns = max_turns
         self.trace_id = trace_id or str(uuid.uuid4())[:8]
+        self.system_prompt = system_prompt or DEFAULT_SUBAGENT_SYSTEM_PROMPT
 
     def execute_async(self, task: str, task_id: str | None = None) -> str:
         """Schedule a background subagent execution on the persistent isolated loop.
 
-        Returns the task_id. The TaskTool polls ``get_background_task_result``
+        Returns the ``task_id``. The TaskTool polls ``get_background_task_result``
         for terminal status; this method does not block the caller.
+
+        The actual astream/LLM run is performed on the persistent isolated loop
+        by ``_run_task`` (see ``_aexecute`` for the async body).
         """
         if task_id is None:
             task_id = str(uuid.uuid4())[:8]
@@ -316,96 +459,218 @@ class SubagentExecutor:
             task_id,
             self.timeout_seconds,
         )
-        # Scheduling only — actual execution deferred to P3 subagent-runtime
-        # integration once the persistent loop is validated.
+
+        # Schedule the real astream/LLM run on the persistent isolated loop.
+        # The submission is best-effort: if the loop is shut down (test
+        # teardown), fall through and let the holder sit in PENDING.
+        try:
+            loop = _get_isolated_subagent_loop()
+            future = asyncio.run_coroutine_threadsafe(
+                self._aexecute(task, result),
+                loop,
+            )
+            # Watchdog: surface timeout / exception in the holder once the
+            # future resolves. ``run_task_watchdog`` runs in a daemon thread
+            # so it does not block the caller of execute_async.
+            threading.Thread(
+                target=self._run_task_watchdog,
+                args=(task_id, future),
+                name=f"subagent-watchdog-{task_id}",
+                daemon=True,
+            ).start()
+        except Exception as exc:  # pragma: no cover — defensive
+            logger.exception("[trace=%s] Subagent %s failed to schedule", self.trace_id, self.name)
+            result.try_set_terminal(SubagentStatus.FAILED, error=str(exc))
+
         return task_id
 
-    def _run_task(self, task: str, task_id: str) -> SubagentResult:
-        """Run a subagent on the persistent loop. Used internally by future runtime paths."""
-        with _background_tasks_lock:
-            holder = _background_tasks.get(task_id)
-            if holder is None:
-                holder = SubagentResult(
-                    task_id=task_id,
-                    trace_id=self.trace_id,
-                    status=SubagentStatus.RUNNING,
-                    started_at=datetime.now(),
-                )
-                _background_tasks[task_id] = holder
-            else:
-                holder.status = SubagentStatus.RUNNING
-                holder.started_at = datetime.now()
+    def _run_task_watchdog(self, task_id: str, future: Future[Any]) -> None:
+        """Wait for the isolated-loop future and reflect terminal state into the holder.
+
+        Cancellation is signalled via ``SubagentResult.cancel_event`` — this
+        watchdog translates ``CancelledError`` / ``TimeoutError`` from the
+        future into a CANCELLED / TIMED_OUT terminal transition.
+        """
         try:
-            asyncio.run_coroutine_threadsafe(
-                self._aexecute_placeholder(task, holder),
-                _get_isolated_subagent_loop(),
-            ).result(timeout=self.timeout_seconds)
+            future.result(timeout=self.timeout_seconds)
+        except TimeoutError:
+            holder = get_background_task_result(task_id)
+            if holder is not None:
+                holder.cancel_event.set()
+                holder.try_set_terminal(
+                    SubagentStatus.TIMED_OUT,
+                    error=f"Execution timed out after {self.timeout_seconds} seconds",
+                )
+            future.cancel()
+        except asyncio.CancelledError:
+            holder = get_background_task_result(task_id)
+            if holder is not None:
+                holder.try_set_terminal(
+                    SubagentStatus.CANCELLED,
+                    error="Cancelled by parent",
+                )
         except Exception as exc:
-            holder.try_set_terminal(SubagentStatus.FAILED, error=str(exc))
-        return holder
+            holder = get_background_task_result(task_id)
+            if holder is not None and not holder.status.is_terminal:
+                holder.try_set_terminal(
+                    SubagentStatus.FAILED,
+                    error=str(exc),
+                )
 
-    async def _aexecute_placeholder(self, task: str, holder: SubagentResult) -> None:
-        """Placeholder async body. Real astream / LLM run is added in later subagent-runtime tasks."""
-        await asyncio.sleep(0)
-        holder.try_set_terminal(SubagentStatus.COMPLETED, result=f"echo:{task}")
+    async def _aexecute(self, task: str, holder: SubagentResult) -> None:
+        """Real astream / LLM run.
 
+        Builds the subagent graph, opens a stream writer, collects token
+        usage via ``SubagentTokenCollector``, and writes ``task_running`` /
+        ``task_completed`` / ``task_failed`` events tagged with the
+        ``task_id``. Honours ``holder.cancel_event`` at every astream
+        iteration boundary.
+        """
+        # Pre-check: bail out immediately if already cancelled
+        if holder.cancel_event.is_set():
+            logger.info(
+                "[trace=%s] Subagent %s cancelled before streaming", self.trace_id, self.name
+            )
+            holder.try_set_terminal(
+                SubagentStatus.CANCELLED,
+                error="Cancelled by parent",
+            )
+            return
 
-# ---- checkpointer=False enforcement (P3.3) ---------------------------------
+        # Acquire a stream writer for this execution. ``get_stream_writer``
+        # returns a no-op outside an active langgraph stream — callers can
+        # still rely on the holder's ``result`` field for terminal state.
+        try:
+            writer = get_stream_writer()
+        except Exception:
+            writer = None
 
-# quant-agent does not use ``langchain.agents.create_agent``; subagents are
-# built with a manual ``StateGraph(...).compile(checkpointer=...)``. We
-# isolate subagent state by hardcoding ``checkpointer=False`` here so a
-# parent checkpointer cannot accidentally leak into the subagent graph
-# (which would inherit permission/state).
-_PARENT_CHECKPOINTER_MSG = (
-    "Subagents must be compiled with checkpointer=False; passing a parent "
-    "checkpointer would let subagent writes leak into the parent thread's "
-    "state. See P3.3 in docs/superpowers/plans/2026-06-30-p0-p4-...md."
-)
+        if writer is not None:
+            try:
+                writer({"type": "task_running", "task_id": holder.task_id, "status": "starting"})
+            except Exception:  # pragma: no cover — defensive
+                logger.debug("task_running writer failed", exc_info=True)
 
+        # Build the subagent graph + token collector
+        try:
+            compiled = compile_subagent_graph(model_name=get_settings().model)
+        except NotImplementedError:
+            raise
+        except Exception as exc:
+            logger.exception(
+                "[trace=%s] Subagent %s failed to compile graph", self.trace_id, self.name
+            )
+            holder.try_set_terminal(
+                SubagentStatus.FAILED,
+                error=f"Failed to compile subagent graph: {exc}",
+            )
+            return
 
-def _build_subagent_state_graph(model_name: str) -> Any:
-    """Build a minimal placeholder StateGraph for a subagent.
+        collector = SubagentTokenCollector(caller=f"subagent:{self.name}")
 
-    The real wiring (tools, middlewares, dynamic context) lands in the
-    subagent-runtime integration; for P3.3 the only contract under test is
-    that ``compile()`` is invoked with ``checkpointer=False``.
-    """
-    model = ChatOpenAI(
-        model=model_name,
-        api_key=SecretStr("test-placeholder"),
-        base_url="http://localhost",
-        streaming=False,
-    )
-    graph = StateGraph(ThreadState)
-    # Placeholder node so ``compile()`` returns a valid object.
-    graph.add_node("placeholder", lambda state, config: state)
-    graph.set_entry_point("placeholder")
-    graph.add_edge("placeholder", END)
-    return graph, model
+        # Initial state — system prompt + human task. Mirror deer-flow's
+        # _build_initial_state shape (executor.py:485-490) so a downstream
+        # tool-binding upgrade slots in without a state-shape rewrite.
+        state: dict[str, Any] = {
+            "messages": [
+                SystemMessage(content=self.system_prompt),
+                HumanMessage(content=task),
+            ],
+        }
 
+        run_config: dict[str, Any] = {
+            "recursion_limit": self.max_turns if self.max_turns is not None else 25,
+            "callbacks": [collector],
+            "tags": [f"subagent:{self.name}"],
+        }
 
-def compile_subagent_graph(
-    *,
-    model_name: str,
-    checkpointer: Any = None,
-) -> Any:
-    """Compile a subagent graph with ``checkpointer=False`` enforced.
+        try:
+            final_chunk: dict[str, Any] | None = None
+            seen_message_ids: set[str] = set()
 
-    Adapted from deer-flow's executor.py:375 — the hazard documented there
-    is that a parent checkpointer silently inherits into the subagent graph.
-    This guard makes the regression loud.
+            async for chunk in compiled.astream(state, config=run_config, stream_mode="values"):
+                if holder.cancel_event.is_set():
+                    logger.info(
+                        "[trace=%s] Subagent %s cancelled mid-stream", self.trace_id, self.name
+                    )
+                    holder.try_set_terminal(
+                        SubagentStatus.CANCELLED,
+                        error="Cancelled by parent",
+                        token_usage_records=collector.snapshot_records(),
+                    )
+                    if writer is not None:
+                        with contextlib.suppress(Exception):
+                            writer({"type": "task_cancelled", "task_id": holder.task_id})
+                    return
 
-    Args:
-        model_name: Resolved model for the subagent.
-        checkpointer: If non-None, raises ``NotImplementedError``. Subagents
-            always compile with ``checkpointer=False``.
+                final_chunk = chunk
+                messages = chunk.get("messages", []) if isinstance(chunk, dict) else []
+                if messages:
+                    last_message = messages[-1]
+                    if isinstance(last_message, AIMessage):
+                        message_id = getattr(last_message, "id", None)
+                        if message_id and message_id in seen_message_ids:
+                            continue
+                        if message_id:
+                            seen_message_ids.add(message_id)
+                        payload = last_message.model_dump()
+                        holder.ai_messages.append(payload)
+                        if writer is not None:
+                            try:
+                                writer(
+                                    {
+                                        "type": "task_running",
+                                        "task_id": holder.task_id,
+                                        "message": payload,
+                                        "message_index": len(holder.ai_messages),
+                                    }
+                                )
+                            except Exception:  # pragma: no cover
+                                logger.debug("task_running writer failed", exc_info=True)
 
-    Returns:
-        The compiled subagent graph (a ``CompiledStateGraph``).
-    """
-    if checkpointer is not None:
-        raise NotImplementedError(_PARENT_CHECKPOINTER_MSG)
+            # Extract final result text from the last AI message
+            final_text: str | None = None
+            if final_chunk and isinstance(final_chunk, dict):
+                final_messages = final_chunk.get("messages", [])
+                for msg in reversed(final_messages):
+                    if isinstance(msg, AIMessage):
+                        final_text = _extract_ai_text(msg)
+                        if final_text:
+                            break
 
-    graph, _model = _build_subagent_state_graph(model_name)
-    return graph.compile(checkpointer=False)
+            if final_text is None:
+                # Fallback: concatenate all captured AI message texts
+                texts = [_extract_ai_text(m) for m in (holder.ai_messages or [])]
+                texts_str: list[str] = [t for t in texts if isinstance(t, str)]
+                final_text = "\n".join(texts_str) if texts_str else "No response generated"
+
+            holder.try_set_terminal(
+                SubagentStatus.COMPLETED,
+                result=final_text,
+                token_usage_records=collector.snapshot_records(),
+            )
+
+            if writer is not None:
+                try:
+                    writer(
+                        {
+                            "type": "task_completed",
+                            "task_id": holder.task_id,
+                            "result": final_text,
+                            "usage": collector.snapshot_records(),
+                        }
+                    )
+                except Exception:  # pragma: no cover
+                    logger.debug("task_completed writer failed", exc_info=True)
+        except Exception as exc:
+            logger.exception(
+                "[trace=%s] Subagent %s failed during execution", self.trace_id, self.name
+            )
+            holder.try_set_terminal(
+                SubagentStatus.FAILED,
+                error=str(exc),
+                token_usage_records=collector.snapshot_records(),
+            )
+            if writer is not None:
+                with contextlib.suppress(Exception):
+                    writer({"type": "task_failed", "task_id": holder.task_id, "error": str(exc)})
