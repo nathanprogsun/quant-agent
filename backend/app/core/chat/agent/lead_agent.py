@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +13,7 @@ from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode
 from pydantic import SecretStr
 
+from app.config.extensions_config import ExtensionsConfig
 from app.core.chat.agent.model_call import ModelCallRequest
 from app.core.chat.agent.prompt import apply_prompt_template
 from app.core.chat.agent.thread_state import ThreadState
@@ -102,7 +104,14 @@ def make_lead_agent(config: RunnableConfig) -> Any:
         model = model.bind_tools(tools)
 
     # System prompt
-    system_prompt = apply_prompt_template()
+    enabled_skills = _collect_enabled_skills(
+        skills_root=Path(settings.skills_root),
+        extensions_config_path=Path(settings.extensions_config_path),
+    )
+    system_prompt = apply_prompt_template(
+        skills=enabled_skills,
+        container_base_path=str(Path(settings.skills_root).resolve()),
+    )
 
     # Middleware chain — Phase 1 empty, Phase 2+ assembled
     middlewares = _build_middlewares(config)
@@ -253,3 +262,27 @@ def _bind_awrap(mw: AgentMiddleware, next_handler: Any) -> Any:
         return await mw.awrap_model_call(req, next_handler)
 
     return call
+
+
+def _collect_enabled_skills(
+    *,
+    skills_root: Path,
+    extensions_config_path: Path,
+) -> tuple[tuple[str, str], ...]:
+    """Discover skills on disk and filter by the extensions toggle state.
+
+    Returns a tuple of (name, description) pairs — metadata only, never body.
+    Order is the lexical name order from LocalSkillStorage. When the
+    extensions config is missing or malformed, every discovered skill is
+    treated as enabled (opt-out toggle) so a fresh checkout still works.
+    """
+    try:
+        config = ExtensionsConfig.from_file(extensions_config_path)
+    except (FileNotFoundError, ValueError, json.JSONDecodeError):
+        config = None
+
+    storage = LocalSkillStorage(root=skills_root)
+    skills = storage.load_skills()
+    if config is None:
+        return tuple((s.name, s.description) for s in skills)
+    return tuple((s.name, s.description) for s in skills if config.is_skill_enabled(s.name))
