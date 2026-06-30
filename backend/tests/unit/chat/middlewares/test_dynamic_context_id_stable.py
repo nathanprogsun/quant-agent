@@ -103,6 +103,7 @@ async def test_does_not_mutate_static_system_message(
         "messages": [SystemMessage(content=sys_content), HumanMessage(content="hi", id="u1")]
     }
     out = await mw.before_model(state, {})
+    assert out is not None
     msgs = out["messages"]
     # messages[0] static SystemMessage.content MUST be unchanged
     assert isinstance(msgs[0], SystemMessage)
