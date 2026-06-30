@@ -19,8 +19,8 @@ from app.core.backtest.types import (
     BacktestStatus,
 )
 from app.settings import reload_settings
-from app.web.api.backtest.views import get_backtest_service
 from app.web.application import get_app
+from app.web.lifespan_service import backtest_service_from_request
 from tests.integration.client import APITestClient
 
 
@@ -39,7 +39,8 @@ def _parse_sse_messages(body: str) -> list[dict[str, Any]]:
 async def backtest_log_sse_client(
     test_app_context: Any, monkeypatch: pytest.MonkeyPatch
 ) -> AsyncGenerator[tuple[APITestClient, AsyncMock]]:
-    monkeypatch.setenv("JQCLI_TOKEN", "test-token")
+    monkeypatch.setenv("JQCLI_USERNAME", "test-user")
+    monkeypatch.setenv("JQCLI_PASSWORD", "test-pass")
     reload_settings()
 
     poll_results = [
@@ -65,7 +66,7 @@ async def backtest_log_sse_client(
 
     app = get_app()
     app.state.app_context = test_app_context
-    app.dependency_overrides[get_backtest_service] = lambda: svc
+    app.dependency_overrides[backtest_service_from_request] = lambda: svc
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
@@ -81,7 +82,8 @@ async def backtest_log_sse_client(
         yield client, svc
 
     app.dependency_overrides.clear()
-    monkeypatch.delenv("JQCLI_TOKEN", raising=False)
+    monkeypatch.delenv("JQCLI_USERNAME", raising=False)
+    monkeypatch.delenv("JQCLI_PASSWORD", raising=False)
     reload_settings()
 
 

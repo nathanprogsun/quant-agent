@@ -123,20 +123,25 @@ class Settings(BaseSettings):
     run_manager_ttl_seconds: int = 3600
 
     # ==================== JoinQuant / jqcli ====================
-    jqcli_token: SecretStr | None = Field(
-        default=None,
-        validation_alias="JQCLI_TOKEN",
-        description="JoinQuant API token (server env only)",
-    )
-    jqcli_cookie: SecretStr | None = Field(
-        default=None,
-        validation_alias="JQCLI_COOKIE",
-        description="JoinQuant session cookie (server env only)",
-    )
     jqcli_api_base: str = Field(
         default="https://www.joinquant.com",
         validation_alias="JQCLI_API_BASE",
         description="JoinQuant API base URL",
+    )
+    jqcli_username: str | None = Field(
+        default=None,
+        validation_alias="JQCLI_USERNAME",
+        description="JoinQuant account username for password login",
+    )
+    jqcli_password: SecretStr | None = Field(
+        default=None,
+        validation_alias="JQCLI_PASSWORD",
+        description="JoinQuant account password for password login",
+    )
+    jqcli_auth_cache_ttl_seconds: int = Field(
+        default=1800,
+        validation_alias="JQCLI_AUTH_CACHE_TTL_SECONDS",
+        description="TTL for in-memory jqcli cookie cache after password login",
     )
 
 

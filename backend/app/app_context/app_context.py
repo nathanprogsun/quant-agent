@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.common.runs.manager import RunManager
 from app.common.stream_bridge.base import StreamBridge
+from app.core.backtest.registry import BacktestRegistry
 from app.core.chat.skills.registry import SkillRegistry
 
 
@@ -49,6 +50,7 @@ class AppContext:
     stream_bridge: StreamBridge | None = None
     run_manager: RunManager | None = None
     skill_registry: SkillRegistry | None = None
+    backtest_registry: BacktestRegistry | None = None
     lifespan_exit_stack: AsyncExitStack | None = dataclasses.field(
         default=None,
         compare=False,

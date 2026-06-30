@@ -11,11 +11,12 @@ from uuid import uuid4
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from app.core.backtest.jqcli_auth import clear_jqcli_credentials_cache
 from app.core.backtest.service import BacktestService
 from app.core.backtest.types import BacktestMetrics, BacktestResult, BacktestStatus
 from app.settings import reload_settings
-from app.web.api.backtest.views import get_backtest_service
 from app.web.application import get_app
+from app.web.lifespan_service import backtest_service_from_request
 from tests.integration.client import APITestClient
 
 
@@ -34,8 +35,9 @@ def _parse_sse_messages(body: str) -> list[dict[str, Any]]:
 async def backtest_stream_client(
     test_app_context: Any, monkeypatch: pytest.MonkeyPatch
 ) -> AsyncGenerator[tuple[APITestClient, AsyncMock]]:
-    """Authenticated client with mocked BacktestService and jqcli env."""
-    monkeypatch.setenv("JQCLI_TOKEN", "test-token")
+    """Authenticated client with mocked BacktestService."""
+    monkeypatch.setenv("JQCLI_USERNAME", "test-user")
+    monkeypatch.setenv("JQCLI_PASSWORD", "test-pass")
     reload_settings()
 
     poll_results = [
@@ -53,7 +55,7 @@ async def backtest_stream_client(
 
     app = get_app()
     app.state.app_context = test_app_context
-    app.dependency_overrides[get_backtest_service] = lambda: svc
+    app.dependency_overrides[backtest_service_from_request] = lambda: svc
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
@@ -69,7 +71,8 @@ async def backtest_stream_client(
         yield client, svc
 
     app.dependency_overrides.clear()
-    monkeypatch.delenv("JQCLI_TOKEN", raising=False)
+    monkeypatch.delenv("JQCLI_USERNAME", raising=False)
+    monkeypatch.delenv("JQCLI_PASSWORD", raising=False)
     reload_settings()
 
 
@@ -79,9 +82,12 @@ async def test_auth_check_unconfigured(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """GET auth-check returns unconfigured when env vars missing."""
-    monkeypatch.delenv("JQCLI_TOKEN", raising=False)
-    monkeypatch.delenv("JQCLI_COOKIE", raising=False)
+    monkeypatch.delenv("JQCLI_USERNAME", raising=False)
+    monkeypatch.delenv("JQCLI_PASSWORD", raising=False)
+    monkeypatch.setenv("JQCLI_USERNAME", "")
+    monkeypatch.setenv("JQCLI_PASSWORD", "")
     reload_settings()
+    clear_jqcli_credentials_cache()
 
     await noauthed_api_client.post(
         "/api/v1/auth/register",
@@ -95,6 +101,46 @@ async def test_auth_check_unconfigured(
     data = await noauthed_api_client.get("/api/v1/backtest/auth-check")
     assert data["configured"] is False
     assert data["authenticated"] is False
+
+
+@pytest.mark.asyncio
+@patch("app.core.backtest.jqcli_auth.login_with_password")
+async def test_auth_check_configured_via_password_login(
+    mock_login,
+    noauthed_api_client: APITestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """auth-check reports configured when username/password login succeeds."""
+    monkeypatch.delenv("JQCLI_USERNAME", raising=False)
+    monkeypatch.delenv("JQCLI_PASSWORD", raising=False)
+    monkeypatch.setenv("JQCLI_USERNAME", "test-user")
+    monkeypatch.setenv("JQCLI_PASSWORD", "test-pass")
+    reload_settings()
+    clear_jqcli_credentials_cache()
+    mock_login.return_value = {"cookie": "session=test"}
+
+    await noauthed_api_client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": f"{uuid4()}@test.com",
+            "password": "TestPassword123!",
+            "full_name": "Test User",
+        },
+    )
+
+    with patch(
+        "app.core.backtest.service._check_auth_sync",
+        return_value={"username": "test-user"},
+    ):
+        data = await noauthed_api_client.get("/api/v1/backtest/auth-check")
+
+    assert data["configured"] is True
+    assert data["authenticated"] is True
+    mock_login.assert_called_once()
+
+    monkeypatch.delenv("JQCLI_USERNAME", raising=False)
+    monkeypatch.delenv("JQCLI_PASSWORD", raising=False)
+    reload_settings()
 
 
 @pytest.mark.asyncio

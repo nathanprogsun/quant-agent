@@ -1,4 +1,5 @@
 """Integration test fixtures."""
+
 from __future__ import annotations
 
 import asyncio
@@ -13,6 +14,7 @@ from httpx import ASGITransport, AsyncClient
 from app.app_context.app_context import AppContext, create_checkpointer
 from app.common.runs.manager import RunManager
 from app.common.stream_bridge.memory import MemoryStreamBridge
+from app.core.backtest.registry import BacktestRegistry
 from app.core.chat.middlewares.memory_middleware import (
     set_memory_middleware_session_factory,
 )
@@ -87,12 +89,14 @@ async def test_app_context(
 
     run_manager = RunManager()
     stream_bridge = MemoryStreamBridge(queue_maxsize=100)
+    backtest_registry = BacktestRegistry()
 
     app_context = AppContext(
         session_factory=session_factory,
         checkpointer=checkpointer,
         stream_bridge=stream_bridge,
         run_manager=run_manager,
+        backtest_registry=backtest_registry,
         lifespan_exit_stack=lifespan_exit_stack,
     )
 
