@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from langgraph.runtime import Runtime
 
 import app.core.chat.tools.builtin.task_tool as task_tool_module
 from app.core.chat.middlewares.token_usage_middleware import TokenUsageMiddleware
@@ -52,7 +53,7 @@ async def test_bridge_attaches_usage_to_dispatch_aimessage() -> None:
     }
 
     mw = TokenUsageMiddleware()
-    out = await mw.after_model(state, {})
+    out = await mw.after_model(state, Runtime())
     assert out is not None
     msgs = out.get("messages", [])
     # The dispatch AIMessage must appear with merged usage_metadata
@@ -83,7 +84,7 @@ async def test_bridge_dedups_pop_consumes_cache_entry() -> None:
 
     state = {"messages": [HumanMessage(content="x"), dispatch, tool, final]}
     mw = TokenUsageMiddleware()
-    await mw.after_model(state, {})
+    await mw.after_model(state, Runtime())
     # Cache must be popped (P3.4 contract: pop_cached_subagent_usage is called)
     assert task_tool_module.pop_cached_subagent_usage("call-X") is None
 
@@ -94,6 +95,6 @@ async def test_bridge_handles_no_task_messages() -> None:
     final = AIMessage(content="plain")
     state = {"messages": [HumanMessage(content="x"), final]}
     mw = TokenUsageMiddleware()
-    out = await mw.after_model(state, {})
+    out = await mw.after_model(state, Runtime())
     # Should still emit token_usage in the response (existing behavior preserved)
     assert out is None or out.get("messages") is None

@@ -14,6 +14,7 @@ from typing import Any
 
 import pytest
 from langchain_core.messages import HumanMessage, SystemMessage
+from langgraph.runtime import Runtime
 
 from app.core.chat.middlewares.dynamic_context_middleware import (
     _REMINDER_DATE_KEY,
@@ -46,7 +47,7 @@ async def test_first_turn_swaps_first_human_message_into_system_reminder(
     state: dict[str, Any] = {
         "messages": [SystemMessage(content="sys"), HumanMessage(content="hello", id="u1")]
     }
-    out = await mw.before_model(state, {})
+    out = await mw.before_model(state, Runtime())
     assert out is not None
     msgs = out["messages"]
     # Original HumanMessage id="u1" is replaced by a SystemMessage reminder with the SAME id
@@ -84,7 +85,7 @@ async def test_same_day_subsequent_turn_is_frozen(
             HumanMessage(content="second question", id="u2"),
         ]
     }
-    out = await mw.before_model(state, {})
+    out = await mw.before_model(state, Runtime())
     # Frozen: same day → no patch
     assert out is None, "same-day subsequent turn must be frozen (no patch)"
 
@@ -102,7 +103,7 @@ async def test_does_not_mutate_static_system_message(
     state: dict[str, Any] = {
         "messages": [SystemMessage(content=sys_content), HumanMessage(content="hi", id="u1")]
     }
-    out = await mw.before_model(state, {})
+    out = await mw.before_model(state, Runtime())
     assert out is not None
     msgs = out["messages"]
     # messages[0] static SystemMessage.content MUST be unchanged
@@ -132,7 +133,7 @@ async def test_midnight_crossing_injects_date_update_at_last_human(
             HumanMessage(content="good morning", id="u2"),
         ]
     }
-    out = await mw.before_model(state, {})
+    out = await mw.before_model(state, Runtime())
     assert out is not None
     msgs = out["messages"]
     # A NEW date-update SystemMessage reminder is injected with reminder_date=today
