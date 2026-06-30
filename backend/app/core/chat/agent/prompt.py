@@ -1,4 +1,11 @@
-"""System prompt construction for the lead agent."""
+"""System prompt construction for the lead agent.
+
+P4.3: the static system prompt carries NO per-user data. Memory is injected
+only by DynamicContextMiddleware (P4.2) as a separate
+``HumanMessage(id='{stable_id}__memory')``; it must not live in the system
+prompt (that would break the frozen-snapshot prefix cache and conflate
+framework-owned vs. user-owned data).
+"""
 
 from __future__ import annotations
 
@@ -34,19 +41,10 @@ SYSTEM_PROMPT = """你是一个量化投资分析助手，帮助用户分析股�
 """
 
 
-def apply_prompt_template(
-    *,
-    memory_context: str | None = None,
-) -> str:
-    """Build system prompt with optional memory injection.
+def apply_prompt_template() -> str:
+    """Return the static system prompt.
 
-    Args:
-        memory_context: Optional memory context to inject.
-
-    Returns:
-        Complete system prompt string.
+    Per-user memory is NOT appended here (P4.3); DynamicContextMiddleware
+    injects memory as a separate HumanMessage (P4.2).
     """
-    prompt = SYSTEM_PROMPT
-    if memory_context:
-        prompt += f"\n\n<memory>\n{memory_context}\n</memory>"
-    return prompt
+    return SYSTEM_PROMPT

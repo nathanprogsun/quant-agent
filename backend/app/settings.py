@@ -11,6 +11,8 @@ from typing import Literal
 from pydantic import AliasChoices, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.config.memory_config import MemoryConfig
+
 
 class Settings(BaseSettings):
     """Application settings.
@@ -117,6 +119,9 @@ class Settings(BaseSettings):
 
     # ==================== StreamBridge ====================
     stream_bridge_queue_maxsize: int = 256
+
+    # ==================== Memory evolution (P4) ====================
+    memory: MemoryConfig = Field(default_factory=MemoryConfig)
 
     # ==================== RunManager ====================
     run_manager_max_runs: int = 1000
