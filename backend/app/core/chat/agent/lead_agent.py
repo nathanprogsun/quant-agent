@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Any
 
 from langchain_core.messages import AIMessage, SystemMessage
@@ -11,6 +13,8 @@ from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode
 from pydantic import SecretStr
 
+from app.config.extensions_config import ExtensionsConfig
+from app.core.chat.agent.model_call import ModelCallRequest
 from app.core.chat.agent.prompt import apply_prompt_template
 from app.core.chat.agent.thread_state import ThreadState
 from app.core.chat.middlewares.base import AgentMiddleware
@@ -18,14 +22,17 @@ from app.core.chat.middlewares.clarification_middleware import ClarificationMidd
 from app.core.chat.middlewares.dynamic_context_middleware import DynamicContextMiddleware
 from app.core.chat.middlewares.loop_detection_middleware import LoopDetectionMiddleware
 from app.core.chat.middlewares.memory_middleware import MemoryMiddleware
+from app.core.chat.middlewares.skill_activation_middleware import SkillActivationMiddleware
 from app.core.chat.middlewares.subagent_limit_middleware import SubagentLimitMiddleware
 from app.core.chat.middlewares.summarization_middleware import SummarizationMiddleware
 from app.core.chat.middlewares.title_middleware import TitleMiddleware
 from app.core.chat.middlewares.token_usage_middleware import TokenUsageMiddleware
 from app.core.chat.tools.builtin.lint_tool import lint_code_tool
 from app.core.chat.tools.builtin.param_tool import make_validate_parameters_tool
+from app.core.chat.tools.builtin.read_file_tool import ReadFileTool
 from app.core.jq_kb.tools import get_tools
 from app.settings import get_settings
+from app.skills.storage.local_skill_storage import LocalSkillStorage
 
 # P4.3: "<memory>" is no longer a system-prompt suffix — memory is injected by
 # DynamicContextMiddleware (P4.2) as a separate HumanMessage, not appended to
@@ -90,13 +97,21 @@ def make_lead_agent(config: RunnableConfig) -> Any:
     tools: list[Any] = [
         lint_code_tool,
         make_validate_parameters_tool(),
+        ReadFileTool(containers=[Path(settings.skills_root)]),
         *get_tools(pr_phase=3),
     ]
     if tools:
         model = model.bind_tools(tools)
 
     # System prompt
-    system_prompt = apply_prompt_template()
+    enabled_skills = _collect_enabled_skills(
+        skills_root=Path(settings.skills_root),
+        extensions_config_path=Path(settings.extensions_config_path),
+    )
+    system_prompt = apply_prompt_template(
+        skills=enabled_skills,
+        container_base_path=str(Path(settings.skills_root).resolve()),
+    )
 
     # Middleware chain — Phase 1 empty, Phase 2+ assembled
     middlewares = _build_middlewares(config)
@@ -148,8 +163,19 @@ def _make_agent_node(
         # would rebuild the SystemMessage and break the frozen-snapshot prefix
         # cache. System message identity is preserved from the entry-point call.
 
-        # LLM call — `messages` is the full patched list (id-swap applied)
-        response = await model.ainvoke(messages)
+        # LLM call — wrapped by awrap_model_call hooks (P1.7 SkillActivation
+        # injects a <slash_skill_activation> block when the last user message
+        # starts with /<skill-name>). Default ABC impl is a no-op delegate, so
+        # middlewares that do not override the hook are unaffected. The request
+        # is mutable: a middleware may replace `messages` before delegating; we
+        # read it back so any injection persists via the add_messages reducer.
+        request = ModelCallRequest(messages=messages)
+
+        async def _invoke_model(req: ModelCallRequest) -> Any:
+            return await model.ainvoke(req.messages)
+
+        response = await _run_awrap_model_call(middlewares, request, _invoke_model)
+        messages = request.messages
 
         # D9: persist the patched message list. Returning [*messages, response]
         # lets the add_messages reducer replace-in-place by id (the swapped
@@ -193,10 +219,12 @@ def _build_middlewares(config: RunnableConfig) -> list[AgentMiddleware]:
     7. SubagentLimitMiddleware - limits concurrent subagent calls
     """
     configurable = config.get("configurable", {})
+    settings = get_settings()
 
     # Summarization enabled flag
     summarization_enabled = configurable.get("summarization_enabled", True)
     max_messages = configurable.get("max_messages", 50)
+    skills_root = configurable.get("skills_root", settings.skills_root)
 
     return [
         TitleMiddleware(),
@@ -207,4 +235,54 @@ def _build_middlewares(config: RunnableConfig) -> list[AgentMiddleware]:
         LoopDetectionMiddleware(),
         SubagentLimitMiddleware(),
         MemoryMiddleware(max_messages=max_messages),
+        SkillActivationMiddleware(storage=LocalSkillStorage(root=Path(skills_root))),
     ]
+
+
+async def _run_awrap_model_call(
+    middlewares: list[AgentMiddleware],
+    request: ModelCallRequest,
+    handler: Any,
+) -> Any:
+    """Chain awrap_model_call hooks around the model invocation.
+
+    Middlewares are wrapped so that the FIRST in the list is outermost
+    (mirrors before_model ordering). The default ABC implementation is a
+    no-op delegate, so middlewares that do not override the hook are
+    transparent.
+    """
+    wrapped = handler
+    for mw in reversed(middlewares):
+        wrapped = _bind_awrap(mw, wrapped)
+    return await wrapped(request)
+
+
+def _bind_awrap(mw: AgentMiddleware, next_handler: Any) -> Any:
+    async def call(req: ModelCallRequest) -> Any:
+        return await mw.awrap_model_call(req, next_handler)
+
+    return call
+
+
+def _collect_enabled_skills(
+    *,
+    skills_root: Path,
+    extensions_config_path: Path,
+) -> tuple[tuple[str, str], ...]:
+    """Discover skills on disk and filter by the extensions toggle state.
+
+    Returns a tuple of (name, description) pairs — metadata only, never body.
+    Order is the lexical name order from LocalSkillStorage. When the
+    extensions config is missing or malformed, every discovered skill is
+    treated as enabled (opt-out toggle) so a fresh checkout still works.
+    """
+    try:
+        config = ExtensionsConfig.from_file(extensions_config_path)
+    except (FileNotFoundError, ValueError, json.JSONDecodeError):
+        config = None
+
+    storage = LocalSkillStorage(root=skills_root)
+    skills = storage.load_skills()
+    if config is None:
+        return tuple((s.name, s.description) for s in skills)
+    return tuple((s.name, s.description) for s in skills if config.is_skill_enabled(s.name))

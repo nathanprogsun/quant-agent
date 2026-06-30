@@ -1,0 +1,8 @@
+{
+  "skills": {
+    "deep-research": { "enabled": true },
+    "user-skill": { "enabled": false }
+  },
+  "mcpServers": {},
+  "mcpInterceptors": []
+}

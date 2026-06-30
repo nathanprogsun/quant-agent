@@ -117,6 +117,16 @@ class Settings(BaseSettings):
     checkpointer_backend: Literal["memory", "sqlite", "postgres"] = "sqlite"
     checkpointer_connection_string: str = "checkpoints.db"
 
+    # ==================== Extensions (skills / MCP) ====================
+    extensions_config_path: str = Field(
+        default="extensions_config.json",
+        description="Path to runtime-toggleable extensions config (skills, MCP servers)",
+    )
+    skills_root: str = Field(
+        default="skills",
+        description="Root directory of the SKILL.md disk layout (public/ + custom/)",
+    )
+
     # ==================== StreamBridge ====================
     stream_bridge_queue_maxsize: int = 256
 
