@@ -107,9 +107,7 @@ class TokenUsageMiddleware(AgentMiddleware):
         self._completion_tokens = 0
         self._turn_count = 0
 
-    async def after_model(
-        self, state: dict[str, Any], config: dict[str, Any]
-    ) -> dict[str, Any] | None:
+    async def after_model(self, state: dict[str, Any], runtime: Runtime) -> dict[str, Any] | None:
         """Extract usage from the latest model response and bridge subagent usage."""
         messages = state.get("messages", [])
         if not messages:

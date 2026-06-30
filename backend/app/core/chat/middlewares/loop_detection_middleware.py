@@ -26,29 +26,7 @@ class LoopDetectionMiddleware(AgentMiddleware):
         self._tool_history: list[str] = []
         self._loop_detected = False
 
-    async def before_tool(self, tool_name: str, tool_input: dict[str, Any], config: dict[str, Any]) -> dict[str, Any] | None:
-        """Check for loop patterns before tool execution."""
-        self._tool_history.append(tool_name)
-        if len(self._tool_history) > self._max_sequence_length:
-            self._tool_history.pop(0)
-
-        # Check for repeated tool calls
-        if len(self._tool_history) >= self._max_repeated_calls:
-            recent = self._tool_history[-self._max_repeated_calls:]
-            if all(t == tool_name for t in recent):
-                self._loop_detected = True
-                # Allow execution but flag it
-
-        return None
-
-    async def after_tool(
-        self, tool_name: str, tool_input: dict[str, Any], result: Any, config: dict[str, Any]
-    ) -> Any | None:
-        """After tool call - analyze result for additional loop signals."""
-        # If tool returned empty/error consistently, could indicate a loop
-        if result is None or (isinstance(result, dict) and not result):
-            self._loop_detected = True
-        return None
+        # before_tool/after_tool removed — dead code (agent_node never calls them).
 
     def is_loop_detected(self) -> bool:
         """Return whether a loop has been detected."""

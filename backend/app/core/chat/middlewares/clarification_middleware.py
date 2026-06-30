@@ -39,7 +39,7 @@ class ClarificationMiddleware(AgentMiddleware):
         """Check if text contains clarification request patterns."""
         return any(pattern.search(text) for pattern in self._patterns)
 
-    async def after_model(self, state: dict[str, Any], config: dict[str, Any]) -> dict[str, Any] | None:
+    async def after_model(self, state: dict[str, Any], runtime: Runtime) -> dict[str, Any] | None:
         """Detect clarification requests in model response."""
         messages = state.get("messages", [])
         if not messages:
@@ -53,7 +53,9 @@ class ClarificationMiddleware(AgentMiddleware):
         if isinstance(content, list):
             # Handle multimodal content
             text = " ".join(
-                item.get("text", "") for item in content if isinstance(item, dict) and item.get("type") == "text"
+                item.get("text", "")
+                for item in content
+                if isinstance(item, dict) and item.get("type") == "text"
             )
         else:
             text = str(content)

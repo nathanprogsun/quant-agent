@@ -50,6 +50,7 @@ dependencies = [
     "llama-index-vector-stores-chroma>=0.5.5",
     "llama-index-llms-openai>=0.7.9",
     "langchain-mcp-adapters>=0.3.0",
+    "langchain>=1.2.15",
 ]
 
 [build-system]

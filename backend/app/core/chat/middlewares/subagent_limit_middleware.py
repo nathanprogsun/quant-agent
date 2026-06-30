@@ -58,9 +58,7 @@ class SubagentLimitMiddleware(AgentMiddleware):
         # mutated by the heuristic path.
         self._active_subagents = 0
 
-    async def before_model(
-        self, state: dict[str, Any], config: dict[str, Any]
-    ) -> dict[str, Any] | None:
+    async def before_model(self, state: dict[str, Any], runtime: Runtime) -> dict[str, Any] | None:
         """Before model — check the cache size against the concurrency limit."""
         active = _active_subagent_count()
         self._active_subagents = active
@@ -74,18 +72,6 @@ class SubagentLimitMiddleware(AgentMiddleware):
                 "subagent_limit_reached": True,
                 "max_concurrent": self._max_concurrent,
             }
-        return None
-
-    async def before_tool(
-        self, tool_name: str, tool_input: dict[str, Any], config: dict[str, Any]
-    ) -> dict[str, Any] | None:
-        """No-op — the limit is driven by the cache, not tool_name substrings."""
-        return None
-
-    async def after_tool(
-        self, tool_name: str, tool_input: dict[str, Any], result: Any, config: dict[str, Any]
-    ) -> Any | None:
-        """No-op — see ``before_tool``."""
         return None
 
     def get_active_count(self) -> int:
