@@ -22,7 +22,7 @@ from pydantic import AliasChoices, BaseModel, Field, PrivateAttr, field_validato
 # Module-level so pydantic does not turn it into a ModelPrivateAttr on the
 # BaseModel. Matches both ``$VAR`` and ``${VAR}`` (deer-flow parity); a missing
 # variable expands to "" so a partially-configured operator env does not crash.
-_ENV_VAR_RE = re.compile(r"\$\{([A-Z_][A-Z0-9_]*)\}|(?<!\\)\$([A-Z_][A-Z0-9_]*))
+_ENV_VAR_RE = re.compile(r"\$\{([A-Z_][A-Z0-9_]*)\}|(?<!\\)\$([A-Z_][A-Z0-9_]*)")
 
 
 class SkillStateConfig(BaseModel):
