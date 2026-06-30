@@ -1,83 +1,222 @@
-"""Task tool for subagent delegation."""
+"""Task tool — delegates work to subagents via the persistent isolated loop.
+
+Ports deer-flow's tools/builtins/task_tool.py:33-51, 187, 340, 351:
+- ``@tool('task')`` surface (replaces the BaseTool stub)
+- ``InjectedToolCallId`` injection so the parent dispatch id is reused
+  as the subagent ``task_id`` (P3.4 bridge consumes this id)
+- delegation via ``SubagentExecutor.execute_async`` onto the persistent
+  isolated loop (3.1)
+- stream events via ``get_stream_writer()``: ``task_started``,
+  ``task_running``, ``task_completed`` (etc.)
+- on ``CancelledError``, ``_subagent_usage_cache`` entry is popped so
+  the parent ``TokenUsageMiddleware`` does not accumulate a phantom bucket
+
+Adapter: quant-agent does not run a runtime ``deerflow.tools.types.Runtime``
+injected into the langchain tool call; instead we accept the standard
+``InjectedToolCallId`` parameter via the langchain-core Annotated surface.
+"""
 
 from __future__ import annotations
 
-from langchain_core.callbacks import CallbackManagerForToolRun
-from langchain_core.tools import BaseTool, ToolException
-from pydantic import BaseModel, Field
+import asyncio
+import logging
+from typing import Annotated, Any
+
+from langchain_core.tools import InjectedToolCallId, tool
+from langgraph.config import get_stream_writer
+
+from app.core.chat.subagents.executor import (
+    MAX_CONCURRENT_SUBAGENTS,
+    SubagentExecutor,
+    SubagentResult,
+    SubagentStatus,
+    cleanup_background_task,
+    get_background_task_result,
+)
+
+logger = logging.getLogger(__name__)
+
+# Per-tool_call_id usage cache. Populated by ``_cache_subagent_usage`` on
+# terminal status; cleared on cancel/exception; consumed by
+# ``TokenUsageMiddleware._apply`` (P3.4 bridge) to attribute tokens to the
+# parent dispatch AIMessage.
+_subagent_usage_cache: dict[str, dict[str, int]] = {}
 
 
-class TaskInput(BaseModel):
-    """Input schema for TaskTool."""
-
-    task_type: str = Field(
-        description="Type of task to delegate (e.g., 'research', 'coding', 'review')"
-    )
-    prompt: str = Field(description="The prompt/instruction for the subagent to execute")
-    description: str = Field(description="Human-readable description of the task")
+def pop_cached_subagent_usage(tool_call_id: str) -> dict[str, int] | None:
+    """Remove and return the cached usage dict for ``tool_call_id``."""
+    return _subagent_usage_cache.pop(tool_call_id, None)
 
 
-class TaskTool(BaseTool):
-    """Tool for delegating tasks to subagents.
+def _cache_subagent_usage(tool_call_id: str, usage: dict[str, int] | None) -> None:
+    if usage:
+        _subagent_usage_cache[tool_call_id] = usage
 
-    This tool allows the main agent to spawn subagents for specific
-    tasks such as research, coding, review, or analysis.
 
-    The tool returns the result of the subagent execution as a string.
+def _summarize_usage(records: list[dict[str, Any]] | None) -> dict[str, int] | None:
+    if not records:
+        return None
+    return {
+        "input_tokens": sum(r.get("input_tokens", 0) or 0 for r in records),
+        "output_tokens": sum(r.get("output_tokens", 0) or 0 for r in records),
+        "total_tokens": sum(r.get("total_tokens", 0) or 0 for r in records),
+    }
+
+
+class _ResolvedSubagentConfig:
+    """Minimal duck-typed SubagentConfig used by the tool body."""
+
+    timeout_seconds: int = 1800
+    max_turns: int | None = None
+
+
+def _resolve_subagent_config(name: str) -> _ResolvedSubagentConfig:
+    """Return a minimal config. Real SubagentsAppConfig lookup is added in P3.5."""
+    _ = name
+    return _ResolvedSubagentConfig()
+
+
+async def _run_task_body(
+    *,
+    executor: SubagentExecutor,
+    prompt: str,
+    tool_call_id: str,
+    config: _ResolvedSubagentConfig,
+    description: str,
+    subagent_type: str,
+) -> str:
+    """Drive one subagent from spawn to terminal status; emit stream events.
+
+    Kept as a module-level coroutine so tests can monkeypatch easily.
     """
+    task_id = executor.execute_async(prompt, task_id=tool_call_id)
+    writer = get_stream_writer()
+    writer({"type": "task_started", "task_id": task_id, "description": description})
+    last_message_count = 0
+    try:
+        while True:
+            result = get_background_task_result(task_id)
+            if result is None:
+                writer({"type": "task_failed", "task_id": task_id, "error": "Task disappeared"})
+                cleanup_background_task(task_id)
+                return f"Error: Task {task_id} disappeared from background tasks"
 
-    name: str = "task"
-    description: str = "Delegate a specific task to a subagent. Use when you need help with specialized tasks like research, coding, review, or analysis."
-    args_schema: type[BaseModel] = TaskInput
+            ai_messages = result.ai_messages or []
+            current_message_count = len(ai_messages)
+            if current_message_count > last_message_count:
+                for i in range(last_message_count, current_message_count):
+                    writer(
+                        {
+                            "type": "task_running",
+                            "task_id": task_id,
+                            "message": ai_messages[i],
+                            "message_index": i + 1,
+                            "total_messages": current_message_count,
+                        }
+                    )
+                last_message_count = current_message_count
 
-    def _run(
-        self,
-        task_type: str,
-        prompt: str,
-        description: str,
-        run_manager: CallbackManagerForToolRun | None = None,
-    ) -> str:
-        """Execute the task delegation.
+            usage = _summarize_usage(getattr(result, "token_usage_records", None))
 
-        Args:
-            task_type: Type of task to delegate.
-            prompt: The prompt for the subagent.
-            description: Description of the task.
-            run_manager: Callback manager for tool execution.
+            if result.status == SubagentStatus.COMPLETED:
+                _cache_subagent_usage(tool_call_id, usage)
+                writer(
+                    {
+                        "type": "task_completed",
+                        "task_id": task_id,
+                        "result": result.result,
+                        "usage": usage,
+                    }
+                )
+                cleanup_background_task(task_id)
+                return f"Task Succeeded. Result: {result.result}"
+            if result.status == SubagentStatus.FAILED:
+                _cache_subagent_usage(tool_call_id, usage)
+                writer(
+                    {
+                        "type": "task_failed",
+                        "task_id": task_id,
+                        "error": result.error,
+                        "usage": usage,
+                    }
+                )
+                cleanup_background_task(task_id)
+                return f"Task failed. Error: {result.error}"
+            if result.status == SubagentStatus.CANCELLED:
+                _cache_subagent_usage(tool_call_id, usage)
+                writer(
+                    {
+                        "type": "task_cancelled",
+                        "task_id": task_id,
+                        "error": result.error,
+                        "usage": usage,
+                    }
+                )
+                cleanup_background_task(task_id)
+                return "Task cancelled by user."
+            if result.status == SubagentStatus.TIMED_OUT:
+                _cache_subagent_usage(tool_call_id, usage)
+                writer(
+                    {
+                        "type": "task_timed_out",
+                        "task_id": task_id,
+                        "error": result.error,
+                        "usage": usage,
+                    }
+                )
+                cleanup_background_task(task_id)
+                return f"Task timed out. Error: {result.error}"
 
-        Returns:
-            Result from the subagent execution.
-        """
-        raise ToolException(
-            "TaskTool._run is not implemented. Use _arun for async execution."
-        )
+            await asyncio.sleep(5)
+    except asyncio.CancelledError:
+        _subagent_usage_cache.pop(tool_call_id, None)
+        raise
 
-    async def _arun(
-        self,
-        task_type: str,
-        prompt: str,
-        description: str,
-        run_manager: CallbackManagerForToolRun | None = None,
-    ) -> str:
-        """Async execute the task delegation.
 
-        Args:
-            task_type: Type of task to delegate.
-            prompt: The prompt for the subagent.
-            description: Description of the task.
-            run_manager: Callback manager for tool execution.
+@tool("task", parse_docstring=True)
+async def task_tool(
+    description: str,
+    prompt: str,
+    subagent_type: str,
+    tool_call_id: Annotated[str, InjectedToolCallId],
+) -> str:
+    """Delegate a task to a specialized subagent that runs in its own context.
 
-        Returns:
-            Result from the subagent execution.
-        """
-        # TODO: Implement actual subagent delegation
-        # This is a placeholder that returns a structured response
-        # In production, this would spawn a subagent and return its result
-        result = {
-            "status": "delegated",
-            "task_type": task_type,
-            "description": description,
-            "prompt": prompt,
-            "note": "Subagent delegation not yet implemented",
-        }
-        return str(result)
+    Args:
+        description: A short (3-5 word) description of the task for logging/display.
+        prompt: The task description for the subagent. Be specific.
+        subagent_type: The subagent type to use (e.g. ``general-purpose``).
+        tool_call_id: Injected by the framework — the parent dispatch tool id
+            reused as the subagent task id for downstream attribution.
+    """
+    config = _resolve_subagent_config(subagent_type)
+    executor = SubagentExecutor(
+        name=subagent_type,
+        prompt=prompt,
+        timeout_seconds=config.timeout_seconds,
+        max_turns=config.max_turns,
+    )
+    return await _run_task_body(
+        executor=executor,
+        prompt=prompt,
+        tool_call_id=tool_call_id,
+        config=config,
+        description=description,
+        subagent_type=subagent_type,
+    )
+
+
+# Public alias — backward-compat for ``app.core.chat.tools.__init__``.
+TaskTool = task_tool
+
+
+__all__ = [
+    "MAX_CONCURRENT_SUBAGENTS",
+    "SubagentExecutor",
+    "SubagentResult",
+    "SubagentStatus",
+    "TaskTool",
+    "_subagent_usage_cache",
+    "pop_cached_subagent_usage",
+    "task_tool",
+]
