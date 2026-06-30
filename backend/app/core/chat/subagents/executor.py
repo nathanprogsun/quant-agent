@@ -31,6 +31,12 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 
+from langchain_openai import ChatOpenAI
+from langgraph.graph import END, StateGraph
+from pydantic import SecretStr
+
+from app.core.chat.agent.thread_state import ThreadState
+
 logger = logging.getLogger(__name__)
 
 
@@ -342,3 +348,64 @@ class SubagentExecutor:
         """Placeholder async body. Real astream / LLM run is added in later subagent-runtime tasks."""
         await asyncio.sleep(0)
         holder.try_set_terminal(SubagentStatus.COMPLETED, result=f"echo:{task}")
+
+
+# ---- checkpointer=False enforcement (P3.3) ---------------------------------
+
+# quant-agent does not use ``langchain.agents.create_agent``; subagents are
+# built with a manual ``StateGraph(...).compile(checkpointer=...)``. We
+# isolate subagent state by hardcoding ``checkpointer=False`` here so a
+# parent checkpointer cannot accidentally leak into the subagent graph
+# (which would inherit permission/state).
+_PARENT_CHECKPOINTER_MSG = (
+    "Subagents must be compiled with checkpointer=False; passing a parent "
+    "checkpointer would let subagent writes leak into the parent thread's "
+    "state. See P3.3 in docs/superpowers/plans/2026-06-30-p0-p4-...md."
+)
+
+
+def _build_subagent_state_graph(model_name: str) -> Any:
+    """Build a minimal placeholder StateGraph for a subagent.
+
+    The real wiring (tools, middlewares, dynamic context) lands in the
+    subagent-runtime integration; for P3.3 the only contract under test is
+    that ``compile()`` is invoked with ``checkpointer=False``.
+    """
+    model = ChatOpenAI(
+        model=model_name,
+        api_key=SecretStr("test-placeholder"),
+        base_url="http://localhost",
+        streaming=False,
+    )
+    graph = StateGraph(ThreadState)
+    # Placeholder node so ``compile()`` returns a valid object.
+    graph.add_node("placeholder", lambda state, config: state)
+    graph.set_entry_point("placeholder")
+    graph.add_edge("placeholder", END)
+    return graph, model
+
+
+def compile_subagent_graph(
+    *,
+    model_name: str,
+    checkpointer: Any = None,
+) -> Any:
+    """Compile a subagent graph with ``checkpointer=False`` enforced.
+
+    Adapted from deer-flow's executor.py:375 — the hazard documented there
+    is that a parent checkpointer silently inherits into the subagent graph.
+    This guard makes the regression loud.
+
+    Args:
+        model_name: Resolved model for the subagent.
+        checkpointer: If non-None, raises ``NotImplementedError``. Subagents
+            always compile with ``checkpointer=False``.
+
+    Returns:
+        The compiled subagent graph (a ``CompiledStateGraph``).
+    """
+    if checkpointer is not None:
+        raise NotImplementedError(_PARENT_CHECKPOINTER_MSG)
+
+    graph, _model = _build_subagent_state_graph(model_name)
+    return graph.compile(checkpointer=False)
