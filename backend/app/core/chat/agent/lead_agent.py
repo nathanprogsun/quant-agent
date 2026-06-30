@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 from langchain.agents.middleware import AgentMiddleware
@@ -191,14 +192,25 @@ def _make_agent_node(
     """
     tools = list(tools or [])
 
-    async def agent_node(state: ThreadState) -> dict[str, Any]:
+    async def agent_node(state: ThreadState, config: RunnableConfig | None = None) -> dict[str, Any]:
         messages = _ensure_system_message(list(state.get("messages", [])), system_prompt)
         working_state: dict[str, Any] = {**dict(state), "messages": messages}
+
+        # Build a Runtime from the configurable dict so middlewares can access
+        # thread_id / user_id / run_id (before this fix, Runtime() had None context).
+        configurable = config.get("configurable", {}) if config else {}
+        runtime = Runtime(
+            context=SimpleNamespace(
+                thread_id=configurable.get("thread_id", ""),
+                user_id=configurable.get("user_id"),
+                run_id=configurable.get("run_id", ""),
+            )
+        )
 
         # before_model hooks — must see the system prompt so middlewares do not drop it
         state_patches: dict[str, Any] = {}
         for mw in middlewares:
-            modified = await mw.abefore_model(working_state, Runtime())
+            modified = await mw.abefore_model(working_state, runtime)
             if modified:
                 for key, value in modified.items():
                     if key == "messages":
@@ -248,7 +260,7 @@ def _make_agent_node(
         state_update: dict[str, Any] = {"messages": [*messages, response], **state_patches}
         preview_state = {**working_state, "messages": [*messages, response]}
         for mw in middlewares:
-            modified = await mw.aafter_model(preview_state, Runtime())
+            modified = await mw.aafter_model(preview_state, runtime)
             if modified:
                 state_update.update(modified)
 
