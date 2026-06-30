@@ -12,9 +12,10 @@ triggers within 30s collapse.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from app.core.chat.memory.llm_adapter import MemoryLLMAdapter
+from app.core.chat.memory.provider import MemoryProvider, set_memory_provider
 from app.core.chat.memory.queue import (
     MemoryUpdateQueue,
     get_memory_update_queue,
@@ -31,7 +32,7 @@ if TYPE_CHECKING:
     from app.settings import Settings
 
 
-def build_memory_update_queue(settings: Settings, session_factory: object) -> MemoryUpdateQueue:
+def build_memory_update_queue(settings: Settings, session_factory: Any) -> MemoryUpdateQueue:
     """Construct a fully-wired MemoryUpdateQueue (does not install it)."""
     llm = MemoryLLMAdapter(settings)
     updater = MemoryUpdater(llm=llm, config=settings.memory)
@@ -42,7 +43,7 @@ def build_memory_update_queue(settings: Settings, session_factory: object) -> Me
     )
 
 
-def install_memory_subsystem(settings: Settings, session_factory: object) -> MemoryUpdateQueue:
+def install_memory_subsystem(settings: Settings, session_factory: Any) -> MemoryUpdateQueue:
     """Build, install, and return the process-wide MemoryUpdateQueue.
 
     Also installs the summarization flush hook bridging SummarizationMiddleware
@@ -50,6 +51,7 @@ def install_memory_subsystem(settings: Settings, session_factory: object) -> Mem
     """
     queue = build_memory_update_queue(settings, session_factory)
     set_memory_update_queue(queue)
+    set_memory_provider(MemoryProvider(session_factory, settings.memory))
 
     def _flush(event: SummarizationEvent) -> None:
         active = get_memory_update_queue()
@@ -61,8 +63,9 @@ def install_memory_subsystem(settings: Settings, session_factory: object) -> Mem
 
 
 def shutdown_memory_subsystem(queue: MemoryUpdateQueue | None) -> None:
-    """Tear down the process-wide memory queue and hook."""
+    """Tear down the process-wide memory queue, provider, and hook."""
     set_summarization_flush_hook(None)
+    set_memory_provider(None)
     set_memory_update_queue(None)
     if queue is not None:
         queue.shutdown(wait=False)
