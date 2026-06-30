@@ -15,6 +15,12 @@ describe('useSessionState', () => {
     expect(result.current.state).toBe('generating')
   })
 
+  it('transitions idle → code_ready on codeComplete() for restored threads', () => {
+    const { result } = renderHook(() => useSessionState())
+    act(() => result.current.codeComplete())
+    expect(result.current.state).toBe('code_ready')
+  })
+
   it('transitions generating → code_ready on codeComplete()', () => {
     const { result } = renderHook(() => useSessionState())
     act(() => result.current.generate())

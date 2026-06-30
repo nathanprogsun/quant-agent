@@ -24,15 +24,8 @@ import {
 } from "@/core/messages/pythonBlocks";
 import { useStrategyWorkspace } from "@/hooks/useStrategyWorkspace";
 import { useThread } from "@/hooks/useThreads";
+import { getDefaultBacktestParams } from "@/core/backtest/defaultParams";
 import { NEW_THREAD_ID, useThreadStream } from "@/core/threads/hooks";
-
-const DEFAULT_BACKTEST_PARAMS = {
-  start_date: "2020-01-01",
-  end_date: "2024-12-31",
-  initial_capital: 100000,
-  frequency: "day",
-  benchmark: "000300.XSHG",
-};
 
 export default function ChatPage({
   params,
@@ -90,7 +83,6 @@ function ChatThreadPage({ thread_id }: { thread_id: string }) {
     startBacktest,
     backtestComplete,
     backtestFailed,
-    analysisComplete,
     reset,
   } = useSessionState();
 
@@ -100,7 +92,6 @@ function ChatThreadPage({ thread_id }: { thread_id: string }) {
   const backtestIdRef = useRef<string | null>(null);
   const [lastBacktestId, setLastBacktestId] = useState<string | null>(null);
   const [streamUrl, setStreamUrl] = useState<string | null>(null);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [logLines, setLogLines] = useState<string[]>([]);
   const [performanceSeries, setPerformanceSeries] = useState<PerformancePoint[]>([]);
@@ -111,6 +102,10 @@ function ChatThreadPage({ thread_id }: { thread_id: string }) {
   const wasLoadingRef = useRef(false);
   const editorVersionRef = useRef(1);
   const initialMessageSentRef = useRef(false);
+  const hasRestoredSessionRef = useRef(false);
+
+  const lastBacktestIdStorageKey = `lastBacktestId:${thread_id}`;
+  const hydratedLastBacktestIdRef = useRef(false);
 
   const {
     messages,
@@ -132,6 +127,9 @@ function ChatThreadPage({ thread_id }: { thread_id: string }) {
       onFinish: () => {},
     });
 
+  const threadCode =
+    typeof values?.code === "string" ? values.code.trim() : "";
+
   const latestPythonBlock = useMemo(
     () => extractLatestPythonBlock(messages as Message[]),
     [messages],
@@ -145,7 +143,7 @@ function ChatThreadPage({ thread_id }: { thread_id: string }) {
   const hasRunResults =
     workspace.runStatus !== "idle" || lastMetrics != null || lastBacktestId != null;
 
-  const strategyPanelTitle =
+  const strategyPanelTitle: string =
     threadTitle?.trim() ||
     editorCode.match(/^#\s*(.+)/m)?.[1]?.trim() ||
     "未命名策略";
@@ -155,19 +153,23 @@ function ChatThreadPage({ thread_id }: { thread_id: string }) {
       setEditorCode(latestPythonBlock);
       lastSyncedBlockRef.current = latestPythonBlock;
       editorVersionRef.current += 1;
+      codeComplete();
     }
     workspace.openWorkspace();
-  }, [latestPythonBlock, workspace]);
+  }, [latestPythonBlock, workspace, codeComplete]);
 
   useEffect(() => {
     workspace.closeWorkspace();
+    hasRestoredSessionRef.current = false;
   }, [thread_id, workspace.closeWorkspace]);
 
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       try {
-        const res = await fetch("/api/v1/backtest/auth-check");
+        const res = await fetch("/api/v1/backtest/auth-check", {
+          credentials: "include",
+        });
         if (!res.ok) return;
         const data = (await res.json()) as { configured?: boolean };
         if (!cancelled) {
@@ -182,7 +184,7 @@ function ChatThreadPage({ thread_id }: { thread_id: string }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [isAuthenticated]);
 
   useEffect(() => {
     backtestIdRef.current = backtestId;
@@ -201,6 +203,19 @@ function ChatThreadPage({ thread_id }: { thread_id: string }) {
     setHoldingGroups(data.holdings ?? []);
   }, []);
 
+  useEffect(() => {
+    if (hydratedLastBacktestIdRef.current) return;
+    if (typeof window === "undefined") return;
+    const stored = window.localStorage.getItem(lastBacktestIdStorageKey);
+    if (!stored) {
+      hydratedLastBacktestIdRef.current = true;
+      return;
+    }
+    hydratedLastBacktestIdRef.current = true;
+    setLastBacktestId(stored);
+    void fetchBacktestDetail(stored);
+  }, [lastBacktestIdStorageKey, fetchBacktestDetail]);
+
   const { connect, disconnect } = useBacktestStream(streamUrl ?? "", {
     onStarted: (id) => {
       setBacktestId(id);
@@ -215,6 +230,9 @@ function ChatThreadPage({ thread_id }: { thread_id: string }) {
       const id = backtestIdRef.current;
       if (id) {
         setLastBacktestId(id);
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem(lastBacktestIdStorageKey, id);
+        }
         void fetchBacktestDetail(id);
       }
       backtestComplete(metrics);
@@ -236,7 +254,7 @@ function ChatThreadPage({ thread_id }: { thread_id: string }) {
     },
   });
 
-  const { startAnalyze, cancelAnalyze } = useAnalyzeStream();
+  const { cancelAnalyze } = useAnalyzeStream();
 
   useEffect(() => {
     if (!streamUrl) return;
@@ -263,15 +281,31 @@ function ChatThreadPage({ thread_id }: { thread_id: string }) {
   }, [isLoading, latestPythonBlock, generate, codeComplete, reset]);
 
   useEffect(() => {
-    if (
-      shouldSyncEditorCode(latestPythonBlock, lastSyncedBlockRef.current) &&
-      latestPythonBlock
-    ) {
-      setEditorCode(latestPythonBlock);
-      lastSyncedBlockRef.current = latestPythonBlock;
+    const codeSource = threadCode || latestPythonBlock;
+    if (!codeSource) {
+      return;
+    }
+
+    if (shouldSyncEditorCode(codeSource, lastSyncedBlockRef.current)) {
+      setEditorCode(codeSource);
+      lastSyncedBlockRef.current = codeSource;
       editorVersionRef.current += 1;
     }
-  }, [latestPythonBlock]);
+  }, [threadCode, latestPythonBlock]);
+
+  useEffect(() => {
+    if (isLoading || hasRestoredSessionRef.current) {
+      return;
+    }
+
+    const codeSource = threadCode || latestPythonBlock;
+    if (!codeSource) {
+      return;
+    }
+
+    hasRestoredSessionRef.current = true;
+    codeComplete();
+  }, [isLoading, threadCode, latestPythonBlock, codeComplete]);
 
   useEffect(() => {
     const initialMessage = searchParams.get("initialMessage");
@@ -325,11 +359,12 @@ function ChatThreadPage({ thread_id }: { thread_id: string }) {
       const res = await fetch("/api/v1/backtest", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
           code: editorCode,
           thread_id,
           version: editorVersionRef.current,
-          params: DEFAULT_BACKTEST_PARAMS,
+          params: getDefaultBacktestParams(),
         }),
       });
 
@@ -366,80 +401,6 @@ function ChatThreadPage({ thread_id }: { thread_id: string }) {
     workspace.resetRunStatus();
     backtestFailed();
   }, [backtestFailed, disconnect, workspace]);
-
-  const handleRunAnalyze = useCallback(async () => {
-    if (!isAuthenticated) {
-      openLoginModal();
-      return;
-    }
-
-    if (
-      !lastMetrics ||
-      !lastBacktestId ||
-      isAnalyzing ||
-      !editorCode.trim()
-    ) {
-      return;
-    }
-
-    setSubmitError(null);
-    setIsAnalyzing(true);
-
-    try {
-      await startAnalyze(
-        {
-          thread_id,
-          backtest_id: lastBacktestId,
-          code: editorCode,
-          metrics: lastMetrics as Record<string, unknown>,
-        },
-        {
-          onDelta: () => {},
-          onDone: () => {
-            analysisComplete();
-            setIsAnalyzing(false);
-          },
-          onError: () => {
-            setIsAnalyzing(false);
-          },
-        },
-      );
-    } catch {
-      setIsAnalyzing(false);
-    }
-  }, [
-    analysisComplete,
-    editorCode,
-    isAnalyzing,
-    isAuthenticated,
-    lastBacktestId,
-    lastMetrics,
-    openLoginModal,
-    startAnalyze,
-    thread_id,
-  ]);
-
-  const handleAiFix = useCallback(() => {
-    const recentErrors = logLines.slice(-8).join("\n");
-    setInputPrefill(
-      `请根据以下回测日志修复策略代码中的问题：\n\n${recentErrors}\n\n请给出修复后的完整 Python 策略代码。`,
-    );
-  }, [logLines]);
-
-  const handleSubmitSimulation = useCallback(async () => {
-    if (!lastBacktestId || workspace.runStatus !== "done") return;
-    try {
-      const res = await fetch(`/api/v1/backtest/${lastBacktestId}/simulation`, {
-        method: "POST",
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("提交模拟失败");
-      setSubmitError(null);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "提交模拟失败";
-      setSubmitError(message);
-    }
-  }, [lastBacktestId, workspace.runStatus]);
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-white">
@@ -519,16 +480,12 @@ function ChatThreadPage({ thread_id }: { thread_id: string }) {
             sessionState={sessionState}
             jqcliConfigured={jqcliConfigured}
             lastMetrics={lastMetrics}
-            isAnalyzing={isAnalyzing}
             logLines={logLines}
             performanceSeries={performanceSeries}
             tradeGroups={tradeGroups}
             holdingGroups={holdingGroups}
             onRunBacktest={() => void handleRunBacktest()}
             onAbortBacktest={handleAbortBacktest}
-            onAnalyze={() => void handleRunAnalyze()}
-            onAiFix={handleAiFix}
-            onSubmitSimulation={() => void handleSubmitSimulation()}
           />
         ) : null}
       </div>

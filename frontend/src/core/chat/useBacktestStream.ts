@@ -35,7 +35,7 @@ export function useBacktestStream(url: string, options: BacktestStreamOptions = 
             opts.onProgress?.(data.message ?? '')
             break
           case 'backtest_completed':
-            if (data.metrics) opts.onComplete?.(data.metrics)
+            opts.onComplete?.(data.metrics ?? {})
             break
           case 'backtest_failed':
             opts.onFailed?.(data.error ?? '未知错误')

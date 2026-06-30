@@ -52,6 +52,17 @@ describe('useBacktestStream', () => {
     expect(onComplete).toHaveBeenCalledWith({ annual_return: 0.15 })
   })
 
+  it('calls onComplete even when metrics are missing', () => {
+    const onComplete = vi.fn()
+    const { result } = renderHook(() => useBacktestStream('/api/stream', { onComplete }))
+    act(() => result.current.connect())
+
+    const es = MockEventSource.instances[0]
+    act(() => es.simulateMessage(JSON.stringify({ type: 'backtest_completed' })))
+
+    expect(onComplete).toHaveBeenCalledWith({})
+  })
+
   it('handles backtest_failed events', () => {
     const onFailed = vi.fn()
     const { result } = renderHook(() => useBacktestStream('/api/stream', { onFailed }))
