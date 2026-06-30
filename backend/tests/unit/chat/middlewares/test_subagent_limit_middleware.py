@@ -1,4 +1,9 @@
-"""Tests for SubagentLimitMiddleware wired to the real subagent cache."""
+"""Tests for SubagentLimitMiddleware wired to the real subagent cache.
+
+Replaces the prior name-substring counter with a lookup of
+``_subagent_usage_cache.size()`` so the limit is driven by real
+subagent traffic, not the substring heuristic.
+"""
 
 from __future__ import annotations
 
@@ -6,7 +11,6 @@ import asyncio
 from typing import Any
 
 import pytest
-from langgraph.runtime import Runtime
 
 import app.core.chat.tools.builtin.task_tool as task_tool_module
 from app.core.chat.middlewares.subagent_limit_middleware import (
@@ -93,7 +97,7 @@ def test_before_model_allows_under_limit(main_event_loop: Any) -> None:
         "total_tokens": 2,
     }
     mw = SubagentLimitMiddleware(max_concurrent=3)
-    out = main_event_loop.run_until_complete(mw.before_model({"messages": []}, Runtime()))
+    out = main_event_loop.run_until_complete(mw.before_model({"messages": []}, {}))
     assert out is None
 
 
@@ -107,7 +111,7 @@ async def test_before_model_blocks_when_cache_at_limit() -> None:
             "total_tokens": 2,
         }
     mw = SubagentLimitMiddleware(max_concurrent=3)
-    out = await mw.before_model({"messages": []}, Runtime())
+    out = await mw.before_model({"messages": []}, {})
     assert out is not None
     assert out.get("subagent_limit_reached") is True
     assert out.get("max_concurrent") == 3
@@ -122,8 +126,21 @@ async def test_before_model_allows_just_under_limit() -> None:
             "total_tokens": 2,
         }
     mw = SubagentLimitMiddleware(max_concurrent=3)
-    out = await mw.before_model({"messages": []}, Runtime())
+    out = await mw.before_model({"messages": []}, {})
     assert out is None
+
+
+@pytest.mark.asyncio
+async def test_limit_ignores_tool_name_substring_heuristic() -> None:
+    """The middleware MUST NOT count subagents by name substring anymore."""
+    mw = SubagentLimitMiddleware()
+    # Simulate two subagent-looking tool calls — should NOT touch the counter
+    # because we now drive the limit from the cache, not from tool_name.
+    out_a = await mw.before_tool("subagent_foo", {"prompt": "x"}, {})
+    out_b = await mw.before_tool("bar_subagent", {"prompt": "y"}, {})
+    assert out_a is None
+    assert out_b is None
+    assert mw._active_subagents == 0
 
 
 def test_get_active_count_returns_zero_initially() -> None:

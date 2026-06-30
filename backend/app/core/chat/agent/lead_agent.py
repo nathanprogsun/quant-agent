@@ -17,7 +17,7 @@ from app.config.extensions_config import ExtensionsConfig
 from app.core.chat.agent.model_call import ModelCallRequest
 from app.core.chat.agent.prompt import apply_prompt_template
 from app.core.chat.agent.thread_state import ThreadState
-from app.core.chat.middlewares.base import AgentMiddleware, Runtime
+from app.core.chat.middlewares.base import AgentMiddleware
 from app.core.chat.middlewares.clarification_middleware import ClarificationMiddleware
 from app.core.chat.middlewares.dangling_tool_call_middleware import (
     DanglingToolCallMiddleware,
@@ -125,7 +125,9 @@ def make_lead_agent(config: RunnableConfig) -> Any:
     # P2.3 — DeferredToolFilter / tool_search (fail-closed when enabled
     # but no MCP tool survived filtering).
     tool_search_enabled = bool(mcp_tools)
-    tools, deferred_setup = assemble_deferred_tools(base_tools, enabled=tool_search_enabled)
+    tools, deferred_setup = assemble_deferred_tools(
+        base_tools, enabled=tool_search_enabled
+    )
 
     if tools:
         model = model.bind_tools(tools)
@@ -144,7 +146,9 @@ def make_lead_agent(config: RunnableConfig) -> Any:
         system_prompt = (
             system_prompt
             + "\n\n"
-            + get_deferred_tools_prompt_section(deferred_names=deferred_setup.deferred_names)
+            + get_deferred_tools_prompt_section(
+                deferred_names=deferred_setup.deferred_names
+            )
         )
 
     # Middleware chain — Phase 1 empty, Phase 2+ assembled
@@ -197,7 +201,7 @@ def _make_agent_node(
         # before_model hooks — must see the system prompt so middlewares do not drop it
         state_patches: dict[str, Any] = {}
         for mw in middlewares:
-            modified = await mw.before_model(working_state, Runtime())
+            modified = await mw.before_model(working_state, {})
             if modified:
                 for key, value in modified.items():
                     if key == "messages":
@@ -247,7 +251,7 @@ def _make_agent_node(
         state_update: dict[str, Any] = {"messages": [*messages, response], **state_patches}
         preview_state = {**working_state, "messages": [*messages, response]}
         for mw in middlewares:
-            modified = await mw.after_model(preview_state, Runtime())
+            modified = await mw.after_model(preview_state, {})
             if modified:
                 state_update.update(modified)
 
@@ -323,7 +327,6 @@ def _build_middlewares(
         )
 
     return chain
-
 
 async def _run_awrap_model_call(
     middlewares: list[AgentMiddleware],

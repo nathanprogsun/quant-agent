@@ -3,7 +3,6 @@
 from unittest.mock import AsyncMock, patch
 
 from langchain_core.messages import AIMessage, HumanMessage
-from langgraph.runtime import Runtime
 
 from app.core.chat.middlewares.title_middleware import TitleMiddleware
 
@@ -22,7 +21,7 @@ async def test_title_middleware_generates_after_first_exchange() -> None:
         "_generate_title",
         new=AsyncMock(return_value="稳健型 ETF 策略咨询"),
     ):
-        result = await middleware.after_model(state, Runtime())
+        result = await middleware.after_model(state, {})
 
     assert result == {"title": "稳健型 ETF 策略咨询"}
 
@@ -37,7 +36,7 @@ async def test_title_middleware_skips_when_title_exists() -> None:
         ],
     }
 
-    result = await middleware.after_model(state, Runtime())
+    result = await middleware.after_model(state, {})
 
     assert result is None
 
@@ -46,7 +45,7 @@ async def test_title_middleware_waits_for_assistant_reply() -> None:
     middleware = TitleMiddleware()
     state = {"messages": [HumanMessage(content="稳健型ETF策略")]}
 
-    result = await middleware.after_model(state, Runtime())
+    result = await middleware.after_model(state, {})
 
     assert result is None
 
@@ -60,9 +59,13 @@ async def test_title_middleware_uses_greeting_fallback() -> None:
             "_generate_title",
             wraps=middleware._generate_title,
         ) as generate_title,
-        patch("app.core.chat.middlewares.title_middleware.ChatOpenAI") as mock_chat_openai,
+        patch(
+            "app.core.chat.middlewares.title_middleware.ChatOpenAI"
+        ) as mock_chat_openai,
     ):
-        mock_chat_openai.return_value.ainvoke = AsyncMock(side_effect=RuntimeError("offline"))
+        mock_chat_openai.return_value.ainvoke = AsyncMock(
+            side_effect=RuntimeError("offline")
+        )
         title = await generate_title("hi", "你好，有什么可以帮你？")
 
     assert title == "新对话"
@@ -83,7 +86,7 @@ async def test_title_middleware_generates_after_tool_loop() -> None:
         "_generate_title",
         new=AsyncMock(return_value="参数校验"),
     ):
-        result = await middleware.after_model(state, Runtime())
+        result = await middleware.after_model(state, {})
 
     assert result == {"title": "参数校验"}
 
@@ -97,6 +100,6 @@ async def test_title_middleware_ignores_tool_call_only_reply() -> None:
         ]
     }
 
-    result = await middleware.after_model(state, Runtime())
+    result = await middleware.after_model(state, {})
 
     assert result is None

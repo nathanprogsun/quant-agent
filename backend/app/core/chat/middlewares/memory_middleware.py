@@ -34,18 +34,23 @@ class MemoryMiddleware(AgentMiddleware):
     def __init__(self, max_messages: int = 50) -> None:
         self._max_messages = max_messages
 
-    async def before_model(self, state: dict[str, Any], runtime: Runtime) -> dict[str, Any] | None:
+    async def before_model(
+        self, state: dict[str, Any], config: dict[str, Any]
+    ) -> dict[str, Any] | None:
         """No-op. Memory injection lives in DynamicContextMiddleware (P4.2)."""
         return None
 
-    async def after_model(self, state: dict[str, Any], runtime: Runtime) -> dict[str, Any] | None:
+    async def after_model(
+        self, state: dict[str, Any], config: dict[str, Any]
+    ) -> dict[str, Any] | None:
         """Dispatch a flush trigger to the MemoryUpdateQueue when over threshold."""
         messages: list[BaseMessage] = list(state.get("messages", []))
         if len(messages) < self._max_messages:
             return None
 
-        thread_id = str(runtime.context.thread_id if runtime.context else "") or "unknown"
-        user_id = runtime.context.user_id if runtime.context else None
+        configurable = config.get("configurable", {})
+        thread_id = str(configurable.get("thread_id", "")) or "unknown"
+        user_id = configurable.get("user_id")
 
         event = SummarizationEvent(
             thread_id=thread_id,
