@@ -235,7 +235,7 @@ async def get_mcp_tools() -> list[BaseTool]:
                 )
 
         client = MultiServerMCPClient(
-            servers_config,
+            servers_config,  # type: ignore[arg-type]
             tool_interceptors=tool_interceptors,
             tool_name_prefix=True,
         )

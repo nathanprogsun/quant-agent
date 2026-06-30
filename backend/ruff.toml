@@ -15,6 +15,7 @@ ignore = ["E501", "ISC001", "RUF012", "RUF001", "RUF006"]
 "app/app_context/app_context.py" = ["PLC0415"]
 "app/web/lifespan.py" = ["PLC0415"]
 "app/config/**/*.py" = ["PLC0415"]
+"app/core/chat/agent/lead_agent.py" = ["PLC0415"]
 
 [lint.isort]
 known-first-party = []

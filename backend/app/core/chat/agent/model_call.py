@@ -1,9 +1,9 @@
-"""Model-call request carrier for the awrap_model_call hook surface.
+"""Model-call request carrier for the ``awrap_model_call`` hook surface.
 
-A lightweight, mutable container passed through ``AgentMiddleware.awrap_model_call``.
-Middlewares may replace ``messages`` (and, in future, ``tools``) before
-delegating to the handler. Mutability is intentional: the request is a
-transient call-site carrier, not domain state.
+A lightweight, mutable container passed through
+``AgentMiddleware.awrap_model_call``. Middlewares may replace ``messages``
+(and ``tools``) before delegating to the handler. Mutability is intentional:
+the request is a transient call-site carrier, not domain state.
 """
 
 from __future__ import annotations
@@ -16,7 +16,8 @@ from langchain_core.messages import BaseMessage
 
 @dataclass
 class ModelCallRequest:
-    """Carrier for the model call: messages + bound tools."""
+    """Carrier for the model call: messages + bound tools (optional state)."""
 
     messages: list[BaseMessage] = field(default_factory=list)
     tools: list[Any] | None = None
+    state: dict[str, Any] | None = None

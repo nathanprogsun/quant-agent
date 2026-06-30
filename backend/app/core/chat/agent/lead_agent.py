@@ -19,6 +19,9 @@ from app.core.chat.agent.prompt import apply_prompt_template
 from app.core.chat.agent.thread_state import ThreadState
 from app.core.chat.middlewares.base import AgentMiddleware
 from app.core.chat.middlewares.clarification_middleware import ClarificationMiddleware
+from app.core.chat.middlewares.deferred_tool_filter_middleware import (
+    DeferredToolFilterMiddleware,
+)
 from app.core.chat.middlewares.dynamic_context_middleware import DynamicContextMiddleware
 from app.core.chat.middlewares.loop_detection_middleware import LoopDetectionMiddleware
 from app.core.chat.middlewares.memory_middleware import MemoryMiddleware
@@ -33,6 +36,10 @@ from app.core.chat.tools.builtin.read_file_tool import ReadFileTool
 from app.core.jq_kb.tools import get_tools
 from app.settings import get_settings
 from app.skills.storage.local_skill_storage import LocalSkillStorage
+from app.tools.builtins.tool_search import (
+    assemble_deferred_tools,
+    get_deferred_tools_prompt_section,
+)
 
 # P4.3: "<memory>" is no longer a system-prompt suffix — memory is injected by
 # DynamicContextMiddleware (P4.2) as a separate HumanMessage, not appended to
@@ -93,17 +100,37 @@ def make_lead_agent(config: RunnableConfig) -> Any:
         extra_body={"reasoning_split": True},
     )
 
-    # Tools — lint/validate + jq_kb (PR3: search_jq_api + search_jq_dict + search_jq_strategy)
-    tools: list[Any] = [
+    # Tools — lint/validate + jq_kb (PR3: search_jq_api + search_jq_dict + search_jq_strategy) + MCP
+    base_tools: list[Any] = [
         lint_code_tool,
         make_validate_parameters_tool(),
         ReadFileTool(containers=[Path(settings.skills_root)]),
         *get_tools(pr_phase=3),
     ]
+
+    # P2.2 — extend with MCP tools loaded at app startup. ``get_cached_mcp_tools``
+    # is the production entry point; in langgraph-studio paths where no
+    # FastAPI app exists it falls back to an empty list.
+    try:
+        from app.mcp import get_cached_mcp_tools
+
+        mcp_tools = get_cached_mcp_tools()
+    except Exception:
+        mcp_tools = []
+    base_tools.extend(mcp_tools)
+
+    # P2.3 — DeferredToolFilter / tool_search (fail-closed when enabled
+    # but no MCP tool survived filtering).
+    tool_search_enabled = bool(mcp_tools)
+    tools, deferred_setup = assemble_deferred_tools(
+        base_tools, enabled=tool_search_enabled
+    )
+
     if tools:
         model = model.bind_tools(tools)
 
-    # System prompt
+    # System prompt — P1.8 metadata-only skills + P2.3 deferred-tool names
+    # (without the schemas).
     enabled_skills = _collect_enabled_skills(
         skills_root=Path(settings.skills_root),
         extensions_config_path=Path(settings.extensions_config_path),
@@ -112,14 +139,25 @@ def make_lead_agent(config: RunnableConfig) -> Any:
         skills=enabled_skills,
         container_base_path=str(Path(settings.skills_root).resolve()),
     )
+    if deferred_setup.deferred_names:
+        system_prompt = (
+            system_prompt
+            + "\n\n"
+            + get_deferred_tools_prompt_section(
+                deferred_names=deferred_setup.deferred_names
+            )
+        )
 
     # Middleware chain — Phase 1 empty, Phase 2+ assembled
-    middlewares = _build_middlewares(config)
+    middlewares = _build_middlewares(config, deferred_setup)
 
     # Build StateGraph
     graph = StateGraph(ThreadState)
 
-    graph.add_node("agent", _make_agent_node(model, system_prompt, middlewares))
+    graph.add_node(
+        "agent",
+        _make_agent_node(model, system_prompt, middlewares, tools),
+    )
     if tools:
         graph.add_node("tools", ToolNode(tools))
         graph.add_edge("tools", "agent")
@@ -135,11 +173,23 @@ def _make_agent_node(
     model: ChatOpenAI,
     system_prompt: str,
     middlewares: list[AgentMiddleware],
+    tools: list[Any] | None = None,
 ) -> Any:
     """Create the agent node function.
 
-    Extracted as a standalone function for testability.
+    Extracted as a standalone function for testability. Routes the model
+    call through ``AgentMiddleware.awrap_model_call`` so middlewares that
+    override the wrap hook (``DeferredToolFilterMiddleware``,
+    DanglingToolCall, future additions) can mutate / short-circuit the
+    request before binding. The default ABC impl is a no-op delegate, so
+    legacy middlewares that have not been ported are transparent.
+
+    ``tools`` is the bound-tool list at build time. It is included in
+    ``ModelCallRequest.tools`` for ``wrap_model_call`` filters; the
+    underlying model already has these tools bound at construction so
+    the wrap hook is for *observing / filtering*, not rebinding.
     """
+    tools = list(tools or [])
 
     async def agent_node(state: ThreadState) -> dict[str, Any]:
         messages = _ensure_system_message(list(state.get("messages", [])), system_prompt)
@@ -165,17 +215,29 @@ def _make_agent_node(
 
         # LLM call — wrapped by awrap_model_call hooks (P1.7 SkillActivation
         # injects a <slash_skill_activation> block when the last user message
-        # starts with /<skill-name>). Default ABC impl is a no-op delegate, so
-        # middlewares that do not override the hook are unaffected. The request
-        # is mutable: a middleware may replace `messages` before delegating; we
-        # read it back so any injection persists via the add_messages reducer.
-        request = ModelCallRequest(messages=messages)
+        # starts with /<skill-name>; P2.3 DeferredToolFilterMiddleware can
+        # mutate ``tools`` / ``messages`` before binding). Default ABC impl is
+        # a no-op delegate, so middlewares that do not override the hook are
+        # unaffected. The request is mutable: a middleware may replace
+        # ``messages`` / ``tools`` before delegating; we read them back so any
+        # injection persists via the add_messages reducer. ``ModelCallRequest
+        # .state`` mirrors the working state so middleware can read
+        # ``state["promoted"]`` and other keys.
+        request = ModelCallRequest(
+            messages=list(messages),
+            tools=list(tools),
+            state=dict(working_state),
+        )
 
-        async def _invoke_model(req: ModelCallRequest) -> Any:
+        async def _invoke(req: ModelCallRequest) -> Any:
             return await model.ainvoke(req.messages)
 
-        response = await _run_awrap_model_call(middlewares, request, _invoke_model)
-        messages = request.messages
+        response = await _run_awrap_model_call(middlewares, request, _invoke)
+        # Pull the (possibly mutated) messages back out so the add_messages
+        # reducer sees any middleware-side patches in addition to the model
+        # output. ``tools`` patches from the middleware stay graph-local
+        # because bind_tools was already called at build time.
+        messages = list(request.messages)
 
         # D9: persist the patched message list. Returning [*messages, response]
         # lets the add_messages reducer replace-in-place by id (the swapped
@@ -206,10 +268,15 @@ def _should_use_tools(state: ThreadState) -> str:
     return END
 
 
-def _build_middlewares(config: RunnableConfig) -> list[AgentMiddleware]:
+def _build_middlewares(
+    config: RunnableConfig,
+    deferred_setup: Any = None,
+) -> list[AgentMiddleware]:
     """Build middleware chain.
 
-    Assembles middlewares in order per DeerFlow convention:
+    Assembles middlewares in order per DeerFlow convention, plus P2.3's
+    ``DeferredToolFilterMiddleware`` (appended last so it operates on the
+    final tool list with the rest of the chain's messages resolved):
     1. TitleMiddleware - generates conversation title
     2. TokenUsageMiddleware - tracks token usage
     3. SummarizationMiddleware - handles long conversation summarization
@@ -217,6 +284,7 @@ def _build_middlewares(config: RunnableConfig) -> list[AgentMiddleware]:
     5. ClarificationMiddleware - detects clarification requests
     6. LoopDetectionMiddleware - detects repeated tool call patterns
     7. SubagentLimitMiddleware - limits concurrent subagent calls
+    8. DeferredToolFilterMiddleware - hides MCP tools until promoted
     """
     configurable = config.get("configurable", {})
     settings = get_settings()
@@ -226,7 +294,7 @@ def _build_middlewares(config: RunnableConfig) -> list[AgentMiddleware]:
     max_messages = configurable.get("max_messages", 50)
     skills_root = configurable.get("skills_root", settings.skills_root)
 
-    return [
+    chain: list[AgentMiddleware] = [
         TitleMiddleware(),
         TokenUsageMiddleware(),
         SummarizationMiddleware(max_messages=max_messages, enabled=summarization_enabled),
@@ -238,15 +306,27 @@ def _build_middlewares(config: RunnableConfig) -> list[AgentMiddleware]:
         SkillActivationMiddleware(storage=LocalSkillStorage(root=Path(skills_root))),
     ]
 
+    # P2.3 — DeferredToolFilter appended last; the catalog snapshot was
+    # frozen at build time so promotion hashes stay stable for the lifetime
+    # of this compiled graph.
+    if deferred_setup is not None and deferred_setup.tool_search_tool is not None:
+        chain.append(
+            DeferredToolFilterMiddleware(
+                deferred_names=deferred_setup.deferred_names,
+                catalog_hash=deferred_setup.catalog_hash,
+            )
+        )
+
+    return chain
 
 async def _run_awrap_model_call(
     middlewares: list[AgentMiddleware],
     request: ModelCallRequest,
     handler: Any,
 ) -> Any:
-    """Chain awrap_model_call hooks around the model invocation.
+    """Chain ``awrap_model_call`` hooks around the model invocation.
 
-    Middlewares are wrapped so that the FIRST in the list is outermost
+    Middlewares are wrapped so the FIRST in the list is outermost
     (mirrors before_model ordering). The default ABC implementation is a
     no-op delegate, so middlewares that do not override the hook are
     transparent.
