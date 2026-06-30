@@ -1,10 +1,28 @@
-"""Skill registry - central registration and management of agent skills."""
+"""Skill registry - central registration and management of agent skills.
+
+.. deprecated::
+    This module is the legacy in-memory skill registry (H2). Plan-1 moves
+    to the disk-backed SKILL.md protocol (``app.skills``). Importing from
+    this module triggers a ``DeprecationWarning``; migrate legacy rows via
+    ``scripts/migrate_legacy_skills.py`` and use
+    ``app.skills.storage.local_skill_storage.LocalSkillStorage`` instead.
+"""
 
 from __future__ import annotations
 
+import warnings
 from typing import Any
 
 from pydantic import BaseModel, Field
+
+warnings.warn(
+    (
+        "app.core.chat.skills.registry is legacy; migrate to the disk-backed "
+        "app.skills protocol via scripts/migrate_legacy_skills.py."
+    ),
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 
 class SkillParameter(BaseModel):
