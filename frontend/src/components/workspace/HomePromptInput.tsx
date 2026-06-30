@@ -1,7 +1,10 @@
 "use client";
 
 import { ChevronDown, Paperclip, Square } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+import { useSkills } from "@/core/skills";
+import { applySkillSuggestion, getMatchingSkillSuggestions } from "@/core/skills/suggestions";
 
 interface HomePromptInputProps {
   onSend: (content: string) => void;
@@ -29,7 +32,9 @@ export function HomePromptInput({
   className,
 }: HomePromptInputProps) {
   const [input, setInput] = useState("");
+  const [activeSuggestion, setActiveSuggestion] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const { skills } = useSkills();
 
   useEffect(() => {
     if (!prefill) return;
@@ -37,6 +42,17 @@ export function HomePromptInput({
     textareaRef.current?.focus();
     onPrefillApplied?.();
   }, [prefill, onPrefillApplied]);
+
+  const slashPrefix = useMemo(() => extractSlashPrefix(input), [input]);
+  const suggestions = useMemo(
+    () => (slashPrefix !== null ? getMatchingSkillSuggestions(slashPrefix, skills) : []),
+    [slashPrefix, skills],
+  );
+
+  useEffect(() => {
+    // Reset active index whenever the suggestion set changes
+    setActiveSuggestion(0);
+  }, [suggestions.length]);
 
   const handleSubmit = useCallback(() => {
     const trimmed = input.trim();
@@ -48,7 +64,39 @@ export function HomePromptInput({
     }
   }, [disabled, input, onSend]);
 
+  const acceptSuggestion = useCallback(
+    (index: number) => {
+      const skill = suggestions[index];
+      if (!skill) return;
+      const next = applySkillSuggestion(input, skill.name);
+      setInput(next);
+      textareaRef.current?.focus();
+    },
+    [input, suggestions],
+  );
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (suggestions.length > 0) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setActiveSuggestion((i) => (i + 1) % suggestions.length);
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setActiveSuggestion((i) => (i - 1 + suggestions.length) % suggestions.length);
+        return;
+      }
+      if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault();
+        acceptSuggestion(activeSuggestion);
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        return;
+      }
+    }
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSubmit();
@@ -80,6 +128,32 @@ export function HomePromptInput({
           rows={3}
           className="min-h-[88px] w-full resize-none text-sm text-gray-900 outline-none placeholder:text-gray-400"
         />
+        {suggestions.length > 0 ? (
+          <ul
+            role="listbox"
+            aria-label="技能建议"
+            className="mt-1 max-h-48 overflow-auto rounded border border-gray-200 bg-white py-1 text-sm"
+          >
+            {suggestions.map((skill, index) => (
+              <li
+                key={skill.name}
+                role="option"
+                aria-selected={index === activeSuggestion}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  acceptSuggestion(index);
+                }}
+                onMouseEnter={() => setActiveSuggestion(index)}
+                className={`cursor-pointer px-3 py-1.5 ${
+                  index === activeSuggestion ? "bg-blue-50" : ""
+                }`}
+              >
+                <span className="font-mono text-blue-600">/{skill.name}</span>
+                <span className="ml-2 text-gray-500">{skill.description}</span>
+              </li>
+            ))}
+          </ul>
+        ) : null}
         <div className="mt-2 flex items-center justify-between">
           <button
             type="button"
@@ -130,4 +204,16 @@ export function HomePromptInput({
       ) : null}
     </div>
   );
+}
+
+/**
+ * Extract the slash-command prefix at the end of the input.
+ *
+ * Returns the text after a leading `/` when the input ends with `/<token>` and
+ * the token contains no whitespace; otherwise null (no active slash command).
+ */
+function extractSlashPrefix(input: string): string | null {
+  const match = /\/([a-zA-Z0-9_-]*)$/.exec(input);
+  if (!match) return null;
+  return match[1];
 }
