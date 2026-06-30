@@ -37,7 +37,20 @@ describe('BacktestButton', () => {
     )
     const button = screen.getByRole('button')
     expect(button.hasAttribute('disabled')).toBe(true)
-    expect(button.getAttribute('title')).toContain('jqcli')
+    expect(button.getAttribute('title')).toContain('聚宽')
+  })
+
+  it('shows tooltip when session is idle without code', () => {
+    render(
+      <BacktestButton
+        state="idle"
+        hasEditorCode={false}
+        onRun={vi.fn()}
+        onAbort={vi.fn()}
+      />,
+    )
+    const button = screen.getByRole('button')
+    expect(button.getAttribute('title')).toContain('策略代码')
   })
 
   it('calls onRun when clicked in code_ready state', () => {

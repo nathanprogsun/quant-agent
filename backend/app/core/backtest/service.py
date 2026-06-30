@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import functools
+import re
 from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime
 from typing import Any, cast
 from uuid import UUID
 
@@ -58,6 +60,7 @@ def _check_auth_sync(token: str, cookie: str, api_base: str) -> dict[str, Any]:
             from jqcli.api.auth import (  # type: ignore[attr-defined]  # noqa: PLC0415
                 get_current_user,
             )
+
             user_info = get_current_user(client)
         except ImportError:
             user_info = {"username": "authenticated"}
@@ -126,26 +129,175 @@ def _get_logs_sync(
         client.close()
 
 
-def _parse_performance_series(result_payload: dict[str, Any]) -> list[PerformancePoint]:
+def _get_all_logs_sync(
+    backtest_id: str,
+    token: str,
+    cookie: str,
+    api_base: str,
+) -> list[str]:
+    """Fetch all backtest log lines for trade/holding extraction."""
+    client = ApiClient(api_base, token=token, cookie=cookie)
+    try:
+        payload = get_backtest_logs(client, backtest_id, offset=0, all_items=True)
+        raw_logs = payload.get("logs") or []
+        return [str(line) for line in raw_logs]
+    finally:
+        client.close()
+
+
+_MS_SERIES_KEYS = ("benchmark", "overallReturn")
+_NESTED_MS_SERIES_KEYS = (
+    ("orders", "buy"),
+    ("orders", "sell"),
+    ("gains", "earn"),
+    ("gains", "lose"),
+)
+_ORDER_LOG_RE = re.compile(
+    r"^(?P<date>\d{4}-\d{2}-\d{2}).*订单已委托：StockOrder\("
+    r"[^)]*security=(?P<symbol>[^\s,)]+)[^)]*action=(?P<action>open|close)"
+)
+_HOLDING_LOG_RE = re.compile(
+    r"^(?P<date>\d{4}-\d{2}-\d{2})\s+\d{2}:\d{2}:\d{2}\s+-\s+\S+\s+-\s+"
+    r"(?P<symbol>\S+):\s+(?P<qty>\d+)\s+股,\s+价值\s+(?P<value>[\d.]+)"
+)
+
+
+def _unwrap_result_block(result_payload: dict[str, Any]) -> dict[str, Any]:
     data = result_payload.get("data", result_payload)
     if isinstance(data, dict) and isinstance(data.get("data"), dict):
         data = data["data"]
-    result = data.get("result") if isinstance(data, dict) else {}
-    if not isinstance(result, dict):
+    if not isinstance(data, dict):
+        return {}
+    result = data.get("result")
+    return result if isinstance(result, dict) else {}
+
+
+def _ms_to_date_str(ms: int) -> str:
+    return datetime.fromtimestamp(ms / 1000, tz=UTC).strftime("%Y-%m-%d")
+
+
+def _append_time_value_series(target: dict[str, Any], source: dict[str, Any]) -> None:
+    for key in ("time", "value"):
+        target_values = target.get(key)
+        source_values = source.get(key)
+        if isinstance(target_values, list) and isinstance(source_values, list):
+            target_values.extend(source_values)
+        elif isinstance(source_values, list):
+            target[key] = list(source_values)
+
+
+def _merge_result_series(target_result: dict[str, Any], page_result: dict[str, Any]) -> None:
+    for key in _MS_SERIES_KEYS:
+        page_series = page_result.get(key)
+        if isinstance(page_series, dict):
+            bucket = cast(dict[str, Any], target_result.setdefault(key, {"time": [], "value": []}))
+            _append_time_value_series(bucket, page_series)
+    for parent_key, child_key in _NESTED_MS_SERIES_KEYS:
+        page_parent = page_result.get(parent_key)
+        if not isinstance(page_parent, dict):
+            continue
+        target_parent = cast(dict[str, Any], target_result.setdefault(parent_key, {}))
+        page_child = page_parent.get(child_key)
+        if isinstance(page_child, dict):
+            bucket = cast(
+                dict[str, Any], target_parent.setdefault(child_key, {"time": [], "value": []})
+            )
+            _append_time_value_series(bucket, page_child)
+
+
+def _fetch_full_result_sync(
+    backtest_id: str,
+    token: str,
+    cookie: str,
+    api_base: str,
+) -> dict[str, Any]:
+    """Fetch jqcli backtest chart result, merging paginated series when needed."""
+    client = ApiClient(api_base, token=token, cookie=cookie)
+    try:
+        first_page = get_backtest_result(client, backtest_id, offset=0, user_record_offset=0)
+        data = first_page.get("data")
+        if not isinstance(data, dict):
+            return first_page
+
+        merged_result = dict(data.get("result") or {})
+        count = int(merged_result.get("count") or 0)
+        times = (merged_result.get("overallReturn") or {}).get("time") or []
+        offset = len(times) if isinstance(times, list) else 0
+
+        while count > 0 and offset < count:
+            next_page = get_backtest_result(
+                client,
+                backtest_id,
+                offset=offset,
+                user_record_offset=0,
+            )
+            page_data = next_page.get("data") or {}
+            page_result = page_data.get("result") or {}
+            if not isinstance(page_result, dict):
+                break
+            _merge_result_series(merged_result, page_result)
+            new_times = (merged_result.get("overallReturn") or {}).get("time") or []
+            new_offset = len(new_times) if isinstance(new_times, list) else offset
+            if new_offset <= offset:
+                break
+            offset = new_offset
+
+        return {
+            "id": backtest_id,
+            "data": {
+                "state": data.get("state"),
+                "userRecord": data.get("userRecord"),
+                "result": merged_result,
+            },
+        }
+    finally:
+        client.close()
+
+
+def _parse_performance_series(result_payload: dict[str, Any]) -> list[PerformancePoint]:
+    result = _unwrap_result_block(result_payload)
+    if not result:
         return []
+
+    strategy_series = result.get("overallReturn")
+    benchmark_series = result.get("benchmark")
+    if isinstance(strategy_series, dict):
+        times = strategy_series.get("time") or []
+        strategy_values = strategy_series.get("value") or []
+        benchmark_values = (
+            benchmark_series.get("value") or [] if isinstance(benchmark_series, dict) else []
+        )
+        if isinstance(times, list) and times:
+            points: list[PerformancePoint] = []
+            for index, raw_ms in enumerate(times):
+                strategy_value = float(
+                    strategy_values[index] if index < len(strategy_values) else 0
+                )
+                benchmark_value = float(
+                    benchmark_values[index] if index < len(benchmark_values) else 0
+                )
+                points.append(
+                    PerformancePoint(
+                        date=_ms_to_date_str(int(raw_ms)),
+                        strategy=strategy_value,
+                        benchmark=benchmark_value,
+                        relative=strategy_value - benchmark_value,
+                    )
+                )
+            return points
 
     series = result.get("series") or result.get("chart_series") or result.get("charts")
     if not isinstance(series, list):
         return []
 
-    points: list[PerformancePoint] = []
+    legacy_points: list[PerformancePoint] = []
     for item in series:
         if not isinstance(item, dict):
             continue
         date = item.get("date") or item.get("time") or item.get("trade_date")
         if not date:
             continue
-        points.append(
+        legacy_points.append(
             PerformancePoint(
                 date=str(date),
                 strategy=float(item.get("strategy") or item.get("strategy_return") or 0),
@@ -154,15 +306,12 @@ def _parse_performance_series(result_payload: dict[str, Any]) -> list[Performanc
                 position_pct=item.get("position_pct"),
             )
         )
-    return points
+    return legacy_points
 
 
 def _parse_trade_groups(result_payload: dict[str, Any]) -> list[TradeDayGroup]:
-    data = result_payload.get("data", result_payload)
-    if isinstance(data, dict) and isinstance(data.get("data"), dict):
-        data = data["data"]
-    result = data.get("result") if isinstance(data, dict) else {}
-    trades = result.get("trades") if isinstance(result, dict) else None
+    result = _unwrap_result_block(result_payload)
+    trades = result.get("trades")
     if not isinstance(trades, list):
         return []
 
@@ -183,20 +332,40 @@ def _parse_trade_groups(result_payload: dict[str, Any]) -> list[TradeDayGroup]:
             )
         )
 
-    return [
-        TradeDayGroup(date=date, trades=list(rows))
-        for date, rows in sorted(by_date.items())
-    ]
+    return [TradeDayGroup(date=date, trades=list(rows)) for date, rows in sorted(by_date.items())]
+
+
+def _parse_trades_from_logs(log_lines: list[str]) -> list[TradeDayGroup]:
+    by_date: dict[str, list[TradeRecord]] = {}
+    for line in log_lines:
+        match = _ORDER_LOG_RE.search(line)
+        if not match:
+            continue
+        action = match.group("action")
+        side = "买入" if action == "open" else "卖出"
+        symbol = match.group("symbol")
+        date = match.group("date")
+        by_date.setdefault(date, []).append(
+            TradeRecord(symbol=symbol, name="", side=side, quantity=0.0, price=0.0)
+        )
+    return [TradeDayGroup(date=date, trades=list(rows)) for date, rows in sorted(by_date.items())]
 
 
 def _parse_holding_groups(result_payload: dict[str, Any]) -> list[HoldingDayGroup]:
     data = result_payload.get("data", result_payload)
     if isinstance(data, dict) and isinstance(data.get("data"), dict):
         data = data["data"]
-    result = cast(dict[str, Any], data.get("result")) if isinstance(data, dict) and data.get("result") is not None else {}
-    holdings = result.get("holdings") or result.get("positions")
+    user_record = data.get("userRecord") if isinstance(data, dict) else None
+    if isinstance(user_record, list):
+        holdings: list[Any] = user_record
+    else:
+        result = cast(
+            dict[str, Any],
+            data.get("result") if isinstance(data, dict) and data.get("result") is not None else {},
+        )
+        holdings = list(result.get("holdings") or result.get("positions") or [])
     if not isinstance(holdings, list):
-        return []
+        return []  # type: ignore[unreachable]
 
     by_date: dict[str, list[HoldingRecord]] = {}
     for item in holdings:
@@ -233,13 +402,46 @@ def _parse_holding_groups(result_payload: dict[str, Any]) -> list[HoldingDayGrou
     return groups
 
 
+def _parse_holdings_from_logs(log_lines: list[str]) -> list[HoldingDayGroup]:
+    by_date: dict[str, list[HoldingRecord]] = {}
+    for line in log_lines:
+        match = _HOLDING_LOG_RE.search(line)
+        if not match:
+            continue
+        date = match.group("date")
+        quantity = float(match.group("qty"))
+        market_value = float(match.group("value"))
+        by_date.setdefault(date, []).append(
+            HoldingRecord(
+                symbol=match.group("symbol"),
+                name="",
+                quantity=quantity,
+                avg_cost=0.0,
+                close=0.0,
+                market_value=market_value,
+            )
+        )
+
+    groups: list[HoldingDayGroup] = []
+    for date, rows in sorted(by_date.items()):
+        total_market_value = sum(r.market_value for r in rows)
+        groups.append(
+            HoldingDayGroup(
+                date=date,
+                holdings=list(rows),
+                summary=HoldingDaySummary(
+                    total_market_value=total_market_value,
+                    cash=0.0,
+                    total_assets=total_market_value,
+                ),
+            )
+        )
+    return groups
+
+
 def _get_result_sync(backtest_id: str, token: str, cookie: str, api_base: str) -> dict[str, Any]:
     """Sync jqcli get backtest result — runs in thread pool."""
-    client = ApiClient(api_base, token=token, cookie=cookie)
-    try:
-        return get_backtest_result(client, backtest_id)
-    finally:
-        client.close()
+    return _fetch_full_result_sync(backtest_id, token, cookie, api_base)
 
 
 def _normalize_metrics(metrics_data: dict[str, Any] | None) -> BacktestMetrics | None:
@@ -258,13 +460,27 @@ def _normalize_metrics(metrics_data: dict[str, Any] | None) -> BacktestMetrics |
 
 
 class BacktestService:
-    """jqcli backtest service — owns the ownership registry and unified errors."""
+    """jqcli backtest service — wraps a shared ownership registry.
 
-    def __init__(self, token: str, cookie: str, api_base: str) -> None:
+    The registry is process-level (one instance per AppContext) so that
+    ownership state survives across per-request service constructions.
+    Without sharing, the SSE stream endpoint would rebuild a fresh
+    ``BacktestService`` whose empty registry cannot find the backtest
+    submitted moments earlier — producing a 404 on the SSE handshake.
+    """
+
+    def __init__(
+        self,
+        token: str,
+        cookie: str,
+        api_base: str,
+        *,
+        registry: BacktestRegistry | None = None,
+    ) -> None:
         self._token = token
         self._cookie = cookie
         self._api_base = api_base
-        self._registry = BacktestRegistry()
+        self._registry = registry or BacktestRegistry()
 
     @property
     def registry(self) -> BacktestRegistry:
@@ -321,7 +537,7 @@ class BacktestService:
                 configured=False,
                 authenticated=False,
                 username=None,
-                message="未配置 JQCLI_TOKEN 或 JQCLI_COOKIE，请联系管理员",
+                message="未配置 JQCLI_USERNAME/JQCLI_PASSWORD，请联系管理员",
             )
         result = await self.check_auth()
         return BacktestAuthStatus(
@@ -501,6 +717,9 @@ class BacktestService:
 
         Internal callers (e.g., background workers) may need raw + parsed
         shapes; the API layer should call `get_result_detail_for_user`.
+
+        jqcli often omits per-trade rows and daily holdings in the result API;
+        when those parsers return empty we supplement from backtest logs.
         """
         try:
             loop = asyncio.get_running_loop()
@@ -510,10 +729,30 @@ class BacktestService:
                     _get_result_sync, backtest_id, self._token, self._cookie, self._api_base
                 ),
             )
+            performance = _parse_performance_series(payload)
+            trades = _parse_trade_groups(payload)
+            holdings = _parse_holding_groups(payload)
+
+            if not trades or not holdings:
+                logs = await loop.run_in_executor(
+                    _executor,
+                    functools.partial(
+                        _get_all_logs_sync,
+                        backtest_id,
+                        self._token,
+                        self._cookie,
+                        self._api_base,
+                    ),
+                )
+                if not trades:
+                    trades = _parse_trades_from_logs(logs)
+                if not holdings:
+                    holdings = _parse_holdings_from_logs(logs)
+
             return {
-                "performance": _parse_performance_series(payload),
-                "trades": _parse_trade_groups(payload),
-                "holdings": _parse_holding_groups(payload),
+                "performance": performance,
+                "trades": trades,
+                "holdings": holdings,
                 "raw": payload,
             }
         except Exception as e:

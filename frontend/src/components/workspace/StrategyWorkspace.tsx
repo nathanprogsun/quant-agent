@@ -14,8 +14,8 @@ import type { PerformancePoint } from "@/components/workspace/PerformanceChart";
 import type { StrategyTab, RunStatus } from "@/hooks/useStrategyWorkspace";
 
 interface StrategyWorkspaceProps {
-  title?: string | null;
-  onClose?: () => void;
+  title: string | null;
+  onClose: (() => void) | undefined;
   activeTab: StrategyTab;
   onTabChange: (tab: StrategyTab) => void;
   runStatus: RunStatus;
@@ -27,16 +27,12 @@ interface StrategyWorkspaceProps {
   sessionState: SessionState;
   jqcliConfigured: boolean;
   lastMetrics: BacktestMetrics | null;
-  isAnalyzing: boolean;
   logLines: string[];
   performanceSeries: PerformancePoint[];
   tradeGroups: TradeDayGroup[];
   holdingGroups: HoldingDayGroup[];
   onRunBacktest: () => void;
   onAbortBacktest: () => void;
-  onAnalyze: () => void;
-  onAiFix?: () => void;
-  onSubmitSimulation?: () => void;
 }
 
 export function StrategyWorkspace({
@@ -53,34 +49,28 @@ export function StrategyWorkspace({
   sessionState,
   jqcliConfigured,
   lastMetrics,
-  isAnalyzing,
   logLines,
   performanceSeries,
   tradeGroups,
   holdingGroups,
   onRunBacktest,
   onAbortBacktest,
-  onAnalyze,
-  onAiFix,
-  onSubmitSimulation,
 }: StrategyWorkspaceProps) {
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col border-l border-gray-200 bg-white">
       <WorkspaceHeader
-        title={title}
+        title={title ?? null}
         onClose={onClose}
         activeTab={activeTab}
         onTabChange={onTabChange}
         hasRunResults={hasRunResults}
         sessionState={sessionState}
         jqcliConfigured={jqcliConfigured}
-        lastMetrics={lastMetrics}
-        isAnalyzing={isAnalyzing}
+        hasEditorCode={Boolean(editorCode.trim())}
+        lastMetrics={lastMetrics ?? null}
         runStatus={runStatus}
         onRunBacktest={onRunBacktest}
         onAbortBacktest={onAbortBacktest}
-        onAnalyze={onAnalyze}
-        onSubmitSimulation={onSubmitSimulation}
       />
       <div className="min-h-0 flex-1">
         {activeTab === "code" ? (
@@ -105,7 +95,6 @@ export function StrategyWorkspace({
           <RunLogPanel
             lines={logLines}
             isRunning={runStatus === "running"}
-            onAiFix={onAiFix}
           />
         ) : null}
       </div>

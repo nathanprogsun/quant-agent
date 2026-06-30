@@ -46,9 +46,7 @@ async def run_backtest_worker(
 
             if result.status == BacktestStatus.RUNNING:
                 try:
-                    logs = await service.fetch_logs_incremental(
-                        backtest_id, log_offset
-                    )
+                    logs = await service.fetch_logs_incremental(backtest_id, log_offset)
                     for line in logs.logs:
                         await _publish_event(
                             bridge,
@@ -150,5 +148,6 @@ async def run_backtest_worker(
             },
         )
     finally:
+        service.registry.release_active(backtest_id)
         await bridge.publish_end(run_id)
         await bridge.cleanup(run_id, delay=60)

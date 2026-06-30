@@ -42,6 +42,13 @@ class BacktestRegistry:
     def remove(self, backtest_id: str) -> None:
         """Remove a backtest from the registry."""
         self._owner_map.pop(backtest_id, None)
+        self.release_active(backtest_id)
+
+    def release_active(self, backtest_id: str) -> None:
+        """Clear thread→backtest lock so the session can submit again.
+
+        Keeps ownership mapping intact so result/detail endpoints still work.
+        """
         for thread_id, active_id in list(self._thread_active.items()):
             if active_id == backtest_id:
                 self._thread_active.pop(thread_id, None)

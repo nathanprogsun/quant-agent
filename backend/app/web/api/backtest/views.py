@@ -3,18 +3,18 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Annotated, cast
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 
 from app.app_context.app_context import AppContext
-from app.core.backtest.errors import BacktestError
+from app.core.backtest.jqcli_auth import JqcliNotConfiguredError, resolve_jqcli_credentials_tuple
 from app.core.backtest.service import BacktestService
 from app.core.backtest.types import BacktestParams
 from app.core.backtest.worker import run_backtest_worker
 from app.db.models.user import User
-from app.settings import Settings, get_settings
+from app.settings import get_settings
 from app.web.api.backtest.schemas import (
     BacktestAbortResponse,
     BacktestAuthStatusResponse,
@@ -32,57 +32,24 @@ from app.web.api.backtest.schemas import (
 )
 from app.web.api.backtest.stream import backtest_sse_consumer, backtest_stream_run_id
 from app.web.api.deps import get_current_user
+from app.web.lifespan_service import backtest_service_from_request
+from app.web.lifespan_service import get_app_context as _get_app_context
 
 router = APIRouter(prefix="/api/v1/backtest", tags=["backtest"])
 
 _worker_tasks: dict[str, asyncio.Task[None]] = {}
 
 
-def _secret_value(value: object | None) -> str:
-    if value is None:
-        return ""
-    if hasattr(value, "get_secret_value"):
-        return str(value.get_secret_value()).strip()
-    return str(value).strip()
-
-
-def get_jqcli_credentials(settings: Settings | None = None) -> tuple[str, str, str] | None:
-    """Read jqcli credentials from server env only."""
-    cfg = settings or get_settings()
-    token = _secret_value(cfg.jqcli_token)
-    cookie = _secret_value(cfg.jqcli_cookie)
-    if not token and not cookie:
-        return None
-    return token, cookie, cfg.jqcli_api_base
-
-
-def get_backtest_service() -> BacktestService:
-    """Build BacktestService from server env settings."""
-    creds = get_jqcli_credentials()
-    if creds is None:
-        raise BacktestError(
-            message="请先在服务器环境变量中配置 JQCLI_TOKEN 或 JQCLI_COOKIE",
-            code="backtest_not_configured",
-            status_code=400,
-        )
-    token, cookie, api_base = creds
-    return BacktestService(token=token, cookie=cookie, api_base=api_base)
-
-
-def _get_app_context(request: Request) -> AppContext:
-    app_context = getattr(request.app.state, "app_context", None)
-    if app_context is None:
-        raise BacktestError(message="服务未就绪", code="service_unavailable", status_code=503)
-    return cast(AppContext, app_context)
-
-
-def _start_backtest_worker(request: Request, backtest_id: str, service: BacktestService) -> None:
+def _start_backtest_worker(
+    app_context: AppContext,
+    backtest_id: str,
+    service: BacktestService,
+) -> None:
     """Spawn background jqcli polling worker for SSE consumers."""
     existing = _worker_tasks.get(backtest_id)
     if existing is not None and not existing.done():
         return
 
-    app_context = _get_app_context(request)
     run_id = backtest_stream_run_id(backtest_id)
     assert app_context.stream_bridge is not None  # always set at startup
     task = asyncio.create_task(
@@ -111,13 +78,29 @@ async def auth_check_get(
     Returns `configured=False` when no credentials are configured rather
     than 400 — clients (the setup wizard) need to distinguish the two.
     """
-    creds = get_jqcli_credentials()
+    cfg = get_settings()
+    try:
+        creds = resolve_jqcli_credentials_tuple(cfg)
+    except JqcliNotConfiguredError:
+        return BacktestAuthStatusResponse(
+            authenticated=False,
+            username=None,
+            message="未配置 JQCLI_USERNAME/JQCLI_PASSWORD，请联系管理员",
+            configured=False,
+        )
+    except RuntimeError as exc:
+        return BacktestAuthStatusResponse(
+            authenticated=False,
+            username=None,
+            message=str(exc),
+            configured=True,
+        )
     if creds is None:
         return BacktestAuthStatusResponse(
             authenticated=False,
             username=None,
-            message="未配置 JQCLI_TOKEN 或 JQCLI_COOKIE，请联系管理员",
-            configured=False,
+            message="聚宽登录失败，请检查 JQCLI_USERNAME/JQCLI_PASSWORD",
+            configured=True,
         )
     token, cookie, api_base = creds
     service = BacktestService(token=token, cookie=cookie, api_base=api_base)
@@ -126,7 +109,7 @@ async def auth_check_get(
         authenticated=status.authenticated,
         username=status.username,
         message=status.message,
-        configured=status.configured,
+        configured=True,
     )
 
 
@@ -143,7 +126,7 @@ async def submit_backtest(
     body: BacktestSubmitRequest,
     request: Request,
     current_user: Annotated[User, Depends(get_current_user)],
-    service: Annotated[BacktestService, Depends(get_backtest_service)],
+    service: Annotated[BacktestService, Depends(backtest_service_from_request)],
 ) -> BacktestSubmitResponse:
     """Submit a backtest for execution."""
     params = BacktestParams(
@@ -160,7 +143,8 @@ async def submit_backtest(
         version=body.version,
         params=params,
     )
-    _start_backtest_worker(request, backtest_id, service)
+    app_context = _get_app_context(request)
+    _start_backtest_worker(app_context, backtest_id, service)
     return BacktestSubmitResponse(backtest_id=backtest_id)
 
 
@@ -168,7 +152,7 @@ async def submit_backtest(
 async def get_backtest_result(
     backtest_id: str,
     current_user: Annotated[User, Depends(get_current_user)],
-    service: Annotated[BacktestService, Depends(get_backtest_service)],
+    service: Annotated[BacktestService, Depends(backtest_service_from_request)],
 ) -> BacktestResultResponse:
     """Get backtest result by ID."""
     detail = await service.get_result_detail_for_user(backtest_id, current_user.id)
@@ -214,7 +198,7 @@ async def stream_backtest(
     backtest_id: str,
     request: Request,
     current_user: Annotated[User, Depends(get_current_user)],
-    service: Annotated[BacktestService, Depends(get_backtest_service)],
+    service: Annotated[BacktestService, Depends(backtest_service_from_request)],
 ) -> StreamingResponse:
     """Stream backtest progress events via SSE."""
     service.assert_owner(backtest_id, current_user.id)
@@ -232,13 +216,17 @@ async def stream_backtest(
     )
 
 
-@router.post("/{backtest_id}/simulation", response_model=BacktestSimulationResponse)
+@router.post(
+    "/{backtest_id}/simulation",
+    response_model=BacktestSimulationResponse,
+    deprecated=True,
+)
 async def submit_simulation(
     backtest_id: str,
     current_user: Annotated[User, Depends(get_current_user)],
-    service: Annotated[BacktestService, Depends(get_backtest_service)],
+    service: Annotated[BacktestService, Depends(backtest_service_from_request)],
 ) -> BacktestSimulationResponse:
-    """Submit simulation stub — jqcli simulation wiring deferred."""
+    """Deprecated: simulation submit is not supported in the current product scope."""
     result = await service.submit_simulation_for_user(backtest_id, current_user.id)
     return BacktestSimulationResponse(
         success=result.success,
@@ -252,7 +240,7 @@ async def submit_simulation(
 async def abort_backtest(
     backtest_id: str,
     current_user: Annotated[User, Depends(get_current_user)],
-    service: Annotated[BacktestService, Depends(get_backtest_service)],
+    service: Annotated[BacktestService, Depends(backtest_service_from_request)],
 ) -> BacktestAbortResponse:
     """Abort a running backtest."""
     result = await service.abort_for_user(backtest_id, current_user.id)

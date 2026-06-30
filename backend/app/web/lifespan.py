@@ -18,6 +18,8 @@ from app.app_context.app_context import AppContext, create_checkpointer
 from app.app_logging import get_logger
 from app.common.runs.manager import RunManager
 from app.common.stream_bridge.memory import MemoryStreamBridge
+from app.core.backtest.jqcli_auth import JqcliNotConfiguredError, resolve_jqcli_credentials
+from app.core.backtest.registry import BacktestRegistry
 from app.core.chat.middlewares.memory_middleware import set_memory_middleware_session_factory
 from app.core.chat.skills.registry import SkillRegistry
 from app.core.jq_kb.embeddings import warm_up_models
@@ -88,6 +90,8 @@ async def setup_app_context(app: FastAPI) -> None:
     stream_bridge = MemoryStreamBridge(queue_maxsize=cfg.stream_bridge_queue_maxsize)
     # RunManager
     run_manager = RunManager()
+    # BacktestRegistry — process-level ownership registry shared across requests
+    backtest_registry = BacktestRegistry()
 
     set_memory_middleware_session_factory(session_factory)
 
@@ -98,6 +102,7 @@ async def setup_app_context(app: FastAPI) -> None:
         stream_bridge=stream_bridge,
         run_manager=run_manager,
         skill_registry=SkillRegistry(),
+        backtest_registry=backtest_registry,
         lifespan_exit_stack=lifespan_exit_stack,
     )
     set_app_context(app=app, app_context=app_context)
@@ -144,6 +149,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, Any]:
             # Models not downloaded — log and continue. First request will
             # surface the install hint in the tool error.
             logger.warning("jq_kb warm-up skipped: %s", exc)
+
+        try:
+            await run_in_pool(resolve_jqcli_credentials)
+            logger.info("jqcli credentials warmed up")
+        except JqcliNotConfiguredError:
+            pass
+        except Exception:
+            logger.warning("jqcli credential warmup failed", exc_info=True)
 
         logger.info("Application lifespan started")
 

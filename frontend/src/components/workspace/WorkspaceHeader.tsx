@@ -4,7 +4,6 @@ import { useEffect } from "react";
 import { X } from "lucide-react";
 
 import { BacktestButton } from "@/components/workspace/BacktestButton";
-import { AnalyzeButton } from "@/components/workspace/AnalyzeButton";
 import type { BacktestMetrics, SessionState } from "@/core/chat/types";
 import type { StrategyTab, RunStatus } from "@/hooks/useStrategyWorkspace";
 
@@ -21,20 +20,18 @@ const RESULT_TAB_IDS = new Set<StrategyTab>(
 );
 
 interface WorkspaceHeaderProps {
-  title?: string | null;
-  onClose?: () => void;
+  title: string | null;
+  onClose: (() => void) | undefined;
   activeTab: StrategyTab;
   onTabChange: (tab: StrategyTab) => void;
   hasRunResults?: boolean;
   sessionState: SessionState;
   jqcliConfigured: boolean;
+  hasEditorCode?: boolean;
   lastMetrics: BacktestMetrics | null;
-  isAnalyzing: boolean;
   runStatus: RunStatus;
   onRunBacktest: () => void;
   onAbortBacktest: () => void;
-  onAnalyze: () => void;
-  onSubmitSimulation?: () => void;
 }
 
 export function WorkspaceHeader({
@@ -45,13 +42,9 @@ export function WorkspaceHeader({
   hasRunResults = false,
   sessionState,
   jqcliConfigured,
-  lastMetrics,
-  isAnalyzing,
-  runStatus,
+  hasEditorCode = false,
   onRunBacktest,
   onAbortBacktest,
-  onAnalyze,
-  onSubmitSimulation,
 }: WorkspaceHeaderProps) {
   const visibleTabs = hasRunResults
     ? ALL_TABS
@@ -105,28 +98,13 @@ export function WorkspaceHeader({
           ))}
         </nav>
         <div className="flex shrink-0 items-center gap-2 py-2">
-          {onSubmitSimulation ? (
-            <button
-              type="button"
-              onClick={onSubmitSimulation}
-              disabled={runStatus !== "done"}
-              className="rounded-md border px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-            >
-              提交模拟
-            </button>
-          ) : null}
           <BacktestButton
             state={sessionState}
             jqcliConfigured={jqcliConfigured}
+            hasEditorCode={hasEditorCode}
             onRun={onRunBacktest}
             onAbort={onAbortBacktest}
             runLabel="运行策略"
-          />
-          <AnalyzeButton
-            state={sessionState}
-            lastMetricsAvailable={lastMetrics != null}
-            isAnalyzing={isAnalyzing}
-            onAnalyze={onAnalyze}
           />
         </div>
       </div>

@@ -44,7 +44,7 @@ export default function IntegrationSettingsPage() {
 
       <div className="rounded-md border p-4 space-y-3">
         <p className="text-sm text-muted-foreground">
-          聚宽（jqcli）凭证由服务器环境变量配置（JQCLI_TOKEN、JQCLI_COOKIE、JQCLI_API_BASE）。
+          聚宽（jqcli）凭证由服务器环境变量配置（JQCLI_USERNAME、JQCLI_PASSWORD、JQCLI_API_BASE）。
           如需启用回测，请联系管理员配置环境变量后重启服务。
         </p>
 

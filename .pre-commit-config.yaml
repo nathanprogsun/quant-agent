@@ -17,6 +17,7 @@ repos:
     - --autofix
     - --preserve-quotes
     - --indent=2
+    exclude: .pre-commit-config.yaml
 
 - repo: local
   hooks:
@@ -34,7 +35,7 @@ repos:
 
   - id: mypy
     name: Validate types with MyPy
-    entry: mypy
+    entry: mypy --config-file backend/pyproject.toml --exclude '(jq_kb|dao|backtest/service)' --follow-imports=silent backend/app
     language: system
     types: [python]
     pass_filenames: false

@@ -17,8 +17,8 @@ from app.core.backtest.types import (
     BacktestResultDetail,
     BacktestStatus,
 )
-from app.web.api.backtest.views import get_backtest_service
 from app.web.application import get_app
+from app.web.lifespan_service import backtest_service_from_request
 from tests.integration.client import APITestClient
 
 
@@ -49,15 +49,18 @@ async def backtest_api_client(
     svc = AsyncMock(spec=BacktestService)
     app = get_app()
     app.state.app_context = test_app_context
-    app.dependency_overrides[get_backtest_service] = lambda: svc
+    app.dependency_overrides[backtest_service_from_request] = lambda: svc
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         client = APITestClient(ac)
-        await client.post("/api/v1/auth/register", json={
-            "email": f"{uuid4()}@test.com",
-            "password": "TestPassword123!",
-            "full_name": "Test User",
-        })
+        await client.post(
+            "/api/v1/auth/register",
+            json={
+                "email": f"{uuid4()}@test.com",
+                "password": "TestPassword123!",
+                "full_name": "Test User",
+            },
+        )
         yield client, svc
     app.dependency_overrides.clear()
 

@@ -12,7 +12,7 @@ interface SessionStateActions {
 }
 
 const VALID_TRANSITIONS: Record<SessionState, SessionState[]> = {
-  idle: ['generating'],
+  idle: ['generating', 'code_ready'],
   generating: ['code_ready', 'idle'],
   code_ready: ['backtesting', 'idle'],
   backtesting: ['analyzed', 'code_ready', 'idle'],
