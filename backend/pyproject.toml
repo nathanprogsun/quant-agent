@@ -49,6 +49,7 @@ dependencies = [
     "llama-index-embeddings-huggingface>=0.7.0",
     "llama-index-vector-stores-chroma>=0.5.5",
     "llama-index-llms-openai>=0.7.9",
+    "langchain-mcp-adapters>=0.3.0",
 ]
 
 [build-system]
@@ -124,4 +125,3 @@ dev = [
     "ruff>=0.1",
     "mypy>=1.0",
 ]
-
