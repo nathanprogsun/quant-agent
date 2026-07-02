@@ -16,24 +16,7 @@ from langchain.agents.middleware import AgentMiddleware
 
 
 class _IdentityMW(AgentMiddleware):
-    """Minimal subclass providing no-op wrap delegates.
-
-    langchain's AgentMiddleware raises NotImplementedError if only the sync
-    or only the async variant of a wrap method is defined. Provide all four
-    as simple delegates so tests can verify the pass-through path.
-    """
-
-    def wrap_model_call(self, request: Any, handler: Any) -> Any:
-        return handler(request)
-
-    async def awrap_model_call(self, request: Any, handler: Any) -> Any:
-        return await handler(request)
-
-    def wrap_tool_call(self, request: Any, handler: Any) -> Any:
-        return handler(request)
-
-    async def awrap_tool_call(self, request: Any, handler: Any) -> Any:
-        return await handler(request)
+    """Minimal subclass that does not override any hook."""
 
 
 @pytest.mark.asyncio
