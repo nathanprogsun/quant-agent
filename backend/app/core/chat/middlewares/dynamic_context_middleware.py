@@ -31,11 +31,12 @@ import uuid
 from datetime import datetime
 from typing import Any
 
+from langchain.agents.middleware import AgentMiddleware
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
+from langgraph.runtime import Runtime
 
 from app.config.memory_config import MemoryConfig
 from app.core.chat.memory.provider import MemoryProvider, get_memory_provider
-from app.core.chat.middlewares.base import AgentMiddleware
 from app.settings import get_settings
 
 _REMINDER_KWARG = "dynamic_context_reminder"
@@ -161,7 +162,7 @@ class DynamicContextMiddleware(AgentMiddleware):
             return self._memory_provider
         return get_memory_provider()
 
-    async def _resolve_memory_block(self, config: dict[str, Any]) -> str | None:
+    async def _resolve_memory_block(self) -> str | None:
         """Fetch the memory block iff injection is enabled and a provider exists."""
         cfg = self._resolve_config()
         if not cfg.injection_enabled:
@@ -169,13 +170,11 @@ class DynamicContextMiddleware(AgentMiddleware):
         provider = self._resolve_provider()
         if provider is None:
             return None
-        configurable = config.get("configurable", {})
-        user_id = configurable.get("user_id")
-        return await provider.get_block(user_id)
+        # user_id is not available from Runtime (agent_node passes Runtime()).
+        # The provider is responsible for user resolution.
+        return await provider.get_block(None)
 
-    async def before_model(
-        self, state: dict[str, Any], config: dict[str, Any]
-    ) -> dict[str, Any] | None:
+    async def abefore_model(self, state: dict[str, Any], runtime: Runtime) -> dict[str, Any] | None:  # type: ignore[override]
         messages = list(state.get("messages", []))
         if not messages:
             return None
@@ -190,7 +189,7 @@ class DynamicContextMiddleware(AgentMiddleware):
             )
             if first_idx is None:
                 return None
-            memory_block = await self._resolve_memory_block(config)
+            memory_block = await self._resolve_memory_block()
             triple = _make_reminder_and_user(
                 messages[first_idx],
                 _date_reminder(current_date),
@@ -211,7 +210,7 @@ class DynamicContextMiddleware(AgentMiddleware):
         )
         if last_idx is None:
             return None
-        memory_block = await self._resolve_memory_block(config)
+        memory_block = await self._resolve_memory_block()
         triple = _make_reminder_and_user(
             messages[last_idx],
             _date_reminder(current_date),

@@ -17,13 +17,14 @@ import hashlib
 import re
 from typing import Any
 
+from langchain.agents.middleware import AgentMiddleware
 from langchain_core.messages import BaseMessage, HumanMessage
 
 from app.core.chat.agent.model_call import ModelCallRequest
-from app.core.chat.middlewares.base import AgentMiddleware
 from app.skills.exceptions import SkillPathTraversalError
 from app.skills.storage.local_skill_storage import LocalSkillStorage
 from app.skills.types import Skill
+from app.util.asyncio_util.adapter import run_in_pool
 
 RESERVED_SKILL_NAMES: frozenset[str] = frozenset(
     {"bootstrap", "help", "memory", "models", "new", "status"}
@@ -46,10 +47,9 @@ class SkillActivationMiddleware(AgentMiddleware):
         handler: Any,
     ) -> Any:
         """Intercept the model call to inject a slash-skill activation block."""
+        injected = await run_in_pool(self._maybe_inject, None, request.messages)
         if not isinstance(request, ModelCallRequest):
             return await handler(request)
-
-        injected = self._maybe_inject(request.messages)
         if injected is not None:
             request.messages = injected
         return await handler(request)

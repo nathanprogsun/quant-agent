@@ -1,10 +1,9 @@
 """Tests for ``DeferredToolFilterMiddleware``."""
+
 from __future__ import annotations
 
-from typing import Any
-from unittest.mock import AsyncMock, MagicMock
+import asyncio
 
-import pytest
 from langchain_core.messages import ToolMessage
 from langchain_core.tools import Tool
 
@@ -43,8 +42,6 @@ def test_awrap_model_call_hides_all_deferred_when_no_promotion() -> None:
         seen["tools"] = req.tools
         return "ok"
 
-    import asyncio
-
     result = asyncio.run(_mw().awrap_model_call(request, handler))
     assert result == "ok"
     assert [t.name for t in seen["tools"]] == ["active_c"]
@@ -67,8 +64,6 @@ def test_awrap_model_call_promoted_under_matching_hash_passes_through() -> None:
         seen["tools"] = req.tools
         return "ok"
 
-    import asyncio
-
     asyncio.run(_mw().awrap_model_call(request, handler))
     assert {t.name for t in seen["tools"]} == {"mcp_a", "active_c"}
 
@@ -89,8 +84,6 @@ def test_awrap_model_call_promotion_ignored_when_hash_mismatches() -> None:
         seen["tools"] = req.tools
         return "ok"
 
-    import asyncio
-
     asyncio.run(_mw().awrap_model_call(request, handler))
     assert [t.name for t in seen["tools"]] == ["active_c"]
 
@@ -105,8 +98,6 @@ def test_awrap_model_call_no_deferred_is_noop() -> None:
     async def handler(req):
         seen["tools"] = req.tools
         return "ok"
-
-    import asyncio
 
     asyncio.run(mw.awrap_model_call(request, handler))
     assert seen["tools"] is request.tools
@@ -180,8 +171,6 @@ def test_awrap_tool_call_returns_block_when_deferred() -> None:
         seen["called"] = True
         return "would-have-run"
 
-    import asyncio
-
     out = asyncio.run(_mw().awrap_tool_call(_TCReq(), handler))
     assert isinstance(out, ToolMessage)
     assert out.status == "error"
@@ -199,8 +188,6 @@ def test_awrap_tool_call_delegates_when_promoted() -> None:
         seen["called"] = True
         return "ok"
 
-    import asyncio
-
     out = asyncio.run(_mw().awrap_tool_call(_TCReq(), handler))
     assert out == "ok"
     assert seen["called"] is True
@@ -213,8 +200,6 @@ def test_awrap_tool_call_delegates_for_non_deferred_tool() -> None:
 
     async def handler(req):
         return "active-handled"
-
-    import asyncio
 
     out = asyncio.run(_mw().awrap_tool_call(_TCReq(), handler))
     assert out == "active-handled"

@@ -94,9 +94,7 @@ def normalize_input(raw_input: dict[str, Any]) -> dict[str, Any]:
             # Validate length
             content = msg.get("content", "")
             if isinstance(content, str) and len(content) > MAX_MESSAGE_LENGTH:
-                logger.warning(
-                    "Message at index %d exceeds %d chars", i, MAX_MESSAGE_LENGTH
-                )
+                logger.warning("Message at index %d exceeds %d chars", i, MAX_MESSAGE_LENGTH)
                 raise HTTPException(
                     status_code=400,
                     detail="请求参数无效",
@@ -110,9 +108,7 @@ def normalize_input(raw_input: dict[str, Any]) -> dict[str, Any]:
                     detail="请求参数无效",
                 )
         else:
-            logger.warning(
-                "Unsupported message type at index %d: %s", i, type(msg)
-            )
+            logger.warning("Unsupported message type at index %d: %s", i, type(msg))
             raise HTTPException(
                 status_code=400,
                 detail="请求参数无效",
@@ -254,6 +250,7 @@ async def sse_consumer(
     Supports reconnection via Last-Event-ID header.
     """
     last_event_id = request.headers.get("Last-Event-ID")
+    logger.info("SSE consumer started for run %s (last_event_id=%s)", record.run_id, last_event_id)
     try:
         async for event in bridge.subscribe(
             record.run_id,
@@ -265,6 +262,7 @@ async def sse_consumer(
                 continue
 
             if event.event == "__end__":
+                logger.info("SSE consumer received __end__ for run %s", record.run_id)
                 yield format_sse("end", None, event_id=event.id)
                 break
 
@@ -273,5 +271,10 @@ async def sse_consumer(
     except asyncio.CancelledError:
         logger.info("SSE client disconnected for run %s", record.run_id)
     finally:
+        logger.info(
+            "SSE consumer cleanup for run %s (on_disconnect=%s)",
+            record.run_id,
+            record.on_disconnect,
+        )
         if record.on_disconnect == DisconnectMode.CANCEL:
             await run_manager.cancel(record.run_id)

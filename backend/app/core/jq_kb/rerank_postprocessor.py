@@ -11,13 +11,13 @@ from llama_index.core.schema import NodeWithScore, QueryBundle
 from app.core.jq_kb.rerank_client import rerank_documents
 
 
-class RerankPostprocessor(BaseNodePostprocessor):  # type: ignore[misc]  # BaseNodePostprocessor typed as Any (stub missing)
+class RerankPostprocessor(BaseNodePostprocessor):
     """Cross-encoder rerank step in jq_kb hybrid retrieval."""
 
     top_n: int = Field(default=5, ge=1)
 
     def __init__(self, top_n: int = 5, **kwargs: Any) -> None:
-        super().__init__(top_n=top_n, **kwargs)
+        super().__init__(top_n=top_n, **kwargs)  # type: ignore[call-arg]
 
     @classmethod
     def class_name(cls) -> str:
@@ -31,7 +31,7 @@ class RerankPostprocessor(BaseNodePostprocessor):  # type: ignore[misc]  # BaseN
         if not nodes or query_bundle is None:
             return nodes
 
-        documents = [node.node.get_content(metadata_mode="none") for node in nodes]
+        documents = [node.node.get_content(metadata_mode="none") for node in nodes]  # type: ignore[arg-type]
         results = rerank_documents(
             query=query_bundle.query_str,
             documents=documents,

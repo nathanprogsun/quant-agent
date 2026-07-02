@@ -31,7 +31,7 @@ from app.settings import get_settings
 _DEFAULT_CONTEXT_WINDOW = 32_000
 
 
-class ProxyOpenAI(LlamaIndexOpenAI):  # type: ignore[misc]  # LlamaIndexOpenAI typed as Any (stub missing)
+class ProxyOpenAI(LlamaIndexOpenAI):
     """LlamaIndex OpenAI subclass that tolerates proxy-served model names.
 
     Upstream ``OpenAI.metadata`` calls ``openai_modelname_to_contextsize``
@@ -61,7 +61,7 @@ class ProxyOpenAI(LlamaIndexOpenAI):  # type: ignore[misc]  # LlamaIndexOpenAI t
             is_chat_model=True,
             is_function_calling_model=is_function_calling_model(model=model_name),
             model_name=self.model,
-            system_role=("user" if self.model == "o1" else "system"),
+            system_role=("user" if self.model == "o1" else "system"),  # type: ignore[arg-type]
         )
 
 
@@ -88,7 +88,7 @@ def get_llm(*, temperature: float = 0.0) -> ProxyOpenAI:
         api_key=settings.openai_api_key.get_secret_value(),
         api_base=settings.openai_base_url,
         temperature=temperature,
-        openai_client=_get_openai_client(),
+        openai_client=_get_openai_client(),  # type: ignore[call-arg]
     )
 
 

@@ -1,4 +1,5 @@
 """Thread ORM repository (soft-delete aware)."""
+
 from __future__ import annotations
 
 from typing import cast
@@ -41,9 +42,7 @@ class ThreadRepository:
             ),
         )
 
-    async def find_by_id_and_user_or_fail(
-        self, thread_id: UUID, user_id: UUID
-    ) -> Thread:
+    async def find_by_id_and_user_or_fail(self, thread_id: UUID, user_id: UUID) -> Thread:
         thread = await self.find_by_id_and_user(thread_id, user_id)
         if thread is None:
             raise ResourceNotFoundError(f"Thread {thread_id} not found for user {user_id}")
@@ -61,9 +60,7 @@ class ThreadRepository:
         )
         return list((await self.session.execute(stmt)).scalars())
 
-    async def update_title(
-        self, thread_id: UUID, user_id: UUID, title: str
-    ) -> Thread | None:
+    async def update_title(self, thread_id: UUID, user_id: UUID, title: str) -> Thread | None:
         result = await self.session.execute(
             update(Thread)
             .where(Thread.id == thread_id, Thread.user_id == user_id, Thread.not_deleted())
@@ -83,4 +80,4 @@ class ThreadRepository:
             )
             .values(deleted_at=func.now())
         )
-        return (result.rowcount or 0) > 0
+        return (result.rowcount or 0) > 0  # type: ignore[attr-defined]

@@ -87,8 +87,9 @@ export function mergeMessages(
   optimistic: Message[],
 ): Message[] {
   const normalizedHistory = normalizeCheckpointMessages(history);
-  const base = stream.length > 0 ? stream : normalizedHistory;
-  const confirmationSource = stream.length > 0 ? stream : base;
+  const normalizedStream = normalizeCheckpointMessages(stream);
+  const base = normalizedStream.length > 0 ? normalizedStream : normalizedHistory;
+  const confirmationSource = normalizedStream.length > 0 ? normalizedStream : base;
   const pendingOptimistic = filterConfirmedOptimistic(
     confirmationSource,
     optimistic,

@@ -14,7 +14,15 @@ from sqlalchemy.ext.asyncio import (
 
 def make_engine(url: str, *, echo: bool = False) -> AsyncEngine:
     """Create AsyncEngine for the given database URL."""
-    return create_async_engine(url=url, echo=echo)
+    return create_async_engine(
+        url=url,
+        echo=echo,
+        pool_size=10,
+        max_overflow=20,
+        pool_pre_ping=True,
+        pool_recycle=3600,
+        connect_args={"timeout": 30} if "sqlite" in url else {},
+    )
 
 
 def make_session_factory(engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:

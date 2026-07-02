@@ -17,6 +17,7 @@ Adapts to quant-agent's custom ``AgentMiddleware`` ABC: instead of
 ``request.messages`` in place — the agent_node reads
 ``request.messages`` back out so the patched list persists in graph state.
 """
+
 from __future__ import annotations
 
 import json
@@ -25,10 +26,10 @@ from collections import defaultdict, deque
 from collections.abc import Awaitable, Callable, Sequence
 from typing import Any, override
 
+from langchain.agents.middleware import AgentMiddleware
 from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
 
 from app.core.chat.agent.model_call import ModelCallRequest
-from app.core.chat.middlewares.base import AgentMiddleware
 
 logger = logging.getLogger(__name__)
 
@@ -156,9 +157,7 @@ class DanglingToolCallMiddleware(AgentMiddleware):
             return _GENERIC_RECOVERY_NO_DETAIL
         return _INTERRUPTED_FALLBACK
 
-    def _build_patched_messages(
-        self, messages: Sequence[BaseMessage]
-    ) -> list[BaseMessage] | None:
+    def _build_patched_messages(self, messages: Sequence[BaseMessage]) -> list[BaseMessage] | None:
         """Re-group messages so each ``AIMessage.tool_call[i]`` has an adjacent ToolMessage.
 
         Returns the patched list, or ``None`` when no changes are
@@ -227,7 +226,7 @@ class DanglingToolCallMiddleware(AgentMiddleware):
     # ── wrap hooks ───────────────────────────────────────────────
 
     @override
-    def wrap_model_call(
+    def wrap_model_call(  # type: ignore[override]
         self,
         request: ModelCallRequest,
         handler: Callable[[ModelCallRequest], Any],
@@ -238,7 +237,7 @@ class DanglingToolCallMiddleware(AgentMiddleware):
         return handler(request)
 
     @override
-    async def awrap_model_call(
+    async def awrap_model_call(  # type: ignore[override]
         self,
         request: ModelCallRequest,
         handler: Callable[[ModelCallRequest], Awaitable[Any]],

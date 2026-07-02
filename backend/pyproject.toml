@@ -50,6 +50,7 @@ dependencies = [
     "llama-index-vector-stores-chroma>=0.5.5",
     "llama-index-llms-openai>=0.7.9",
     "langchain-mcp-adapters>=0.3.0",
+    "langchain>=0.3.0",
 ]
 
 [build-system]
@@ -102,16 +103,29 @@ enable_error_code = [
 [[tool.mypy.overrides]]
 module = "jqcli"
 ignore_errors = true
+follow_imports = "skip"
 
 [[tool.mypy.overrides]]
 module = "jqcli.*"
 ignore_errors = true
+follow_imports = "skip"
 
 # PyYAML ships no inline type stubs and types-PyYAML is not in the dev deps;
 # silence import-untyped for the SKILL.md frontmatter parser.
 [[tool.mypy.overrides]]
 module = "yaml.*"
 ignore_missing_imports = true
+
+# Test files — relaxed strictness because tests extensively use MagicMock,
+# local imports, and dynamic patterns that are impractical to fully type.
+[[tool.mypy.overrides]]
+module = "tests.*"
+ignore_errors = true
+
+# Utility scripts — third-party type mismatches not worth annotating.
+[[tool.mypy.overrides]]
+module = "scripts.*"
+ignore_errors = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

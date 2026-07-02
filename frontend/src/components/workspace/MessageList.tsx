@@ -1,7 +1,7 @@
 "use client";
 
 import type { Message } from "@langchain/langgraph-sdk";
-import { Fragment } from "react";
+import { Component, Fragment, type ReactNode } from "react";
 import { Streamdown } from "streamdown";
 
 import { StrategyCodeCard } from "@/components/workspace/StrategyCodeCard";
@@ -23,6 +23,34 @@ import {
   getMessageGroups,
 } from "@/core/messages/utils";
 import { streamdownPlugins } from "@/core/streamdown/plugins";
+
+// ── Streamdown Error Boundary ───────────────────────────────────────────────
+// Streamdown can crash mid-stream when it encounters tool_call placeholders
+// or partial XML tags. Catch and fall back to a plain-text render so
+// the rest of the page keeps working.
+class StreamdownErrorBoundary extends Component<
+  { fallback: ReactNode; children: ReactNode },
+  { hasError: boolean }
+> {
+  constructor(props: { fallback: ReactNode; children: ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: unknown) {
+    // eslint-disable-next-line no-console
+    console.warn("Streamdown render failed, using fallback:", error);
+  }
+
+  render() {
+    if (this.state.hasError) return this.props.fallback;
+    return this.props.children;
+  }
+}
 
 interface MessageListProps {
   messages: Message[];
@@ -100,12 +128,16 @@ function MarkdownText({
   if (!safeText.trim()) return null;
 
   return (
-    <Streamdown
-      className="prose prose-sm max-w-none prose-headings:font-semibold prose-p:leading-relaxed prose-code:rounded prose-code:bg-gray-100 prose-code:px-1 prose-code:py-0.5 prose-code:before:content-none prose-code:after:content-none prose-pre:bg-gray-50"
-      {...streamdownPlugins}
+    <StreamdownErrorBoundary
+      fallback={<p className="whitespace-pre-wrap text-sm">{safeText}</p>}
     >
-      {safeText}
-    </Streamdown>
+      <Streamdown
+        className="prose prose-sm max-w-none prose-headings:font-semibold prose-p:leading-relaxed prose-code:rounded prose-code:bg-gray-100 prose-code:px-1 prose-code:py-0.5 prose-code:before:content-none prose-code:after:content-none prose-pre:bg-gray-50"
+        {...streamdownPlugins}
+      >
+        {safeText}
+      </Streamdown>
+    </StreamdownErrorBoundary>
   );
 }
 

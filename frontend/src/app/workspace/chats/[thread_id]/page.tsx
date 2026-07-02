@@ -329,12 +329,13 @@ function ChatThreadPage({ thread_id }: { thread_id: string }) {
   ]);
 
   const handleSend = useCallback(
-    (content: string) => {
+    (content: string): boolean => {
       if (!isAuthenticated) {
         openLoginModal();
-        return;
+        return false;
       }
       sendMessage(content);
+      return true;
     },
     [isAuthenticated, openLoginModal, sendMessage],
   );

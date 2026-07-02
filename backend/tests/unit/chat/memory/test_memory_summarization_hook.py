@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
 from langchain_core.messages import HumanMessage
+from langgraph.runtime import Runtime
 
 from app.core.chat.memory.summarization_hook import (
     SummarizationEvent,
@@ -50,8 +52,10 @@ async def test_summarization_middleware_dispatches_hook_on_threshold() -> None:
     try:
         mw = SummarizationMiddleware(max_messages=5, enabled=True)
         messages = [HumanMessage(content=str(i)) for i in range(6)]
-        await mw.before_model({"messages": messages}, {})
-        await mw.after_model({"messages": messages}, {"configurable": {"user_id": "u1"}})
+        await mw.abefore_model({"messages": messages}, {})
+        await mw.aafter_model(
+            {"messages": messages}, Runtime(context=SimpleNamespace(thread_id="test", user_id="u1"))
+        )
     finally:
         set_summarization_flush_hook(None)
     assert len(queue.enqueued) == 1
@@ -65,8 +69,10 @@ async def test_summarization_middleware_no_dispatch_under_threshold() -> None:
     try:
         mw = SummarizationMiddleware(max_messages=50, enabled=True)
         messages = [HumanMessage(content="hi")]
-        await mw.before_model({"messages": messages}, {})
-        await mw.after_model({"messages": messages}, {"configurable": {"user_id": "u1"}})
+        await mw.abefore_model({"messages": messages}, {})
+        await mw.aafter_model(
+            {"messages": messages}, Runtime(context=SimpleNamespace(thread_id="test", user_id="u1"))
+        )
     finally:
         set_summarization_flush_hook(None)
     assert queue.enqueued == []

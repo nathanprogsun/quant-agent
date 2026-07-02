@@ -1,4 +1,5 @@
 """Memory ORM repository (UserMemory + MemoryFact)."""
+
 from __future__ import annotations
 
 from typing import cast
@@ -43,11 +44,9 @@ class MemoryRepository:
 
     async def delete_memory(self, memory_id: UUID, user_id: UUID) -> bool:
         result = await self.session.execute(
-            delete(UserMemory).where(
-                UserMemory.id == memory_id, UserMemory.user_id == user_id
-            )
+            delete(UserMemory).where(UserMemory.id == memory_id, UserMemory.user_id == user_id)
         )
-        return (result.rowcount or 0) > 0
+        return (result.rowcount or 0) > 0  # type: ignore[attr-defined]
 
     # ---- MemoryFact ----
 
@@ -80,16 +79,12 @@ class MemoryRepository:
         return cast(
             MemoryFact | None,
             await self.session.scalar(
-                select(MemoryFact).where(
-                    MemoryFact.id == fact_id, MemoryFact.user_id == user_id
-                )
+                select(MemoryFact).where(MemoryFact.id == fact_id, MemoryFact.user_id == user_id)
             ),
         )
 
     async def delete_fact(self, fact_id: UUID, user_id: UUID) -> bool:
         result = await self.session.execute(
-            delete(MemoryFact).where(
-                MemoryFact.id == fact_id, MemoryFact.user_id == user_id
-            )
+            delete(MemoryFact).where(MemoryFact.id == fact_id, MemoryFact.user_id == user_id)
         )
-        return (result.rowcount or 0) > 0
+        return (result.rowcount or 0) > 0  # type: ignore[attr-defined]

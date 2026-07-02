@@ -97,7 +97,7 @@ def test_resolve_env_variables_passthrough_non_strings() -> None:
 def test_resolve_config_path_returns_settings_path(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from app import settings as settings_mod
+    from app import settings as settings_mod  # noqa: PLC0415
 
     sentinel = "/tmp/quant-agent-extensions.json"
     monkeypatch.setattr(settings_mod, "get_settings", lambda: _FakeSettings(sentinel))

@@ -41,7 +41,7 @@ class MemoryStreamBridge(StreamBridge):
     - All publish/subscribe calls must be in the same event loop
     """
 
-    def __init__(self, *, queue_maxsize: int = 256) -> None:
+    def __init__(self, *, queue_maxsize: int = 4096) -> None:
         self._streams: dict[UUID, _RunStream] = {}
         self._counters: dict[UUID, int] = {}
         self._maxsize = queue_maxsize
@@ -52,9 +52,7 @@ class MemoryStreamBridge(StreamBridge):
         self._counters[run_id] = seq
         return f"{ts}-{seq}"
 
-    def _resolve_start_offset(
-        self, stream: _RunStream, last_event_id: str | None
-    ) -> int:
+    def _resolve_start_offset(self, stream: _RunStream, last_event_id: str | None) -> int:
         """Locate replay start position for reconnection.
 
         Handles ring eviction: if last_event_id was evicted, start from
@@ -116,6 +114,11 @@ class MemoryStreamBridge(StreamBridge):
                 return
 
             async with stream.condition:
+                # Re-check inside lock to avoid the race where
+                # publish_end notifies while we're between the
+                # flag check above and the wait() call.
+                if idx < len(stream.events):
+                    continue
                 try:
                     await asyncio.wait_for(
                         stream.condition.wait(),

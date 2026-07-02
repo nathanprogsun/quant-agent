@@ -11,23 +11,24 @@ help:
 	@echo "  make run         - Run development server"
 
 install:
-	pip install -e .
+	uv pip install -e .
 
 dev:
-	pip install -e ".[dev]"
+	uv pip install -e ".[dev]"
 
 test:
-	pytest -v --cov=app
+	uv run pytest -v --cov=app tests/unit/
+	uv run pytest -v tests/integration/
 
 test-unit:
-	pytest -v --cov=app tests/unit/
+	uv run pytest -v --cov=app tests/unit/
 
 test-integration:
-	pytest -v --cov=app tests/integration/
+	uv run pytest -v --cov=app tests/integration/
 
 lint:
 	ruff check .
-	mypy .
+	uv run mypy .
 
 format:
 	ruff format .
@@ -43,4 +44,3 @@ clean:
 
 run:
 	uvicorn app.web.__main__:app --reload --host 0.0.0.0 --port 8000
-

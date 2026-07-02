@@ -16,6 +16,10 @@ export default async function WorkspaceLayout({
     redirect("/setup");
   }
 
+  if (authResult.status === "unauthenticated") {
+    redirect("/login");
+  }
+
   if (
     authResult.status === "gateway_unavailable" ||
     authResult.status === "config_error"

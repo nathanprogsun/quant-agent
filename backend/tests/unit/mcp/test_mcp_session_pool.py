@@ -33,10 +33,10 @@ def _stub_create_session(monkeypatch: pytest.MonkeyPatch) -> tuple[MagicMock, Ma
 
     create_session = MagicMock(side_effect=_factory)
 
-    import app.mcp.session_pool as pool_mod
+    import app.mcp.session_pool as pool_mod  # noqa: PLC0415
 
     monkeypatch.setattr(pool_mod, "create_session", create_session, raising=False)
-    import langchain_mcp_adapters.sessions as sessions_mod
+    import langchain_mcp_adapters.sessions as sessions_mod  # noqa: PLC0415
 
     monkeypatch.setattr(sessions_mod, "create_session", create_session, raising=False)
     return create_session, _factory

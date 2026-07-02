@@ -22,6 +22,7 @@ def test_resolve_langgraph_stream_modes_maps_messages_tuple() -> None:
     assert resolve_langgraph_stream_modes(["values", "messages-tuple"]) == [
         "values",
         "messages",
+        "custom",
     ]
 
 

@@ -57,9 +57,9 @@ def _check_auth_sync(token: str, cookie: str, api_base: str) -> dict[str, Any]:
     client = ApiClient(api_base, token=token, cookie=cookie)
     try:
         try:
-            from jqcli.api.auth import (  # type: ignore[attr-defined]  # noqa: PLC0415
-                get_current_user,
-            )
+            import jqcli.api.auth as _auth  # noqa: PLC0415
+
+            get_current_user = _auth.get_current_user  # type: ignore[attr-defined]
 
             user_info = get_current_user(client)
         except ImportError:

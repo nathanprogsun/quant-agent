@@ -42,6 +42,15 @@ def make_sync_tool_wrapper(coro: Callable[..., Any], tool_name: str) -> Callable
 
         try:
             if loop is not None and loop.is_running():
+                # This blocks the event loop thread.
+                # This should only happen if tool.func is called from an async context,
+                # which is unexpected.
+                logger.warning(
+                    "sync_tool_wrapper called from running event loop "
+                    "for tool %r. This will block the event loop until completion. "
+                    "Check if LangChain/LangGraph is calling tool.func instead of tool.coroutine.",
+                    tool_name,
+                )
                 ctx = contextvars.copy_context()
                 future = _SYNC_TOOL_EXECUTOR.submit(
                     ctx.run, lambda: asyncio.run(coro(*args, **kwargs))

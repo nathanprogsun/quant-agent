@@ -1,14 +1,10 @@
 """Tests for the deferred-tool build site that ``make_lead_agent`` invokes."""
+
 from __future__ import annotations
 
-from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
-
-import pytest
 from langchain_core.tools import Tool
 
 from app.tools.builtins.tool_search import (
-    DeferredToolSetup,
     assemble_deferred_tools,
     build_deferred_tool_setup,
 )
@@ -37,9 +33,7 @@ def test_returns_empty_when_disabled() -> None:
 
 
 def test_returns_empty_when_enabled_but_no_mcp_tools() -> None:
-    setup = build_deferred_tool_setup(
-        [_make_tool("alpha"), _make_tool("beta")], enabled=True
-    )
+    setup = build_deferred_tool_setup([_make_tool("alpha"), _make_tool("beta")], enabled=True)
     assert setup.tool_search_tool is None
 
 
@@ -109,11 +103,9 @@ def test_populated_setup_has_three_fields_set() -> None:
 
 
 def test_prompt_section_round_trip() -> None:
-    from app.tools.builtins.tool_search import get_deferred_tools_prompt_section
+    from app.tools.builtins.tool_search import get_deferred_tools_prompt_section  # noqa: PLC0415
 
-    section = get_deferred_tools_prompt_section(
-        deferred_names=frozenset({"alpha", "beta"})
-    )
+    section = get_deferred_tools_prompt_section(deferred_names=frozenset({"alpha", "beta"}))
     assert "alpha" in section
     assert "beta" in section
     assert "<available-deferred-tools>" in section
@@ -121,7 +113,7 @@ def test_prompt_section_round_trip() -> None:
 
 def test_prompt_section_byte_stable() -> None:
     """Same input → same string."""
-    from app.tools.builtins.tool_search import get_deferred_tools_prompt_section
+    from app.tools.builtins.tool_search import get_deferred_tools_prompt_section  # noqa: PLC0415
 
     s1 = get_deferred_tools_prompt_section(deferred_names=frozenset({"x", "y"}))
     s2 = get_deferred_tools_prompt_section(deferred_names=frozenset({"y", "x"}))

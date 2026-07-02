@@ -1,68 +1,131 @@
-"""Clarification detection middleware."""
+"""Middleware for intercepting clarification requests and presenting them to the user.
+
+Ported from deer-flow clarification_middleware.py:159-200.
+Pattern: the model calls the ``ask_clarification`` tool when it needs
+more information. The middleware intercepts this call via
+``awrap_tool_call``, formats a user-friendly message, and returns
+``Command(goto=END)`` to interrupt execution and present the
+question to the user.
+
+Language-agnostic: the model writes the question in whatever language
+the conversation uses. No regex, no LLM classifier in the middleware.
+
+Note: ToolNode must invoke wrap_tool_call hooks for interception to
+work. In quant-agent's current manual StateGraph, ToolNode does not
+go through the middleware chain — this is a pending integration.
+"""
 
 from __future__ import annotations
 
-import re
+import json
+import logging
+from collections.abc import Awaitable, Callable
+from hashlib import sha256
 from typing import Any
 
-from app.core.chat.middlewares.base import AgentMiddleware
+from langchain.agents.middleware import AgentMiddleware
+from langchain_core.messages import ToolMessage
+from langgraph.graph import END
+from langgraph.prebuilt.tool_node import ToolCallRequest
+from langgraph.types import Command
+
+logger = logging.getLogger(__name__)
 
 
 class ClarificationMiddleware(AgentMiddleware):
-    """Detects when the AI is asking for clarification.
+    """Intercepts ``ask_clarification`` tool calls and interrupts execution.
 
-    Monitors model responses to identify clarification patterns and
-    can flag or handle them appropriately.
+    When the model calls ``ask_clarification(question=..., options=[...])``,
+    this middleware:
+    1. Intercepts the tool call before execution (via awrap_tool_call)
+    2. Extracts the question, type, context, and options
+    3. Formats a user-friendly message with icons
+    4. Returns Command(goto=END) to interrupt execution and present the
+       question to the user
     """
 
-    # Patterns that indicate clarification requests
-    CLARIFICATION_PATTERNS = [
-        r"could you (please\s)?(clarify|explain|elaborate|provide more)",
-        r"can you (please\s)?(clarify|explain|elaborate|provide more)",
-        r"would you (please\s)?(clarify|explain|elaborate)",
-        r"i need (more|additional|further)\s*(information|details|clarification)",
-        r"could you give me (more|additional)\s*(information|details)",
-        r"i'm not (quite|sure|clear)\s*(sure|clear) what you mean",
-        r"could you (rephrase|restate|clarify)",
-        r"what do you mean by",
-        r"i'm (a little|slightly)\s*confused",
-        r"could you (go|be) more (specific|precise)",
-        r"please (clarify|explain) (what|how|when|where|why)",
-        r"just to (clarify|confirm|make sure)",
-        r"so (just to be clear|to clarify)",
-    ]
+    def _stable_message_id(self, tool_call_id: str, formatted_message: str) -> str:
+        if tool_call_id:
+            return f"clarification:{tool_call_id}"
+        digest = sha256(formatted_message.encode("utf-8")).hexdigest()[:16]
+        return f"clarification:{digest}"
 
-    def __init__(self) -> None:
-        self._patterns = [re.compile(p, re.IGNORECASE) for p in self.CLARIFICATION_PATTERNS]
+    @staticmethod
+    def _is_chinese(text: str) -> bool:
+        return any("一" <= char <= "鿿" for char in text)
 
-    def _is_clarification_request(self, text: str) -> bool:
-        """Check if text contains clarification request patterns."""
-        return any(pattern.search(text) for pattern in self._patterns)
+    def _format_clarification_message(self, args: dict[str, Any]) -> str:
+        question = args.get("question", "")
+        clarification_type = args.get("clarification_type", "missing_info")
+        context = args.get("context")
+        options = args.get("options", [])
 
-    async def after_model(self, state: dict[str, Any], config: dict[str, Any]) -> dict[str, Any] | None:
-        """Detect clarification requests in model response."""
-        messages = state.get("messages", [])
-        if not messages:
-            return None
+        if isinstance(options, str):
+            try:
+                options = json.loads(options)
+            except (json.JSONDecodeError, TypeError):
+                options = [options]
+        if options is None:
+            options = []
+        elif not isinstance(options, list):
+            options = [options]
 
-        last_message = messages[-1]
-        if not hasattr(last_message, "content"):
-            return None
+        type_icons = {
+            "missing_info": "❇",  # ❓
+            "ambiguous_requirement": "\U0001f914",  # 🤔
+            "approach_choice": "\U0001f500",  # 🔀
+            "risk_confirmation": "⚠️",  # ⚠️
+            "suggestion": "\U0001f4a1",  # 💡
+        }
+        icon = type_icons.get(clarification_type, "❇")
 
-        content = last_message.content
-        if isinstance(content, list):
-            # Handle multimodal content
-            text = " ".join(
-                item.get("text", "") for item in content if isinstance(item, dict) and item.get("type") == "text"
-            )
+        message_parts: list[str] = []
+        if context:
+            message_parts.append(f"{icon} {context}")
+            message_parts.append(f"\n{question}")
         else:
-            text = str(content)
+            message_parts.append(f"{icon} {question}")
 
-        if self._is_clarification_request(text):
-            # Add metadata to track clarification requests
-            return {
-                "requires_clarification": True,
-                "last_message_was_clarification": True,
-            }
+        if options:
+            message_parts.append("")
+            for i, option in enumerate(options, 1):
+                message_parts.append(f"  {i}. {option}")
 
-        return {"last_message_was_clarification": False}
+        return "\n".join(message_parts)
+
+    def _handle_clarification(self, request: ToolCallRequest) -> Command[Any]:
+        args = request.tool_call.get("args", {})
+        question = args.get("question", "")
+        logger.info("Intercepted clarification request: %s", question)
+
+        formatted_message = self._format_clarification_message(args)
+        tool_call_id = request.tool_call.get("id", "")
+
+        tool_message = ToolMessage(
+            id=self._stable_message_id(tool_call_id, formatted_message),  # type: ignore[arg-type]
+            content=formatted_message,
+            tool_call_id=tool_call_id,
+            name="ask_clarification",
+        )
+
+        return Command(update={"messages": [tool_message]}, goto=END)
+
+    # -- sync / async wrap_tool_call (the key hook) --
+
+    def wrap_tool_call(
+        self,
+        request: ToolCallRequest,
+        handler: Callable[[ToolCallRequest], ToolMessage | Command[Any]],
+    ) -> ToolMessage | Command[Any]:
+        if request.tool_call.get("name") != "ask_clarification":
+            return handler(request)
+        return self._handle_clarification(request)
+
+    async def awrap_tool_call(
+        self,
+        request: ToolCallRequest,
+        handler: Callable[[ToolCallRequest], Awaitable[ToolMessage | Command[Any]]],
+    ) -> ToolMessage | Command[Any]:
+        if request.tool_call.get("name") != "ask_clarification":
+            return await handler(request)
+        return self._handle_clarification(request)

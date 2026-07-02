@@ -34,9 +34,9 @@ describe("ThreadList time groups", () => {
     expect(screen.getByText("昨天对话")).toBeInTheDocument();
   });
 
-  test("does not render 今天 group", () => {
+  test("renders 今天 group for today-created thread", () => {
     render(<ThreadList showHistory />);
-    expect(screen.queryByText("今天")).not.toBeInTheDocument();
+    expect(screen.getByText("今天")).toBeInTheDocument();
   });
 
   test("renders 30天内 group", () => {
@@ -51,13 +51,12 @@ describe("ThreadList time groups", () => {
     expect(screen.getByText("更早对话")).toBeInTheDocument();
   });
 
-  test("today's threads appear in 昨天 group", () => {
+  test("today's threads appear in 今天 group", () => {
     render(<ThreadList showHistory />);
     expect(screen.getByText("今天对话")).toBeInTheDocument();
-    // 今天对话 is in the 昨天 section (since 昨天 = past 24h)
-    const yesterdayHeader = screen.getByText("昨天");
-    const yesterdayGroup = yesterdayHeader.parentElement;
-    expect(yesterdayGroup).toContainElement(screen.getByText("今天对话"));
+    const todayHeader = screen.getByText("今天");
+    const todayGroup = todayHeader.parentElement;
+    expect(todayGroup).toContainElement(screen.getByText("今天对话"));
   });
 });
 

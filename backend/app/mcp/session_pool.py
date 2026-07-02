@@ -70,7 +70,7 @@ class MCPSessionPool:
         # ``Any`` here because the upstream type narrows on ``transport`` in
         # a way mypy can't follow. ``# noqa: E501`` keeps ruff quiet about
         # the unused-ignore mismatch with the system mypy hook.
-        cm = create_session(connection)  # type: ignore[arg-type]
+        cm = create_session(connection)
         try:
             session = await cm.__aenter__()
         except BaseException as exc:

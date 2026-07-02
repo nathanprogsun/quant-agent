@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import threading
 
+import pytest
+
 from app.tools.sync_tool_wrapper import make_sync_tool_wrapper
 
 

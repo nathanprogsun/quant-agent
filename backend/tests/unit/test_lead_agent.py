@@ -6,11 +6,12 @@ from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from langchain.agents.middleware import AgentMiddleware
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langgraph.runtime import Runtime
 
 from app.core.chat.agent.lead_agent import _make_agent_node, _should_use_tools, make_lead_agent
 from app.core.chat.agent.thread_state import ThreadState
-from app.core.chat.middlewares.base import AgentMiddleware
 
 # ── ThreadState ──────────────────────────────────────────────
 
@@ -72,15 +73,11 @@ class RecordingMiddleware(AgentMiddleware):
         self.before_model_calls: list[dict[str, Any]] = []
         self.after_model_calls: list[dict[str, Any]] = []
 
-    async def before_model(
-        self, state: dict[str, Any], config: dict[str, Any]
-    ) -> dict[str, Any] | None:
+    async def abefore_model(self, state: dict[str, Any], runtime: Runtime) -> dict[str, Any] | None:
         self.before_model_calls.append(state)
         return None
 
-    async def after_model(
-        self, state: dict[str, Any], config: dict[str, Any]
-    ) -> dict[str, Any] | None:
+    async def aafter_model(self, state: dict[str, Any], runtime: Runtime) -> dict[str, Any] | None:
         self.after_model_calls.append(state)
         return None
 

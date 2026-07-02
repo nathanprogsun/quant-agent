@@ -4,11 +4,10 @@ End-to-end check that the three pieces (catalog, tool_search tool,
 deferred filter middleware) cooperate through a real LangGraph graph
 state update.
 """
+
 from __future__ import annotations
 
-import asyncio
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from langchain_core.messages import ToolMessage

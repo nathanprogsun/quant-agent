@@ -51,7 +51,7 @@ def _load_summaries_map(path: Path = JQ_STRATEGY_SUMMARIES_PATH) -> dict[int, di
     return out
 
 
-class JqStrategyJsonReader(BaseReader):  # type: ignore[misc]  # BaseReader typed as Any (stub missing)
+class JqStrategyJsonReader(BaseReader):
     """Reader for jq_strategy pilot.json / posts.json."""
 
     def __init__(self, raw_dir: Path = JQ_STRATEGY_RAW_DIR) -> None:
@@ -98,8 +98,8 @@ class JqStrategyJsonReader(BaseReader):  # type: ignore[misc]  # BaseReader type
         return strategy_chunks_to_documents(deduped)
 
 
-class JqStrategyChunkToNode(TransformComponent):  # type: ignore[misc]  # BaseReader typed as Any (stub missing)
-    def __call__(self, nodes: Sequence[Document], **kwargs: Any) -> list[TextNode]:
+class JqStrategyChunkToNode(TransformComponent):
+    def __call__(self, nodes: Sequence[Document], **kwargs: Any) -> list[TextNode]:  # type: ignore[override]
         return [
             TextNode(
                 id_=doc.doc_id or doc.id_,
@@ -201,10 +201,10 @@ class JqStrategyStore:
             return
         documents = strategy_chunks_to_documents(chunks)
         pipeline = build_jq_strategy_ingestion_pipeline(
-            vector_store=self.index._storage_context.vector_store,
+            vector_store=self.index._storage_context.vector_store,  # type: ignore[arg-type]
         )
         nodes = pipeline.run(documents=documents)
-        self.persist_bm25(nodes, chunks)
+        self.persist_bm25(nodes, chunks)  # type: ignore[arg-type]
         logger.info("Upserted %d jq_strategy chunks", len(chunks))
 
     def write_manifest(
@@ -237,7 +237,7 @@ class JqStrategyStore:
             filters.append(MetadataFilter(key="layer", value=layer))
         retriever = self.index.as_retriever(
             similarity_top_k=1,
-            filters=MetadataFilters(filters=filters, condition=FilterCondition.AND),
+            filters=MetadataFilters(filters=filters, condition=FilterCondition.AND),  # type: ignore[arg-type]
         )
         hits = retriever.retrieve(f"post_id:{post_id}")
         if not hits:
@@ -245,6 +245,6 @@ class JqStrategyStore:
         node = hits[0].node
         return {
             "id": node.node_id,
-            "document": node.text,
+            "document": node.text,  # type: ignore[attr-defined]
             "metadata": dict(node.metadata),
         }

@@ -73,6 +73,11 @@ export interface ThreadStreamOptions {
   onFinish?: (state: { values: AgentThreadState }) => void;
 }
 
+export interface StoppedSnapshot {
+  messages: Message[];
+  capturedAt: number;
+}
+
 // ── useThreadStream Hook ────────────────────────────────────────────────────
 
 export function useThreadStream({
@@ -229,8 +234,27 @@ export function useThreadStream({
     [hasSdkQueue, queuePaused, submitHumanMessage, thread.isLoading],
   );
 
-  const stopStream = useCallback(() => {
-    return thread.stop();
+  const lastMessagesSnapshotRef = useRef<StoppedSnapshot | null>(null);
+  const [lastMessagesSnapshot, setLastMessagesSnapshot] =
+    useState<StoppedSnapshot | null>(null);
+
+  // Keep a snapshot of the latest non-empty messages so we can fall back
+  // to them if `thread.stop()` (or any other code path) clears the streaming
+  // state and the history endpoint hasn't caught up yet.
+  useEffect(() => {
+    if (thread.messages.length > 0) {
+      const snapshot = {
+        messages: thread.messages,
+        capturedAt: Date.now(),
+      };
+      lastMessagesSnapshotRef.current = snapshot;
+      setLastMessagesSnapshot(snapshot);
+    }
+  }, [thread.messages]);
+
+  const stopStream = useCallback(async () => {
+    void lastMessagesSnapshotRef.current;
+    await thread.stop();
   }, [thread]);
 
   const removeQueuedMessage = useCallback(
@@ -327,11 +351,19 @@ export function useThreadStream({
     optimisticMessages,
   );
 
-  const messages = mergeMessages(
+  // If both the SDK stream and the history endpoint are empty
+  // (e.g. right after `stopStream` before the checkpointer finishes
+  // saving), fall back to a snapshot we captured during the latest
+  // non-empty stream so the user keeps seeing what was generated.
+  const liveMessages = mergeMessages(
     historyMessages,
     thread.messages,
     pendingOptimistic,
   );
+  const messages =
+    liveMessages.length > 0
+      ? liveMessages
+      : lastMessagesSnapshot?.messages ?? liveMessages;
 
   return {
     ...thread,

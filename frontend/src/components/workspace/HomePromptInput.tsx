@@ -7,7 +7,7 @@ import { useSkills } from "@/core/skills";
 import { applySkillSuggestion, getMatchingSkillSuggestions } from "@/core/skills/suggestions";
 
 interface HomePromptInputProps {
-  onSend: (content: string) => void;
+  onSend: (content: string) => boolean;
   onStop?: () => void;
   disabled?: boolean;
   isStreaming?: boolean;
@@ -57,10 +57,12 @@ export function HomePromptInput({
   const handleSubmit = useCallback(() => {
     const trimmed = input.trim();
     if (!trimmed || disabled) return;
-    onSend(trimmed);
-    setInput("");
-    if (textareaRef.current) {
-      textareaRef.current.style.height = "auto";
+    const sent = onSend(trimmed);
+    if (sent) {
+      setInput("");
+      if (textareaRef.current) {
+        textareaRef.current.style.height = "auto";
+      }
     }
   }, [disabled, input, onSend]);
 

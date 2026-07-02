@@ -16,16 +16,17 @@ Adapts to quant-agent's custom ``AgentMiddleware`` ABC (deer-flow uses
 ``langchain.agents.middleware.AgentMiddleware`` with ``ModelRequest`` /
 ``ToolCallRequest``; here we read ``ModelCallRequest`` shapes directly).
 """
+
 from __future__ import annotations
 
 import logging
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+from langchain.agents.middleware import AgentMiddleware
 from langchain_core.messages import ToolMessage
 
 from app.core.chat.agent.model_call import ModelCallRequest
-from app.core.chat.middlewares.base import AgentMiddleware
 
 logger = logging.getLogger(__name__)
 
@@ -119,14 +120,14 @@ class DeferredToolFilterMiddleware(AgentMiddleware):
 
     # ── wrap hooks (sync + async) ───────────────────────────────
 
-    async def awrap_model_call(
+    async def awrap_model_call(  # type: ignore[override]
         self,
         request: ModelCallRequest,
         handler: Callable[[ModelCallRequest], Awaitable[Any]],
     ) -> Any:
         return await handler(self._filter_tools(request))
 
-    def wrap_model_call(
+    def wrap_model_call(  # type: ignore[override]
         self,
         request: ModelCallRequest,
         handler: Callable[[ModelCallRequest], Any],

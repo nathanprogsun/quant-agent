@@ -33,6 +33,7 @@ wheels/
 .cursor/
 .idea/
 .vscode/
+.claude/
 *.swp
 *.swo
 
@@ -53,9 +54,13 @@ test-results/
 docs/
 .gstack/
 
+# Playwright MCP logs
+.playwright-mcp/
+
 # Test / type-check caches
 .pytest_cache/
 
 # continuous-claude runtime artifacts
 continuous-run-*.log
 continuous-run-*.pid
+opencode.json

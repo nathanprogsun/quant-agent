@@ -7,11 +7,13 @@ when len(messages) >= max_messages.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import Any
 from uuid import uuid4
 
 import pytest
 from langchain_core.messages import HumanMessage
+from langgraph.runtime import Runtime
 
 from app.config.memory_config import MemoryConfig
 from app.core.chat.memory.queue import (
@@ -55,10 +57,10 @@ async def test_after_model_fires_when_threshold_met(
     mw = MemoryMiddleware(max_messages=3)
     messages = [HumanMessage(content=str(i)) for i in range(3)]
     state = {"messages": messages}
-    config = {"configurable": {"user_id": uuid4(), "thread_id": "t1"}}
+    runtime = Runtime(context=SimpleNamespace(thread_id="t1", user_id=uuid4()))
 
-    await mw.before_model(state, config)
-    result = await mw.after_model(state, config)
+    await mw.abefore_model(state, runtime)
+    result = await mw.aafter_model(state, runtime)
 
     assert result is None  # no state patch, no message mutation
     # Flush immediately so the drain runs synchronously.
@@ -74,9 +76,9 @@ async def test_after_model_no_fire_under_threshold(
     mw = MemoryMiddleware(max_messages=50)
     messages = [HumanMessage(content="hi")]
     state = {"messages": messages}
-    config = {"configurable": {"user_id": uuid4(), "thread_id": "t1"}}
+    runtime = Runtime(context=SimpleNamespace(thread_id="t1", user_id=uuid4()))
 
-    await mw.after_model(state, config)
+    await mw.aafter_model(state, runtime)
     recording_queue.flush()
     assert len(recording_queue._updater.calls) == 0
 
@@ -89,10 +91,10 @@ async def test_after_model_does_not_mutate_messages(
     messages = [HumanMessage(content="a"), HumanMessage(content="b")]
     original_ids = [m.id for m in messages]
     state = {"messages": messages}
-    config = {"configurable": {"user_id": uuid4(), "thread_id": "t1"}}
+    runtime = Runtime(context=SimpleNamespace(thread_id="t1", user_id=uuid4()))
 
-    await mw.before_model(state, config)
-    await mw.after_model(state, config)
+    await mw.abefore_model(state, runtime)
+    await mw.aafter_model(state, runtime)
 
     assert [m.id for m in messages] == original_ids
     assert len(messages) == 2
@@ -102,5 +104,5 @@ async def test_after_model_does_not_mutate_messages(
 async def test_before_model_is_noop(recording_queue: MemoryUpdateQueue) -> None:
     mw = MemoryMiddleware(max_messages=3)
     state = {"messages": [HumanMessage(content="hi")]}
-    out = await mw.before_model(state, {"configurable": {"user_id": uuid4()}})
+    out = await mw.abefore_model(state, {"configurable": {"user_id": uuid4()}})
     assert out is None
