@@ -20,17 +20,10 @@ class _IdentityMW(AgentMiddleware):
 
 
 @pytest.mark.asyncio
-async def test_default_awrap_model_call_invokes_handler_unchanged() -> None:
+async def test_default_awrap_model_call_not_implemented() -> None:
     mw = _IdentityMW()
-    seen: dict[str, Any] = {}
-
-    async def handler(request: Any) -> Any:
-        seen["called"] = True
-        return "ok"
-
-    result = await mw.awrap_model_call(request=None, handler=handler)
-    assert result == "ok"
-    assert seen["called"] is True
+    with pytest.raises(NotImplementedError):
+        await mw.awrap_model_call(request=None, handler=AsyncMock())
 
 
 @pytest.mark.asyncio
@@ -46,18 +39,10 @@ async def test_awrap_model_call_can_short_circuit() -> None:
     handler.assert_not_awaited()
 
 
-def test_wrap_model_call_sync_default_exists_and_is_noop() -> None:
+def test_wrap_model_call_sync_not_implemented() -> None:
     mw = _IdentityMW()
-    called = {"v": False}
-
-    def handler(request: Any) -> Any:
-        called["v"] = True
-        return "sync-ok"
-
-    # Sync hook must exist and delegate by default
-    result = mw.wrap_model_call(request=None, handler=handler)
-    assert result == "sync-ok"
-    assert called["v"] is True
+    with pytest.raises(NotImplementedError):
+        mw.wrap_model_call(request=None, handler=lambda r: r)
 
 
 @pytest.mark.asyncio
@@ -77,27 +62,13 @@ async def test_awrap_model_call_subclass_override() -> None:
 
 
 @pytest.mark.asyncio
-async def test_default_awrap_tool_call_invokes_handler_unchanged() -> None:
+async def test_default_awrap_tool_call_not_implemented() -> None:
     mw = _IdentityMW()
-    seen: dict[str, Any] = {}
-
-    async def handler(request: Any) -> Any:
-        seen["called"] = True
-        return "tool-ok"
-
-    result = await mw.awrap_tool_call(request=None, handler=handler)
-    assert result == "tool-ok"
-    assert seen["called"] is True
+    with pytest.raises(NotImplementedError):
+        await mw.awrap_tool_call(request=None, handler=AsyncMock())
 
 
-def test_wrap_tool_call_sync_default_exists_and_is_noop() -> None:
+def test_wrap_tool_call_sync_not_implemented() -> None:
     mw = _IdentityMW()
-    called = {"v": False}
-
-    def handler(request: Any) -> Any:
-        called["v"] = True
-        return "sync-tool-ok"
-
-    result = mw.wrap_tool_call(request=None, handler=handler)
-    assert result == "sync-tool-ok"
-    assert called["v"] is True
+    with pytest.raises(NotImplementedError):
+        mw.wrap_tool_call(request=None, handler=lambda r: r)

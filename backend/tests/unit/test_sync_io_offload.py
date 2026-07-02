@@ -129,11 +129,7 @@ async def test_make_lead_agent_async_prefetches_mcp_without_sync_wait(
     async def fake_mcp_async() -> list:
         return mcp_tools
 
-    async def fake_pool(func, *args, **kwargs):
-        return func(*args, **kwargs)
-
     monkeypatch.setattr("app.mcp.cache.get_cached_mcp_tools_async", fake_mcp_async)
-    monkeypatch.setattr(la_mod, "run_in_pool", fake_pool)
 
     with patch.object(la_mod, "make_lead_agent", return_value=sentinel_graph) as mock_build:
         graph = await la_mod.make_lead_agent_async({"configurable": {}})

@@ -235,27 +235,26 @@ export function useThreadStream({
   );
 
   const lastMessagesSnapshotRef = useRef<StoppedSnapshot | null>(null);
+  const [lastMessagesSnapshot, setLastMessagesSnapshot] =
+    useState<StoppedSnapshot | null>(null);
 
   // Keep a snapshot of the latest non-empty messages so we can fall back
   // to them if `thread.stop()` (or any other code path) clears the streaming
   // state and the history endpoint hasn't caught up yet.
   useEffect(() => {
     if (thread.messages.length > 0) {
-      lastMessagesSnapshotRef.current = {
+      const snapshot = {
         messages: thread.messages,
         capturedAt: Date.now(),
       };
+      lastMessagesSnapshotRef.current = snapshot;
+      setLastMessagesSnapshot(snapshot);
     }
   }, [thread.messages]);
 
   const stopStream = useCallback(async () => {
-    const snapshot = lastMessagesSnapshotRef.current;
-    try {
-      await thread.stop();
-    } finally {
-      // No-op: snapshot is read in `messages` derivation below.
-      void snapshot;
-    }
+    void lastMessagesSnapshotRef.current;
+    await thread.stop();
   }, [thread]);
 
   const removeQueuedMessage = useCallback(
@@ -364,7 +363,7 @@ export function useThreadStream({
   const messages =
     liveMessages.length > 0
       ? liveMessages
-      : lastMessagesSnapshotRef.current?.messages ?? liveMessages;
+      : lastMessagesSnapshot?.messages ?? liveMessages;
 
   return {
     ...thread,
