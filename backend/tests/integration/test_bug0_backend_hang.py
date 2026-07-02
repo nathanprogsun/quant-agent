@@ -14,6 +14,7 @@ Feedback loop:
 from __future__ import annotations
 
 import asyncio
+import os
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
@@ -21,6 +22,11 @@ import pytest
 from langchain_core.tools import StructuredTool
 
 from tests.integration.client import APITestClient
+
+requires_openai = pytest.mark.skipif(
+    not os.environ.get("OPENAI_API_KEY"),
+    reason="OPENAI_API_KEY not set",
+)
 
 
 def _create_mock_mcp_tool(name: str, delay: float = 0.5) -> StructuredTool:
@@ -39,6 +45,7 @@ def _create_mock_mcp_tool(name: str, delay: float = 0.5) -> StructuredTool:
     )
 
 
+@requires_openai
 @pytest.mark.asyncio
 async def test_backend_does_not_hang_after_long_stream_with_mcp_tools(
     authed_api_client: APITestClient,
@@ -110,6 +117,7 @@ async def test_backend_does_not_hang_after_long_stream_with_mcp_tools(
                 )
 
 
+@requires_openai
 @pytest.mark.asyncio
 async def test_backend_responds_after_multiple_concurrent_streams(
     authed_api_client: APITestClient,
@@ -158,6 +166,7 @@ async def test_backend_responds_after_multiple_concurrent_streams(
         pytest.fail("Backend hung after concurrent streams")
 
 
+@requires_openai
 @pytest.mark.asyncio
 async def test_stream_cleanup_does_not_block_event_loop(
     authed_api_client: APITestClient,
