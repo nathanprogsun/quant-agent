@@ -14,6 +14,8 @@ from langchain_core.callbacks import CallbackManagerForToolRun
 from langchain_core.tools import BaseTool, ToolException
 from pydantic import BaseModel, Field
 
+from app.util.asyncio_util.adapter import run_in_pool
+
 _DEFAULT_FILE_PATH = "SKILL.md"
 
 
@@ -59,7 +61,7 @@ class ReadFileTool(BaseTool):
         run_manager: CallbackManagerForToolRun | None = None,
     ) -> str:
         """Read a file from a whitelisted container asynchronously."""
-        return self._read(container_path, file_path)
+        return await run_in_pool(self._read, None, container_path, file_path)
 
     # ── core ───────────────────────────────────────────────────
 

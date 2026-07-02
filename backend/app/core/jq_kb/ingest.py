@@ -76,7 +76,7 @@ async def ingest_jq_api(*, reset: bool = False) -> int:
     logger.info("jq_api: embedding %d documents", len(documents))
     vector_store = create_chroma_vector_store()
     pipeline = build_jq_api_ingestion_pipeline(vector_store=vector_store)
-    nodes: list[TextNode] = list(await pipeline.arun(documents=documents, num_workers=1))
+    nodes: list[TextNode] = list(await pipeline.arun(documents=documents, num_workers=1))  # type: ignore[arg-type]
 
     store = JqApiStore()
     store.persist_bm25(nodes, _jq_api_chunks_from_documents(documents))
@@ -100,13 +100,15 @@ async def ingest_jq_dict(*, reset: bool = False) -> int:
 
     reader = JqDictJsonReader()
     documents = _dedupe_documents(reader.load_data())
-    logger.info("jq_dict: embedding %d documents in batches of %d", len(documents), CHROMA_INGEST_BATCH_SIZE)
+    logger.info(
+        "jq_dict: embedding %d documents in batches of %d", len(documents), CHROMA_INGEST_BATCH_SIZE
+    )
     vector_store = create_jq_dict_chroma_vector_store()
     pipeline = build_jq_dict_ingestion_pipeline(vector_store=vector_store)
     nodes: list[TextNode] = []
     for start in range(0, len(documents), CHROMA_INGEST_BATCH_SIZE):
         batch = documents[start : start + CHROMA_INGEST_BATCH_SIZE]
-        nodes.extend(pipeline.run(documents=batch))
+        nodes.extend(pipeline.run(documents=batch))  # type: ignore[arg-type]
         logger.info(
             "jq_dict batch %d-%d / %d documents → %d nodes so far",
             start + 1,
@@ -137,13 +139,17 @@ async def ingest_jq_strategy(*, reset: bool = False) -> int:
 
     reader = JqStrategyJsonReader()
     documents = reader.load_data()
-    logger.info("jq_strategy: embedding %d documents in batches of %d", len(documents), CHROMA_INGEST_BATCH_SIZE)
+    logger.info(
+        "jq_strategy: embedding %d documents in batches of %d",
+        len(documents),
+        CHROMA_INGEST_BATCH_SIZE,
+    )
     vector_store = create_jq_strategy_chroma_vector_store()
     pipeline = build_jq_strategy_ingestion_pipeline(vector_store=vector_store)
     nodes: list[TextNode] = []
     for start in range(0, len(documents), CHROMA_INGEST_BATCH_SIZE):
         batch = documents[start : start + CHROMA_INGEST_BATCH_SIZE]
-        nodes.extend(pipeline.run(documents=batch))
+        nodes.extend(pipeline.run(documents=batch))  # type: ignore[arg-type]
         logger.info(
             "jq_strategy batch %d-%d / %d documents → %d nodes so far",
             start + 1,

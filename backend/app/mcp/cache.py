@@ -16,6 +16,8 @@ import os
 
 from langchain_core.tools import BaseTool
 
+from app.util.asyncio_util.adapter import run_in_pool
+
 logger = logging.getLogger(__name__)
 
 _mcp_tools_cache: list[BaseTool] | None = None
@@ -119,6 +121,11 @@ def get_cached_mcp_tools() -> list[BaseTool]:
         return []
 
     return _mcp_tools_cache or []
+
+
+async def get_cached_mcp_tools_async() -> list[BaseTool]:
+    """Return the cached MCP tool list via thread pool to avoid blocking."""
+    return await run_in_pool(get_cached_mcp_tools)
 
 
 def reset_mcp_tools_cache() -> None:

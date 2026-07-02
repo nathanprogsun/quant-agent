@@ -5,19 +5,17 @@ Adapts to quant-agent's custom ``AgentMiddleware`` ABC: instead of
 ``ModelRequest.override(messages=...)`` we mutate ``request.messages``
 in place.
 """
+
 from __future__ import annotations
 
-from collections import defaultdict
+import asyncio
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock
 
-import pytest
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from app.core.chat.middlewares.dangling_tool_call_middleware import (
     DanglingToolCallMiddleware,
 )
-
 
 # ── fixtures ──────────────────────────────────────────────────────
 
@@ -238,7 +236,9 @@ class TestBuildPatchedMessagesPatching:
     def test_reused_tool_call_ids_across_ai_turns_keep_their_own_tool_results(self) -> None:
         mw = DanglingToolCallMiddleware()
         msgs = [
-            HumanMessage(content="summary", name="summary", additional_kwargs={"hide_from_ui": True}),
+            HumanMessage(
+                content="summary", name="summary", additional_kwargs={"hide_from_ui": True}
+            ),
             _ai_with_tool_calls(
                 [
                     _tc("web_search", "web_search:11"),
@@ -299,7 +299,9 @@ class TestBuildPatchedMessagesPatching:
         assert patched[3].tool_call_id == "web_search:11"
         assert patched[3].status == "error"
 
-    def test_tool_results_are_grouped_with_their_own_ai_turn_across_multiple_ai_messages(self) -> None:
+    def test_tool_results_are_grouped_with_their_own_ai_turn_across_multiple_ai_messages(
+        self,
+    ) -> None:
         mw = DanglingToolCallMiddleware()
         msgs = [
             _ai_with_tool_calls([_tc("bash", "call_1")]),
@@ -401,7 +403,7 @@ class TestBuildPatchedMessagesPatching:
 
 class TestWrapModelCall:
     def test_no_patch_passthrough(self) -> None:
-        from app.core.chat.agent.model_call import ModelCallRequest
+        from app.core.chat.agent.model_call import ModelCallRequest  # noqa: PLC0415
 
         mw = DanglingToolCallMiddleware()
         request = ModelCallRequest(messages=[AIMessage(content="hello")], tools=None)
@@ -411,14 +413,12 @@ class TestWrapModelCall:
             seen["called_with_messages"] = req.messages
             return "response"
 
-        import asyncio
-
         result = asyncio.run(mw.awrap_model_call(request, handler))
         assert result == "response"
         assert seen["called_with_messages"] is request.messages
 
     def test_patched_request_forwarded(self) -> None:
-        from app.core.chat.agent.model_call import ModelCallRequest
+        from app.core.chat.agent.model_call import ModelCallRequest  # noqa: PLC0415
 
         mw = DanglingToolCallMiddleware()
         request = ModelCallRequest(
@@ -431,8 +431,6 @@ class TestWrapModelCall:
             seen["messages"] = req.messages
             return "response"
 
-        import asyncio
-
         result = asyncio.run(mw.awrap_model_call(request, handler))
         assert result == "response"
         assert len(seen["messages"]) == 2
@@ -443,7 +441,7 @@ class TestWrapModelCall:
         assert request.messages is seen["messages"]
 
     def test_wrap_model_call_sync_passthrough(self) -> None:
-        from app.core.chat.agent.model_call import ModelCallRequest
+        from app.core.chat.agent.model_call import ModelCallRequest  # noqa: PLC0415
 
         mw = DanglingToolCallMiddleware()
         request = ModelCallRequest(messages=[AIMessage(content="hello")], tools=None)
@@ -595,7 +593,7 @@ class TestIdempotency:
 
 def test_default_no_state_required() -> None:
     """The middleware does NOT require state — purely inspects ``request.messages``."""
-    from app.core.chat.agent.model_call import ModelCallRequest
+    from app.core.chat.agent.model_call import ModelCallRequest  # noqa: PLC0415
 
     mw = DanglingToolCallMiddleware()
     request = ModelCallRequest(messages=[AIMessage(content="hi")], tools=None)
@@ -604,8 +602,6 @@ def test_default_no_state_required() -> None:
     async def handler(req):
         seen["called"] = True
         return "ok"
-
-    import asyncio
 
     asyncio.run(mw.awrap_model_call(request, handler))
     assert seen["called"] is True
@@ -631,7 +627,7 @@ def test_message_tool_calls_handles_non_dict_entries_gracefully() -> None:
 
 
 def test_max_recovery_error_length_constant() -> None:
-    from app.core.chat.middlewares.dangling_tool_call_middleware import (
+    from app.core.chat.middlewares.dangling_tool_call_middleware import (  # noqa: PLC0415
         _MAX_RECOVERY_ERROR_DETAIL_LEN,
     )
 

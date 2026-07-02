@@ -63,6 +63,7 @@ from app.core.jq_kb.llm import get_llm
 from app.core.jq_kb.schemas import JqApiEnvConstraint
 from app.core.jq_kb.storage import JqApiStore
 from app.core.jq_kb.strategy_storage import JqStrategyStore
+from app.util.asyncio_util.adapter import run_in_pool
 
 logger = logging.getLogger(__name__)
 
@@ -158,7 +159,7 @@ class JqApiRetriever:
         Uses Chroma metadata filter on ``function_name`` field.
         Equivalent to demo's ``query_with_metadata_filter`` pattern.
         """
-        hit = self.store.get_by_function_name(function_name)
+        hit = await run_in_pool(self.store.get_by_function_name, None, function_name)
         if hit is None:
             return None
         return RetrievedChunk(
@@ -258,7 +259,7 @@ class JqApiRetriever:
             retrievers=retrievers,
             llm=self._get_llm(),
             # RRF: rank-based fusion; safe when retriever score scales differ.
-            mode="reciprocal_rerank",
+            mode="reciprocal_rerank",  # type: ignore[arg-type]
             retriever_weights=weights,
             num_queries=self.num_queries,
             use_async=True,
@@ -341,9 +342,7 @@ class JqApiRetriever:
 
 
 def _summarize_hits(chunks: list[RetrievedChunk]) -> str:
-    return ", ".join(
-        f"{c.metadata.get('function_name', c.chunk_id)}:{c.score:.3f}" for c in chunks
-    )
+    return ", ".join(f"{c.metadata.get('function_name', c.chunk_id)}:{c.score:.3f}" for c in chunks)
 
 
 def _node_to_chunk(node_with_score: Any) -> RetrievedChunk:
@@ -490,7 +489,7 @@ class JqDictRetriever:
         return QueryFusionRetriever(
             retrievers=retrievers,
             llm=self._get_llm(),
-            mode="reciprocal_rerank",
+            mode="reciprocal_rerank",  # type: ignore[arg-type]
             retriever_weights=weights,
             num_queries=self.num_queries,
             use_async=True,
@@ -507,9 +506,7 @@ class JqDictRetriever:
 
 
 def _summarize_dict_hits(chunks: list[RetrievedChunk]) -> str:
-    return ", ".join(
-        f"{c.metadata.get('code', c.chunk_id)}:{c.score:.3f}" for c in chunks
-    )
+    return ", ".join(f"{c.metadata.get('code', c.chunk_id)}:{c.score:.3f}" for c in chunks)
 
 
 def create_default_jq_dict_retriever() -> JqDictRetriever:
@@ -618,7 +615,7 @@ class JqStrategyRetriever:
             filters.append(MetadataFilter(key="strategy_type", value=strategy_type))
         if not filters:
             return None
-        return MetadataFilters(filters=filters, condition=FilterCondition.AND)
+        return MetadataFilters(filters=filters, condition=FilterCondition.AND)  # type: ignore[arg-type]
 
     def _build_fusion_retriever(
         self,
@@ -643,7 +640,7 @@ class JqStrategyRetriever:
         return QueryFusionRetriever(
             retrievers=retrievers,
             llm=self._get_strategy_llm(),
-            mode="reciprocal_rerank",
+            mode="reciprocal_rerank",  # type: ignore[arg-type]
             retriever_weights=weights,
             num_queries=self.num_queries,
             use_async=True,
@@ -660,9 +657,7 @@ class JqStrategyRetriever:
 
 
 def _summarize_strategy_hits(chunks: list[RetrievedChunk]) -> str:
-    return ", ".join(
-        f"{c.metadata.get('title', c.chunk_id)}:{c.score:.3f}" for c in chunks
-    )
+    return ", ".join(f"{c.metadata.get('title', c.chunk_id)}:{c.score:.3f}" for c in chunks)
 
 
 def create_default_jq_strategy_retriever() -> JqStrategyRetriever:

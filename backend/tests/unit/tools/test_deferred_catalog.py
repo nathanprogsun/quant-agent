@@ -1,12 +1,11 @@
 """Tests for the deferred-tool catalog (``DeferredToolCatalog.search``)."""
-from __future__ import annotations
 
-from typing import Any
+from __future__ import annotations
 
 from langchain_core.tools import BaseTool, Tool
 
-from app.tools.mcp_metadata import tag_mcp_tool
 from app.tools.builtins.tool_search import MAX_RESULTS, DeferredToolCatalog
+from app.tools.mcp_metadata import tag_mcp_tool
 
 
 def _make_tool(name: str, description: str = "") -> BaseTool:

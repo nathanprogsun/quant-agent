@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from hashlib import sha256
 from typing import Any
 
@@ -54,7 +54,7 @@ class ClarificationMiddleware(AgentMiddleware):
     def _is_chinese(text: str) -> bool:
         return any("一" <= char <= "鿿" for char in text)
 
-    def _format_clarification_message(self, args: dict) -> str:
+    def _format_clarification_message(self, args: dict[str, Any]) -> str:
         question = args.get("question", "")
         clarification_type = args.get("clarification_type", "missing_info")
         context = args.get("context")
@@ -71,11 +71,11 @@ class ClarificationMiddleware(AgentMiddleware):
             options = [options]
 
         type_icons = {
-            "missing_info": "❇",       # ❓
+            "missing_info": "❇",  # ❓
             "ambiguous_requirement": "\U0001f914",  # 🤔
-            "approach_choice": "\U0001f500",        # 🔀
-            "risk_confirmation": "⚠️",    # ⚠️
-            "suggestion": "\U0001f4a1",             # 💡
+            "approach_choice": "\U0001f500",  # 🔀
+            "risk_confirmation": "⚠️",  # ⚠️
+            "suggestion": "\U0001f4a1",  # 💡
         }
         icon = type_icons.get(clarification_type, "❇")
 
@@ -93,7 +93,7 @@ class ClarificationMiddleware(AgentMiddleware):
 
         return "\n".join(message_parts)
 
-    def _handle_clarification(self, request: ToolCallRequest) -> Command:
+    def _handle_clarification(self, request: ToolCallRequest) -> Command[Any]:
         args = request.tool_call.get("args", {})
         question = args.get("question", "")
         logger.info("Intercepted clarification request: %s", question)
@@ -102,7 +102,7 @@ class ClarificationMiddleware(AgentMiddleware):
         tool_call_id = request.tool_call.get("id", "")
 
         tool_message = ToolMessage(
-            id=self._stable_message_id(tool_call_id, formatted_message),
+            id=self._stable_message_id(tool_call_id, formatted_message),  # type: ignore[arg-type]
             content=formatted_message,
             tool_call_id=tool_call_id,
             name="ask_clarification",
@@ -115,8 +115,8 @@ class ClarificationMiddleware(AgentMiddleware):
     def wrap_tool_call(
         self,
         request: ToolCallRequest,
-        handler: Callable[[ToolCallRequest], ToolMessage | Command],
-    ) -> ToolMessage | Command:
+        handler: Callable[[ToolCallRequest], ToolMessage | Command[Any]],
+    ) -> ToolMessage | Command[Any]:
         if request.tool_call.get("name") != "ask_clarification":
             return handler(request)
         return self._handle_clarification(request)
@@ -124,8 +124,8 @@ class ClarificationMiddleware(AgentMiddleware):
     async def awrap_tool_call(
         self,
         request: ToolCallRequest,
-        handler: Callable[[ToolCallRequest], ToolMessage],
-    ) -> ToolMessage | Command:
+        handler: Callable[[ToolCallRequest], Awaitable[ToolMessage | Command[Any]]],
+    ) -> ToolMessage | Command[Any]:
         if request.tool_call.get("name") != "ask_clarification":
             return await handler(request)
         return self._handle_clarification(request)

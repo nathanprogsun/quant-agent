@@ -60,7 +60,7 @@ class SubagentLimitMiddleware(AgentMiddleware):
         # mutated by the heuristic path.
         self._active_subagents = 0
 
-    async def abefore_model(self, state: dict[str, Any], runtime: Runtime) -> dict[str, Any] | None:
+    async def abefore_model(self, state: dict[str, Any], runtime: Runtime) -> dict[str, Any] | None:  # type: ignore[override]
         """Before model — check the cache size against the concurrency limit."""
         active = _active_subagent_count()
         self._active_subagents = active

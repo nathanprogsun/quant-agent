@@ -129,7 +129,7 @@ class Settings(BaseSettings):
     )
 
     # ==================== StreamBridge ====================
-    stream_bridge_queue_maxsize: int = 256
+    stream_bridge_queue_maxsize: int = 4096
 
     # ==================== Memory evolution (P4) ====================
     memory: MemoryConfig = Field(default_factory=MemoryConfig)

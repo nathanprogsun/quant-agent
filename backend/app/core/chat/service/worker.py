@@ -18,8 +18,9 @@ from app.core.chat.service.types import GraphInput
 
 logger = logging.getLogger(__name__)
 
-STREAM_CLEANUP_DELAY_SECONDS = 60
+STREAM_CLEANUP_DELAY_SECONDS = 1
 RUN_CLEANUP_DELAY_SECONDS = 300
+RUN_AGENT_TIMEOUT_SECONDS = 600
 
 
 async def run_agent(
@@ -45,6 +46,7 @@ async def run_agent(
     """
     run_id = record.run_id
     thread_id = record.thread_id
+    logger.info("run_agent started for run %s (thread %s)", run_id, thread_id)
 
     requested_modes = stream_modes
     langgraph_modes = resolve_langgraph_stream_modes(requested_modes)
@@ -66,19 +68,22 @@ async def run_agent(
             },
         )
 
-        # 3. Stream execution
-        async for chunk in agent.astream(
-            payload,
-            config=config,
-            stream_mode=langgraph_modes,
-        ):
-            # Check abort
-            if record.abort_event.is_set():
-                logger.info("Run %s aborted", run_id)
-                break
-            mode, data = _unpack_stream_item(chunk, langgraph_modes)
-            event_name, serialized = _prepare_publish_payload(mode, data)
-            await bridge.publish(run_id, event_name, serialized)
+        # 3. Stream execution with timeout
+        async def _stream_chunks() -> None:
+            async for chunk in agent.astream(
+                payload,
+                config=config,
+                stream_mode=langgraph_modes,
+            ):
+                # Check abort
+                if record.abort_event.is_set():
+                    logger.info("Run %s aborted", run_id)
+                    break
+                mode, data = _unpack_stream_item(chunk, langgraph_modes)
+                event_name, serialized = _prepare_publish_payload(mode, data)
+                await bridge.publish(run_id, event_name, serialized)
+
+        await asyncio.wait_for(_stream_chunks(), timeout=RUN_AGENT_TIMEOUT_SECONDS)
 
         # 4. Completion
         if record.abort_event.is_set():
@@ -94,12 +99,31 @@ async def run_agent(
             )
 
     except asyncio.CancelledError:
+        logger.info("run_agent cancelled for run %s", run_id)
+        # Force-save LangGraph checkpoint so the frontend can retrieve
+        # partial messages after re-fetch. Without this, the streaming
+        # content is lost when the user clicks "stop".
+        try:
+            current_state = await asyncio.wait_for(
+                agent.aget_state(config),  # type: ignore[attr-defined]
+                timeout=5.0,
+            )
+            if current_state and current_state.values:
+                await asyncio.wait_for(
+                    agent.aupdate_state(config, current_state.values),  # type: ignore[attr-defined]
+                    timeout=5.0,
+                )
+        except (TimeoutError, asyncio.CancelledError):
+            logger.warning("Checkpoint save timed out for run %s", run_id)
+        except Exception:
+            pass
         await run_manager.set_status(run_id, RunStatus.INTERRUPTED)
     except Exception as e:
         logger.exception("Run %s failed", run_id)
         await run_manager.set_status(run_id, RunStatus.ERROR, error=str(e))
         await bridge.publish(run_id, "error", {"message": "处理请求时出错，请稍后重试"})
     finally:
+        logger.info("run_agent finally block for run %s", run_id)
         try:
             await bridge.publish_end(run_id)
         except Exception:
@@ -111,6 +135,7 @@ async def run_agent(
         _run_cleanup = asyncio.create_task(
             run_manager.cleanup(run_id, delay=RUN_CLEANUP_DELAY_SECONDS)
         )
+        logger.info("run_agent cleanup tasks created for run %s", run_id)
 
 
 async def _sync_thread_title_from_state(
@@ -129,12 +154,12 @@ async def _sync_thread_title_from_state(
         if thread.title:
             return
 
-        state = await agent.aget_state(config)
+        state = await asyncio.wait_for(agent.aget_state(config), timeout=5.0)
         title = (state.values or {}).get("title")
         if isinstance(title, str) and title.strip():
-            await thread_service.update_title_or_raise(
-                thread_id, user_id, title.strip()
-            )
+            await thread_service.update_title_or_raise(thread_id, user_id, title.strip())
+    except (TimeoutError, asyncio.CancelledError):
+        logger.warning("Title sync timed out for thread %s", thread_id)
     except Exception:
         logger.exception("Failed to sync title for thread %s", thread_id)
 
@@ -158,6 +183,20 @@ def _unpack_stream_item(
 
 def _prepare_publish_payload(mode: str, data: Any) -> tuple[str, Any]:
     """Convert LangGraph stream chunks into SSE-compatible payloads."""
+    # ``custom`` mode carries ``get_stream_writer()`` emissions from
+    # ``lead_agent._invoke``. Extract the per-chunk message and publish it
+    # as an SSE ``messages`` event so the frontend sees incremental stream
+    # data instead of waiting for the full response.
+    if mode == "custom":
+        if isinstance(data, dict):
+            msgs = data.get("messages")
+            if isinstance(msgs, list) and msgs:
+                return "messages", [
+                    _serialize_chunk_data(msgs[0]),
+                    {},
+                ]
+        return "messages", [_serialize_chunk_data(data), {}]
+
     event_name = "messages" if mode == "messages" else mode
 
     if mode == "messages":

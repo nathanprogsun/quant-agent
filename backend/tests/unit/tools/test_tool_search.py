@@ -1,7 +1,6 @@
 """Tests for the deferred-tool setup + ``tool_search`` tool semantics."""
-from __future__ import annotations
 
-from typing import Any
+from __future__ import annotations
 
 import pytest
 from langchain_core.tools import BaseTool, Tool
@@ -174,9 +173,7 @@ def test_prompt_section_empty_when_no_deferred_names() -> None:
 
 
 def test_prompt_section_lists_names_sorted() -> None:
-    section = get_deferred_tools_prompt_section(
-        deferred_names=frozenset({"zeta", "alpha", "mu"})
-    )
+    section = get_deferred_tools_prompt_section(deferred_names=frozenset({"zeta", "alpha", "mu"}))
     assert "<available-deferred-tools>" in section
     # Names appear sorted (deer-flow convention) so the system prompt is
     # byte-stable across calls with the same input — required for

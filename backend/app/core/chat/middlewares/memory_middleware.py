@@ -16,8 +16,8 @@ import logging
 from typing import Any
 
 from langchain.agents.middleware import AgentMiddleware
-from langgraph.runtime import Runtime
 from langchain_core.messages import BaseMessage
+from langgraph.runtime import Runtime
 
 from app.core.chat.memory.queue import get_memory_update_queue
 from app.core.chat.memory.summarization_hook import SummarizationEvent, memory_flush_hook
@@ -35,18 +35,18 @@ class MemoryMiddleware(AgentMiddleware):
     def __init__(self, max_messages: int = 50) -> None:
         self._max_messages = max_messages
 
-    async def abefore_model(self, state: dict[str, Any], runtime: Runtime) -> dict[str, Any] | None:
+    async def abefore_model(self, state: dict[str, Any], runtime: Runtime) -> dict[str, Any] | None:  # type: ignore[override]
         """No-op. Memory injection lives in DynamicContextMiddleware (P4.2)."""
         return None
 
-    async def aafter_model(self, state: dict[str, Any], runtime: Runtime) -> dict[str, Any] | None:
+    async def aafter_model(self, state: dict[str, Any], runtime: Runtime) -> dict[str, Any] | None:  # type: ignore[override]
         """Dispatch a flush trigger to the MemoryUpdateQueue when over threshold."""
         messages: list[BaseMessage] = list(state.get("messages", []))
         if len(messages) < self._max_messages:
             return None
 
-        thread_id = str(runtime.context.thread_id if runtime.context else "") or "unknown"
-        user_id = runtime.context.user_id if runtime.context else None
+        thread_id = str(runtime.context.thread_id if runtime.context else "") or "unknown"  # type: ignore[redundant-expr]
+        user_id = runtime.context.user_id if runtime.context else None  # type: ignore[redundant-expr]
 
         event = SummarizationEvent(
             thread_id=thread_id,

@@ -13,8 +13,8 @@ import logging
 from typing import Any
 
 from langchain.agents.middleware import AgentMiddleware
-from langgraph.runtime import Runtime
 from langchain_core.messages import BaseMessage
+from langgraph.runtime import Runtime
 
 from app.core.chat.memory.summarization_hook import (
     SummarizationEvent,
@@ -33,7 +33,7 @@ class SummarizationMiddleware(AgentMiddleware):
         self._should_summarize = False
         self._pending_message_count = 0
 
-    async def abefore_model(self, state: dict[str, Any], runtime: Runtime) -> dict[str, Any] | None:
+    async def abefore_model(self, state: dict[str, Any], runtime: Runtime) -> dict[str, Any] | None:  # type: ignore[override]
         if not self._enabled:
             return None
         messages = state.get("messages", [])
@@ -44,7 +44,7 @@ class SummarizationMiddleware(AgentMiddleware):
             return {"should_summarize": True, "message_count": count}
         return None
 
-    async def aafter_model(self, state: dict[str, Any], runtime: Runtime) -> dict[str, Any] | None:
+    async def aafter_model(self, state: dict[str, Any], runtime: Runtime) -> dict[str, Any] | None:  # type: ignore[override]
         if not self._should_summarize:
             return None
         self._should_summarize = False
@@ -52,8 +52,8 @@ class SummarizationMiddleware(AgentMiddleware):
         self._pending_message_count = 0
 
         messages: list[BaseMessage] = list(state.get("messages", []))
-        thread_id = str(runtime.context.thread_id if runtime.context else "") or "unknown"
-        user_id = runtime.context.user_id if runtime.context else None
+        thread_id = str(runtime.context.thread_id if runtime.context else "") or "unknown"  # type: ignore[redundant-expr]
+        user_id = runtime.context.user_id if runtime.context else None  # type: ignore[redundant-expr]
 
         event = SummarizationEvent(
             thread_id=thread_id,

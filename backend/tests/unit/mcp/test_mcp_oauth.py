@@ -111,7 +111,7 @@ async def test_cached_token_returns_without_http() -> None:
     cfg = _cfg(oauth)
     mgr = OAuthTokenManager.from_extensions_config(cfg)
     # Seed cache directly with a long-lived token.
-    from app.mcp.oauth import _OAuthToken
+    from app.mcp.oauth import _OAuthToken  # noqa: PLC0415
 
     mgr._tokens["live"] = _OAuthToken(
         access_token="cached",
@@ -135,7 +135,7 @@ async def test_expired_token_triggers_refresh() -> None:
     )
     cfg = _cfg(oauth)
     mgr = OAuthTokenManager.from_extensions_config(cfg)
-    from app.mcp.oauth import _OAuthToken
+    from app.mcp.oauth import _OAuthToken  # noqa: PLC0415
 
     # Already past skew → must refresh.
     mgr._tokens["live"] = _OAuthToken(
@@ -178,7 +178,7 @@ async def test_build_oauth_tool_interceptor_injects_header() -> None:
 
     # Intercept the underlying manager that the interceptor closed over.
     # We seed its token cache so the interceptor returns without httpx.
-    from app.mcp.oauth import OAuthTokenManager as Mgr
+    from app.mcp.oauth import OAuthTokenManager as Mgr  # noqa: PLC0415
 
     # The interceptor captured the manager internally; we patch the
     # classmethod factory to keep returning the same instance, then
@@ -189,9 +189,7 @@ async def test_build_oauth_tool_interceptor_injects_header() -> None:
     )()
 
     # Use a real _OAuthToken via local import for clarity.
-    from datetime import UTC, datetime, timedelta
-
-    from app.mcp.oauth import _OAuthToken
+    from app.mcp.oauth import _OAuthToken  # noqa: PLC0415
 
     captured._tokens["live"] = _OAuthToken(  # type: ignore[attr-defined]
         access_token="xyz",
@@ -199,7 +197,7 @@ async def test_build_oauth_tool_interceptor_injects_header() -> None:
         expires_at=datetime.now(UTC) + timedelta(hours=1),
     )
 
-    import app.mcp.oauth as oauth_mod
+    import app.mcp.oauth as oauth_mod  # noqa: PLC0415
 
     oauth_mod.OAuthTokenManager.from_extensions_config = classmethod(  # type: ignore[assignment]
         lambda cls, _: captured
@@ -232,7 +230,7 @@ async def test_build_oauth_tool_interceptor_injects_header() -> None:
 
 
 @pytest.mark.asyncio
-async def test_get_initial_oauth_headers_skips_empty_values() -> None:
+async def test_get_initial_oauth_headers_returns_cached_value() -> None:
     oauth = McpOAuthConfig(
         enabled=True,
         token_url="https://idp/oauth/token",
@@ -244,10 +242,8 @@ async def test_get_initial_oauth_headers_skips_empty_values() -> None:
     # The interceptor will hit httpx unless we seed the cache. We just
     # assert that the wrapper *skips* empty values: by injecting a
     # pre-fetched token in cache we avoid network entirely.
-    from datetime import UTC, datetime, timedelta
-
-    import app.mcp.oauth as oauth_mod
-    from app.mcp.oauth import _OAuthToken
+    import app.mcp.oauth as oauth_mod  # noqa: PLC0415
+    from app.mcp.oauth import _OAuthToken  # noqa: PLC0415
 
     captured = oauth_mod.OAuthTokenManager.from_extensions_config(cfg)
     captured._tokens["live"] = _OAuthToken(  # type: ignore[attr-defined]

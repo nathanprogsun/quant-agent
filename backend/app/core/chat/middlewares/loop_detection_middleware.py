@@ -45,12 +45,11 @@ _HARD_STOP_MSG = (
 )
 
 _TOOL_FREQ_HARD_STOP_MSG = (
-    "[FORCED STOP] Tool {tool_name} called {count} times — "
-    "exceeded the per-tool safety limit."
+    "[FORCED STOP] Tool {tool_name} called {count} times — exceeded the per-tool safety limit."
 )
 
 
-def _normalize_tool_call_args(raw_args: object) -> tuple[dict, str | None]:
+def _normalize_tool_call_args(raw_args: object) -> tuple[dict[str, Any], str | None]:
     if isinstance(raw_args, dict):
         return raw_args, None
     if isinstance(raw_args, str):
@@ -66,7 +65,7 @@ def _normalize_tool_call_args(raw_args: object) -> tuple[dict, str | None]:
     return {}, json.dumps(raw_args, sort_keys=True, default=str)
 
 
-def _stable_tool_key(name: str, args: dict, fallback_key: str | None) -> str:
+def _stable_tool_key(name: str, args: dict[str, Any], fallback_key: str | None) -> str:
     if name == "read_file" and fallback_key is None:
         path = args.get("path") or ""
         try:
@@ -93,7 +92,7 @@ def _stable_tool_key(name: str, args: dict, fallback_key: str | None) -> str:
     return json.dumps(args, sort_keys=True, default=str)
 
 
-def _hash_tool_calls(tool_calls: list[dict]) -> str:
+def _hash_tool_calls(tool_calls: list[dict[str, Any]]) -> str:
     normalized: list[str] = []
     for tc in tool_calls:
         name = tc.get("name", "")
@@ -101,7 +100,9 @@ def _hash_tool_calls(tool_calls: list[dict]) -> str:
         key = _stable_tool_key(name, args, fallback_key)
         normalized.append(f"{name}:{key}")
     normalized.sort()
-    return hashlib.md5(json.dumps(normalized, sort_keys=True, default=str).encode()).hexdigest()[:12]
+    return hashlib.md5(json.dumps(normalized, sort_keys=True, default=str).encode()).hexdigest()[
+        :12
+    ]
 
 
 class LoopDetectionMiddleware(AgentMiddleware):
@@ -133,15 +134,9 @@ class LoopDetectionMiddleware(AgentMiddleware):
         self._max_pending_warning_keys = max(1, max_tracked_threads * 2)
 
     def _get_thread_id(self, runtime: Runtime) -> str:
-        ctx = runtime.context
-        if ctx and getattr(ctx, "thread_id", None):
-            return str(ctx.thread_id)
         return "default"
 
     def _get_run_id(self, runtime: Runtime) -> str:
-        ctx = runtime.context
-        if ctx and getattr(ctx, "run_id", None):
-            return str(ctx.run_id)
         return "default"
 
     def _pending_key(self, runtime: Runtime) -> tuple[str, str]:
@@ -181,7 +176,7 @@ class LoopDetectionMiddleware(AgentMiddleware):
             if warning not in warnings:
                 warnings.append(warning)
             if len(warnings) > _MAX_PENDING_WARNINGS_PER_RUN:
-                del warnings[:len(warnings) - _MAX_PENDING_WARNINGS_PER_RUN]
+                del warnings[: len(warnings) - _MAX_PENDING_WARNINGS_PER_RUN]
             self._touch_pending_warning_key_locked(pending_key)
             self._prune_pending_warning_state_locked(protected_key=pending_key)
 
@@ -228,7 +223,7 @@ class LoopDetectionMiddleware(AgentMiddleware):
             history = self._history[thread_id]
             history.append(call_hash)
             if len(history) > self.window_size:
-                history[:] = history[-self.window_size:]
+                history[:] = history[-self.window_size :]
 
             warned_hashes = self._warned.get(thread_id)
             if warned_hashes is not None:
@@ -237,7 +232,6 @@ class LoopDetectionMiddleware(AgentMiddleware):
                     self._warned.pop(thread_id, None)
 
             count = history.count(call_hash)
-            tool_names = [tc.get("name", "?") for tc in tool_calls]
 
             if count >= self.hard_limit:
                 return _HARD_STOP_MSG, True
@@ -264,17 +258,15 @@ class LoopDetectionMiddleware(AgentMiddleware):
         return None, False
 
     @staticmethod
-    def _append_text(content: str | list | None, text: str) -> str | list:
+    def _append_text(content: str | list[Any] | None, text: str) -> str | list[Any]:
         if content is None:
             return text
         if isinstance(content, list):
             return [*content, {"type": "text", "text": f"\n\n{text}"}]
-        if isinstance(content, str):
-            return content + f"\n\n{text}"
-        return str(content) + f"\n\n{text}"
+        return content + f"\n\n{text}"
 
     @staticmethod
-    def _build_hard_stop_update(last_msg: Any, content: str | list) -> dict:
+    def _build_hard_stop_update(last_msg: Any, content: str | list[Any]) -> dict[str, Any]:
         update: dict[str, Any] = {"tool_calls": [], "content": content}
         additional_kwargs = dict(getattr(last_msg, "additional_kwargs", {}) or {})
         for key in ("tool_calls", "function_call"):
@@ -286,25 +278,27 @@ class LoopDetectionMiddleware(AgentMiddleware):
         update["response_metadata"] = response_metadata
         return update
 
-    def _apply(self, state: dict[str, Any], runtime: Runtime) -> dict | None:
+    def _apply(self, state: dict[str, Any], runtime: Runtime) -> dict[str, Any] | None:
         warning, hard_stop = self._track_and_check(state, runtime)
         if hard_stop:
             messages = state.get("messages", [])
             last_msg = messages[-1]
             content = self._append_text(last_msg.content, warning or _HARD_STOP_MSG)
-            stripped_msg = last_msg.model_copy(update=self._build_hard_stop_update(last_msg, content))
+            stripped_msg = last_msg.model_copy(
+                update=self._build_hard_stop_update(last_msg, content)
+            )
             return {"messages": [stripped_msg]}
         if warning:
             self._queue_pending_warning(runtime, warning)
             return None
         return None
 
-    async def abefore_model(self, state: dict[str, Any], runtime: Runtime) -> dict[str, Any] | None:
+    async def abefore_model(self, state: dict[str, Any], runtime: Runtime) -> dict[str, Any] | None:  # type: ignore[override]
         self._runtime = runtime
         self._clear_other_run_pending_warnings(runtime)
         return None
 
-    async def aafter_model(self, state: dict[str, Any], runtime: Runtime) -> dict[str, Any] | None:
+    async def aafter_model(self, state: dict[str, Any], runtime: Runtime) -> dict[str, Any] | None:  # type: ignore[override]
         self._runtime = runtime
         return self._apply(state, runtime)
 

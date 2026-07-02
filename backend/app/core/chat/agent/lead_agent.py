@@ -77,7 +77,7 @@ def _ensure_system_message(messages: list[Any], system_prompt: str) -> list[Any]
     return [SystemMessage(content=system_prompt), *messages]
 
 
-def make_lead_agent(config: RunnableConfig) -> Any:
+def make_lead_agent(config: RunnableConfig, mcp_tools: list[Any] | None = None) -> Any:
     """Agent graph factory.
 
     Builds a CompiledStateGraph with:
@@ -87,6 +87,8 @@ def make_lead_agent(config: RunnableConfig) -> Any:
 
     Args:
         config: RunnableConfig with runtime parameters in configurable.
+        mcp_tools: Optional pre-fetched MCP tools. When omitted, falls back
+            to ``get_cached_mcp_tools()``.
 
     Returns:
         CompiledStateGraph instance.
@@ -113,15 +115,17 @@ def make_lead_agent(config: RunnableConfig) -> Any:
         *get_tools(pr_phase=3),
     ]
 
-    # P2.2 — extend with MCP tools loaded at app startup. ``get_cached_mcp_tools``
-    # is the production entry point; in langgraph-studio paths where no
-    # FastAPI app exists it falls back to an empty list.
-    try:
-        from app.mcp import get_cached_mcp_tools
+    # P2.2 — extend with MCP tools loaded at app startup. ``mcp_tools`` can
+    # be passed in from ``make_lead_agent_async``; otherwise fall back to the
+    # synchronous cache entry point (langgraph-studio paths where no FastAPI
+    # app exists fall back to an empty list).
+    if mcp_tools is None:
+        try:
+            from app.mcp import get_cached_mcp_tools
 
-        mcp_tools = get_cached_mcp_tools()
-    except Exception:
-        mcp_tools = []
+            mcp_tools = get_cached_mcp_tools()
+        except Exception:
+            mcp_tools = []
     base_tools.extend(mcp_tools)
 
     # P2.3 — DeferredToolFilter / tool_search (fail-closed when enabled
@@ -170,6 +174,21 @@ def make_lead_agent(config: RunnableConfig) -> Any:
     return graph.compile(checkpointer=checkpointer)
 
 
+async def make_lead_agent_async(config: RunnableConfig) -> Any:
+    """Async agent graph factory — fetches MCP tools without blocking the loop.
+
+    Args:
+        config: RunnableConfig with runtime parameters in configurable.
+
+    Returns:
+        CompiledStateGraph instance.
+    """
+    from app.mcp.cache import get_cached_mcp_tools_async
+
+    mcp_tools = await get_cached_mcp_tools_async()
+    return make_lead_agent(config, mcp_tools=mcp_tools)
+
+
 def _make_agent_node(
     model: ChatOpenAI,
     system_prompt: str,
@@ -192,7 +211,9 @@ def _make_agent_node(
     """
     tools = list(tools or [])
 
-    async def agent_node(state: ThreadState, config: RunnableConfig | None = None) -> dict[str, Any]:
+    async def agent_node(
+        state: ThreadState, config: RunnableConfig | None = None
+    ) -> dict[str, Any]:
         messages = _ensure_system_message(list(state.get("messages", [])), system_prompt)
         working_state: dict[str, Any] = {**dict(state), "messages": messages}
 
@@ -210,7 +231,7 @@ def _make_agent_node(
         # before_model hooks — must see the system prompt so middlewares do not drop it
         state_patches: dict[str, Any] = {}
         for mw in middlewares:
-            modified = await mw.abefore_model(working_state, runtime)
+            modified = await mw.abefore_model(working_state, runtime)  # type: ignore[arg-type]
             if modified:
                 for key, value in modified.items():
                     if key == "messages":
@@ -260,7 +281,7 @@ def _make_agent_node(
         state_update: dict[str, Any] = {"messages": [*messages, response], **state_patches}
         preview_state = {**working_state, "messages": [*messages, response]}
         for mw in middlewares:
-            modified = await mw.aafter_model(preview_state, runtime)
+            modified = await mw.aafter_model(preview_state, runtime)  # type: ignore[arg-type]
             if modified:
                 state_update.update(modified)
 
@@ -286,22 +307,23 @@ def _build_middlewares(
 ) -> list[AgentMiddleware]:
     """Build middleware chain.
 
-    Assembles middlewares in order per DeerFlow convention, plus P2.3's
-    ``DeferredToolFilterMiddleware`` (appended last so it operates on the
-    final tool list with the rest of the chain's messages resolved),
-    plus P2.4's ``DanglingToolCallMiddleware`` at index 3 (after Title,
-    TokenUsage, Summarization — before content-changing
-    ``DynamicContextMiddleware``):
-    1. TitleMiddleware - generates conversation title
-    2. TokenUsageMiddleware - tracks token usage
-    3. SummarizationMiddleware - handles long conversation summarization
-    4. DanglingToolCallMiddleware - patches dangling tool_call ids
-       (P2.4; prevents 400s on OpenAI-compatible reasoning models)
-    5. DynamicContextMiddleware - injects current datetime/timezone
-    6. ClarificationMiddleware - detects clarification requests
-    7. LoopDetectionMiddleware - detects repeated tool call patterns
-    8. SubagentLimitMiddleware - limits concurrent subagent calls
-    9. DeferredToolFilterMiddleware - hides MCP tools until promoted
+    Middlewares are assembled top-to-bottom — first in the list is outermost:
+    1. LLMErrorHandlingMiddleware - catches LLM errors, outermost
+    2. InputSanitizationMiddleware - validates input before any processing
+    3. SystemMessageCoalescingMiddleware - coalesces system messages
+    4. SafetyFinishReasonMiddleware - safety finish reason checks
+    5. TokenBudgetMiddleware - enforces token budget limits
+    6. TitleMiddleware - generates conversation title
+    7. TokenUsageMiddleware - tracks token usage
+    8. SummarizationMiddleware - handles long conversation summarization
+    9. DanglingToolCallMiddleware - patches dangling tool_call ids
+    10. DynamicContextMiddleware - injects current datetime/timezone
+    11. LoopDetectionMiddleware - detects repeated tool call patterns
+    12. SubagentLimitMiddleware - limits concurrent subagent calls
+    13. MemoryMiddleware - persists memory updates
+    14. SkillActivationMiddleware - activates skills
+    15. DeferredToolFilterMiddleware - hides MCP tools until promoted
+    16. ClarificationMiddleware - detects clarification requests (legacy terminal)
     """
     configurable = config.get("configurable", {})
     settings = get_settings()
@@ -311,17 +333,38 @@ def _build_middlewares(
     max_messages = configurable.get("max_messages", 50)
     skills_root = configurable.get("skills_root", settings.skills_root)
 
+    from app.core.chat.middlewares.input_sanitization_middleware import (
+        InputSanitizationMiddleware,
+    )
+    from app.core.chat.middlewares.llm_error_handling_middleware import (
+        LLMErrorHandlingMiddleware,
+    )
+    from app.core.chat.middlewares.safety_finish_reason_middleware import (
+        SafetyFinishReasonMiddleware,
+    )
+    from app.core.chat.middlewares.system_message_coalescing_middleware import (
+        SystemMessageCoalescingMiddleware,
+    )
+    from app.core.chat.middlewares.token_budget_middleware import (
+        TokenBudgetMiddleware,
+    )
+
     chain: list[AgentMiddleware] = [
+        LLMErrorHandlingMiddleware(),
+        InputSanitizationMiddleware(),
+        SystemMessageCoalescingMiddleware(),
+        SafetyFinishReasonMiddleware(),
+        TokenBudgetMiddleware(),
         TitleMiddleware(),
         TokenUsageMiddleware(),
         SummarizationMiddleware(max_messages=max_messages, enabled=summarization_enabled),
         DanglingToolCallMiddleware(),
         DynamicContextMiddleware(),
-        ClarificationMiddleware(),
         LoopDetectionMiddleware(),
         SubagentLimitMiddleware(),
         MemoryMiddleware(max_messages=max_messages),
         SkillActivationMiddleware(storage=LocalSkillStorage(root=Path(skills_root))),
+        ClarificationMiddleware(),
     ]
 
     # P2.3 — DeferredToolFilter appended last; the catalog snapshot was
@@ -359,7 +402,7 @@ async def _run_awrap_model_call(
 
 def _bind_awrap(mw: AgentMiddleware, next_handler: Any) -> Any:
     async def call(req: ModelCallRequest) -> Any:
-        return await mw.awrap_model_call(req, next_handler)
+        return await mw.awrap_model_call(req, next_handler)  # type: ignore[arg-type]
 
     return call
 

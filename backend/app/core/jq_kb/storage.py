@@ -52,7 +52,7 @@ from app.core.jq_kb.schemas import JqApiChunk, Library, LibraryManifest, env_sup
 logger = logging.getLogger(__name__)
 
 
-class JqApiJsonReader(BaseReader):  # type: ignore[misc]  # BaseReader typed as Any (stub missing)
+class JqApiJsonReader(BaseReader):
     """LlamaIndex-compatible reader for our pilot.json / full.json shape.
 
     Output: one ``Document`` per raw record, with all metadata pre-populated.
@@ -97,14 +97,14 @@ class JqApiJsonReader(BaseReader):  # type: ignore[misc]  # BaseReader typed as 
         return chunks_to_documents(chunks)
 
 
-class JqApiChunkToNode(TransformComponent):  # type: ignore[misc]  # BaseReader typed as Any (stub missing)
+class JqApiChunkToNode(TransformComponent):
     """IngestionPipeline transformation: Document → TextNode with stable id.
 
     LlamaIndex's default Document → TextNode just uses text + metadata, but
     we need explicit node ids so re-ingests dedupe correctly.
     """
 
-    def __call__(self, nodes: Sequence[Document], **kwargs: Any) -> list[TextNode]:
+    def __call__(self, nodes: Sequence[Document], **kwargs: Any) -> list[TextNode]:  # type: ignore[override]
         out: list[TextNode] = []
         for doc in nodes:
             out.append(
@@ -252,9 +252,9 @@ class JqApiStore:
         if not documents:
             return []
         vs = vector_store or self.index._storage_context.vector_store
-        pipeline = build_jq_api_ingestion_pipeline(vector_store=vs)
+        pipeline = build_jq_api_ingestion_pipeline(vector_store=vs)  # type: ignore[arg-type]
         nodes = await pipeline.arun(documents=documents, num_workers=num_workers)
-        return list(nodes)
+        return list(nodes)  # type: ignore[arg-type]
 
     def upsert_chunks(self, chunks: list[JqApiChunk]) -> None:
         """Sync ingest wrapper — used by unit tests."""
@@ -262,10 +262,10 @@ class JqApiStore:
             return
         documents = chunks_to_documents(chunks)
         pipeline = build_jq_api_ingestion_pipeline(
-            vector_store=self.index._storage_context.vector_store,
+            vector_store=self.index._storage_context.vector_store,  # type: ignore[arg-type]
         )
         nodes = pipeline.run(documents=documents)
-        self.persist_bm25(nodes, chunks)
+        self.persist_bm25(nodes, chunks)  # type: ignore[arg-type]
         logger.info("Upserted %d jq_api chunks via IngestionPipeline", len(chunks))
 
     def write_manifest(
@@ -306,7 +306,7 @@ class JqApiStore:
         node = hits[0].node
         return {
             "id": node.node_id,
-            "document": node.text,
+            "document": node.text,  # type: ignore[attr-defined]
             "metadata": dict(node.metadata),
         }
 

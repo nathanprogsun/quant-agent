@@ -120,14 +120,14 @@ class DeferredToolFilterMiddleware(AgentMiddleware):
 
     # ── wrap hooks (sync + async) ───────────────────────────────
 
-    async def awrap_model_call(
+    async def awrap_model_call(  # type: ignore[override]
         self,
         request: ModelCallRequest,
         handler: Callable[[ModelCallRequest], Awaitable[Any]],
     ) -> Any:
         return await handler(self._filter_tools(request))
 
-    def wrap_model_call(
+    def wrap_model_call(  # type: ignore[override]
         self,
         request: ModelCallRequest,
         handler: Callable[[ModelCallRequest], Any],

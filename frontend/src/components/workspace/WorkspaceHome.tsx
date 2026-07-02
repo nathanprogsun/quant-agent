@@ -24,8 +24,8 @@ export function WorkspaceHome() {
     return true;
   };
 
-  const handleSend = (content: string) => {
-    if (!requireAuth()) return;
+  const handleSend = (content: string): boolean => {
+    if (!requireAuth()) return false;
 
     createThread.mutate(
       { title: content.slice(0, 40) },
@@ -37,6 +37,7 @@ export function WorkspaceHome() {
         },
       },
     );
+    return true;
   };
 
   const handleChipClick = (prompt: string) => {

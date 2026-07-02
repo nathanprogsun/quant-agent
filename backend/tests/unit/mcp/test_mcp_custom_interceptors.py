@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import json
+import sys
+import types
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from langchain_core.tools import BaseTool
 
 
 def _write(path: Path, payload: dict) -> Path:
@@ -33,9 +36,6 @@ async def test_get_mcp_tools_loads_custom_interceptor(
 
     # A dummy interceptor module. We register it under the test path so
     # ``import_module`` finds it.
-    import sys
-    import types
-
     mod = types.ModuleType("app.tests.unit.mcp.fake_interceptor_module")
     called: dict = {"count": 0}
 
@@ -81,7 +81,7 @@ async def test_get_mcp_tools_loads_custom_interceptor(
         lambda *args, **kwargs: fake_client_instance,
     )
 
-    from app.mcp.tools import get_mcp_tools
+    from app.mcp.tools import get_mcp_tools  # noqa: PLC0415
 
     tools = await get_mcp_tools()
     assert called["count"] == 1, "custom interceptor builder should be called once"
@@ -90,8 +90,6 @@ async def test_get_mcp_tools_loads_custom_interceptor(
 
 def _make_stub_tool(name: str):
     """Create a fake BaseTool with ``name`` and minimal attrs used by tools.py."""
-    from langchain_core.tools import BaseTool
-
     tool = MagicMock(spec=BaseTool)
     tool.name = name
     tool.description = ""
@@ -102,15 +100,12 @@ def _make_stub_tool(name: str):
 
 def test_interceptor_helper_resolves_string_path(monkeypatch: pytest.MonkeyPatch) -> None:
     """``_resolve_variable('pkg.mod:attr')`` returns the named attribute."""
-    import sys
-    import types
-
     mod = types.ModuleType("_resolve_test_mod")
     mod.attr = object()  # sentinel
 
     sys.modules["_resolve_test_mod"] = mod
 
-    from app.mcp.tools import _resolve_variable
+    from app.mcp.tools import _resolve_variable  # noqa: PLC0415
 
     result = _resolve_variable("_resolve_test_mod:attr")
     assert result is mod.attr
@@ -118,7 +113,7 @@ def test_interceptor_helper_resolves_string_path(monkeypatch: pytest.MonkeyPatch
 
 def test_interceptor_helper_logs_on_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     """Invalid paths log a warning and don't crash the loader."""
-    from app.mcp.tools import _resolve_variable
+    from app.mcp.tools import _resolve_variable  # noqa: PLC0415
 
     with pytest.raises(ImportError):
         _resolve_variable("not_a_valid_path")

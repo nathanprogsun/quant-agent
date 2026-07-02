@@ -37,7 +37,7 @@ from app.core.jq_kb.storage import _chroma_client, create_chroma_vector_store
 logger = logging.getLogger(__name__)
 
 
-class JqDictJsonReader(BaseReader):  # type: ignore[misc]  # BaseReader typed as Any (stub missing)
+class JqDictJsonReader(BaseReader):
     """Reader for jq_dict pilot.json / jq_dict.json crawl output."""
 
     def __init__(self, raw_dir: Path = JQ_DICT_RAW_DIR) -> None:
@@ -80,8 +80,8 @@ def _merge_static_suffixes(records: list[dict[str, Any]]) -> list[dict[str, Any]
     return out
 
 
-class JqDictChunkToNode(TransformComponent):  # type: ignore[misc]  # BaseReader typed as Any (stub missing)
-    def __call__(self, nodes: Sequence[Document], **kwargs: Any) -> list[TextNode]:
+class JqDictChunkToNode(TransformComponent):
+    def __call__(self, nodes: Sequence[Document], **kwargs: Any) -> list[TextNode]:  # type: ignore[override]
         out: list[TextNode] = []
         for doc in nodes:
             out.append(
@@ -191,19 +191,19 @@ class JqDictStore:
         if not documents:
             return []
         vs = vector_store or self.index._storage_context.vector_store
-        pipeline = build_jq_dict_ingestion_pipeline(vector_store=vs)
+        pipeline = build_jq_dict_ingestion_pipeline(vector_store=vs)  # type: ignore[arg-type]
         nodes = await pipeline.arun(documents=documents, num_workers=num_workers)
-        return list(nodes)
+        return list(nodes)  # type: ignore[arg-type]
 
     def upsert_chunks(self, chunks: list[JqDictChunk]) -> None:
         if not chunks:
             return
         documents = dict_chunks_to_documents(chunks)
         pipeline = build_jq_dict_ingestion_pipeline(
-            vector_store=self.index._storage_context.vector_store,
+            vector_store=self.index._storage_context.vector_store,  # type: ignore[arg-type]
         )
         nodes = pipeline.run(documents=documents)
-        self.persist_bm25(nodes, chunks)
+        self.persist_bm25(nodes, chunks)  # type: ignore[arg-type]
         logger.info("Upserted %d jq_dict chunks via IngestionPipeline", len(chunks))
 
     def write_manifest(
@@ -243,6 +243,6 @@ class JqDictStore:
         node = hits[0].node
         return {
             "id": node.node_id,
-            "document": node.text,
+            "document": node.text,  # type: ignore[attr-defined]
             "metadata": dict(node.metadata),
         }

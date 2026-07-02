@@ -189,7 +189,7 @@ export function splitThinkingFromText(content: string): {
     if (inner.trim()) thinkingParts.push(inner.trim());
   };
 
-  const thinkingTag = `(?:${"redacted_"}thinking|thinking)`;
+  const thinkingTag = `(?:${"redacted_"}think|think)`;
 
   let withoutThinking = content.replace(
     new RegExp(`<${thinkingTag}>([\\s\\S]*?)<\\/${thinkingTag}>`, "gi"),

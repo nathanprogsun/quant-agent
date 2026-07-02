@@ -226,7 +226,7 @@ class DanglingToolCallMiddleware(AgentMiddleware):
     # ── wrap hooks ───────────────────────────────────────────────
 
     @override
-    def wrap_model_call(
+    def wrap_model_call(  # type: ignore[override]
         self,
         request: ModelCallRequest,
         handler: Callable[[ModelCallRequest], Any],
@@ -237,7 +237,7 @@ class DanglingToolCallMiddleware(AgentMiddleware):
         return handler(request)
 
     @override
-    async def awrap_model_call(
+    async def awrap_model_call(  # type: ignore[override]
         self,
         request: ModelCallRequest,
         handler: Callable[[ModelCallRequest], Awaitable[Any]],

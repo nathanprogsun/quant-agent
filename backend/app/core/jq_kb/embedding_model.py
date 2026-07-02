@@ -9,9 +9,10 @@ from llama_index.core.bridge.pydantic import PrivateAttr
 
 from app.core.jq_kb.embedding_client import embed_texts
 from app.settings import get_settings
+from app.util.asyncio_util.adapter import run_in_pool
 
 
-class EmbeddingModel(BaseEmbedding):  # type: ignore[misc]  # BaseEmbedding typed as Any (stub missing)
+class EmbeddingModel(BaseEmbedding):
     """Configured text embedding model for jq_kb vector indexes."""
 
     _model_name: str = PrivateAttr()
@@ -34,7 +35,7 @@ class EmbeddingModel(BaseEmbedding):  # type: ignore[misc]  # BaseEmbedding type
         return embed_texts(texts)
 
     async def _aget_query_embedding(self, query: str) -> list[float]:
-        return self._get_query_embedding(query)
+        return await run_in_pool(self._get_query_embedding, None, query)
 
     async def _aget_text_embedding(self, text: str) -> list[float]:
         return self._get_text_embedding(text)
