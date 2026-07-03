@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from types import SimpleNamespace
 from typing import Any
 from uuid import UUID
 
@@ -11,6 +12,7 @@ from langchain_core.runnables import Runnable, RunnableConfig
 
 from app.common.runs.manager import RunManager, RunRecord
 from app.common.runs.schemas import RunStatus
+from app.common.serialization import serialize
 from app.common.stream_bridge.base import StreamBridge
 from app.core.chat.service.stream_modes import resolve_langgraph_stream_modes
 from app.core.chat.service.thread_service import ThreadService
@@ -69,11 +71,38 @@ async def run_agent(
         )
 
         # 3. Stream execution with timeout
+        configurable = config.get("configurable", {})
+        runtime_ctx = SimpleNamespace(
+            thread_id=str(thread_id),
+            user_id=configurable.get("user_id"),
+            run_id=str(run_id),
+        )
+
         async def _stream_chunks() -> None:
+            # Single-mode fast path: astream yields raw chunks (no
+            # ``(mode, data)`` wrapper), so skip the unpack step entirely
+            # and publish directly. Multi-mode yields tuples and goes
+            # through ``_unpack_stream_item``.
+            if len(langgraph_modes) == 1:
+                single_mode = langgraph_modes[0]
+                async for chunk in agent.astream(
+                    payload,
+                    config=config,
+                    stream_mode=single_mode,
+                    context=runtime_ctx,
+                ):
+                    if record.abort_event.is_set():
+                        logger.info("Run %s aborted", run_id)
+                        break
+                    event_name, serialized = _prepare_publish_payload(single_mode, chunk)
+                    await bridge.publish(run_id, event_name, serialized)
+                return
+
             async for chunk in agent.astream(
                 payload,
                 config=config,
                 stream_mode=langgraph_modes,
+                context=runtime_ctx,
             ):
                 # Check abort
                 if record.abort_event.is_set():
@@ -182,58 +211,52 @@ def _unpack_stream_item(
 
 
 def _prepare_publish_payload(mode: str, data: Any) -> tuple[str, Any]:
-    """Convert LangGraph stream chunks into SSE-compatible payloads."""
-    # ``custom`` mode carries ``get_stream_writer()`` emissions from
-    # ``lead_agent._invoke``. Extract the per-chunk message and publish it
-    # as an SSE ``messages`` event so the frontend sees incremental stream
-    # data instead of waiting for the full response.
+    """Convert LangGraph stream chunks into SSE-compatible payloads.
+
+    Mode-specific handling:
+
+    - ``custom`` — carries ``get_stream_writer()`` emissions from the
+      agent nodes (per-chunk model streaming). When the payload is a dict
+      with a ``messages`` list, the first message is surfaced as an SSE
+      ``messages`` event with ``[chunk_dump, {}]`` shape so the frontend
+      sees incremental stream data instead of waiting for the full
+      response. Otherwise the whole payload is serialized as the chunk.
+    - ``messages`` — obj is ``(message_chunk, metadata_dict)``; returns
+      ``[chunk_dump, metadata_dict]``.
+    - ``values`` — obj is the full state dict; strips ``__pregel_*`` keys
+      and base64 ``data:`` image blocks from ``hide_from_ui`` messages so
+      they never reach the SSE wire.
+    - everything else — recursive ``model_dump()`` / ``dict()`` fallback.
+
+    The wire shapes are pinned by ``tests/unit/chat/test_worker_payload.py``
+    and the SSE contract test; do not drift them without updating both.
+    """
     if mode == "custom":
+        # ``custom`` carries ``get_stream_writer()`` emissions from the
+        # agent nodes (per-chunk model streaming). When the payload is a
+        # dict with a ``messages`` list, surface the first message as a
+        # ``messages`` event so the frontend sees incremental stream data;
+        # otherwise serialize the whole payload as the chunk. The metadata
+        # slot is always {} — custom emissions carry no per-chunk metadata.
         if isinstance(data, dict):
             msgs = data.get("messages")
-            if isinstance(msgs, list) and msgs:
-                return "messages", [
-                    _serialize_chunk_data(msgs[0]),
-                    {},
-                ]
-        return "messages", [_serialize_chunk_data(data), {}]
-
-    event_name = "messages" if mode == "messages" else mode
+            target = msgs[0] if isinstance(msgs, list) and msgs else data
+        else:
+            target = data
+        return "messages", [serialize(target), {}]
 
     if mode == "messages":
-        if isinstance(data, tuple) and len(data) == 2:
-            chunk, metadata = data
-            return event_name, [
-                _serialize_chunk_data(chunk),
-                _serialize_chunk_data(metadata) or {},
-            ]
-        if isinstance(data, list) and len(data) == 2:
-            return event_name, [
-                _serialize_chunk_data(data[0]),
-                _serialize_chunk_data(data[1]) or {},
-            ]
+        # Delegate to the mode-aware serializer: it handles the
+        # ``(chunk, metadata)`` tuple, the 2-list shape, and the non-tuple
+        # message-chunk fallback (model_dump). Keeping the tuple/list
+        # branching out of the worker avoids duplicating
+        # ``serialize_messages_tuple`` here.
+        return "messages", serialize(data, mode="messages")
 
-    return event_name, _serialize_chunk_data(data)
+    event_name = mode
+    if mode == "values":
+        # delegate to the mode-aware serializer so channel values get
+        # __pregel_* stripping + hide_from_ui image-block stripping.
+        return event_name, serialize(data, mode="values")
 
-
-def _serialize_chunk_data(data: Any) -> Any:
-    """Serialize LangGraph chunk data to JSON-compatible format.
-
-    LangChain messages and LangGraph state dicts may contain
-    non-serializable objects. This converts them to plain dicts.
-    """
-    if data is None:
-        return None
-    if isinstance(data, (str, int, float, bool)):
-        return data
-    if isinstance(data, dict):
-        return {k: _serialize_chunk_data(v) for k, v in data.items()}
-    if isinstance(data, list):
-        return [_serialize_chunk_data(item) for item in data]
-    if isinstance(data, tuple):
-        return [_serialize_chunk_data(item) for item in data]
-    # LangChain message objects have .dict() or model_dump()
-    if hasattr(data, "model_dump"):
-        return data.model_dump()
-    if hasattr(data, "dict"):
-        return data.dict()
-    return str(data)
+    return event_name, serialize(data)
