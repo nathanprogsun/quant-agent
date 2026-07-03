@@ -49,6 +49,11 @@ class RuntimeFeatures:
     tool_error_handling: bool | AgentMiddleware = True
     tool_output_budget: bool | AgentMiddleware = True
 
+    # JqPrefetch — inject jq_kb docs (API / data-dict) into context before
+    # the model call so simple API/field questions don't trigger an extra
+    # ``search_jq_*`` round-trip. Skips strategy (no metadata shortcut).
+    jq_prefetch: bool | AgentMiddleware = True
+
     # Opt-in features
     memory: bool | AgentMiddleware = False
     deferred_tool_filter: bool | AgentMiddleware = False

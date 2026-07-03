@@ -15,19 +15,20 @@ Order is preserved:
    5. ToolErrorHandlingMiddleware      — tool exceptions → error ToolMessage (outer wrap_tool_call)
    6. ToolOutputBudgetMiddleware       — cap oversized ToolMessage to disk + head/tail preview (inner)
    7. DynamicContextMiddleware         — injects <system-reminder> date / memory
-   8. SkillActivationMiddleware        — /<skill-name> slash injection
-   9. TodoMiddleware                   — plan-mode task tracking (conditional)
-  10. SummarizationMiddleware          — dispatches memory flush events (conditional)
-  11. TokenUsageMiddleware             — accumulates prompt/completion tokens
-  12. TitleMiddleware                  — sets the thread title after turn 1
-  13. MemoryMiddleware                 — evolution write-back hook (conditional)
-  14. DeferredToolFilterMiddleware     — hides deferred MCP tools (conditional)
-  15. SubagentLimitMiddleware          — caps concurrent subagent usage (conditional)
-  16. LoopDetectionMiddleware          — breaks repetitive tool-call patterns
-  17. TokenBudgetMiddleware            — warns / hard-stops on token overuse
-  18. <custom_middlewares>             — injection point
-  19. SafetyFinishReasonMiddleware     — strips tool calls on safety terminations
-  20. ClarificationMiddleware          — terminal interrupt on ask_clarification
+   8. JqPrefetchMiddleware             — jq_kb doc prefetch → __jqref HumanMessage (after DynamicContext)
+   9. SkillActivationMiddleware        — /<skill-name> slash injection
+  10. TodoMiddleware                   — plan-mode task tracking (conditional)
+  11. SummarizationMiddleware          — dispatches memory flush events (conditional)
+  12. TokenUsageMiddleware             — accumulates prompt/completion tokens
+  13. TitleMiddleware                  — sets the thread title after turn 1
+  14. MemoryMiddleware                 — evolution write-back hook (conditional)
+  15. DeferredToolFilterMiddleware     — hides deferred MCP tools (conditional)
+  16. SubagentLimitMiddleware          — caps concurrent subagent usage (conditional)
+  17. LoopDetectionMiddleware          — breaks repetitive tool-call patterns
+  18. TokenBudgetMiddleware            — warns / hard-stops on token overuse
+  19. <custom_middlewares>             — injection point
+  20. SafetyFinishReasonMiddleware     — strips tool calls on safety terminations
+  21. ClarificationMiddleware          — terminal interrupt on ask_clarification
 
 Note: ``wrap_tool_call`` hooks (ToolErrorHandling, ToolOutputBudget) form a
 stack at the ToolNode boundary regardless of where they sit in the chain;
@@ -75,9 +76,8 @@ def build_middlewares(
 
     Each middleware is conditionally appended based on its feature flag.
     Imports are lazy to avoid a circular dependency through
-    ``middlewares/__init__.py`` (PLC0415 suppressed intentionally).
+    ``middlewares/__init__.py`` (PLC0415 suppressed per-file in ruff.toml).
     """
-    # ruff: noqa: PLC0415, I001
     # lazy imports — avoids circular import through middlewares/__init__.py
     from app.core.chat.middlewares.clarification_middleware import ClarificationMiddleware
     from app.core.chat.middlewares.dangling_tool_call_middleware import DanglingToolCallMiddleware
@@ -135,6 +135,18 @@ def build_middlewares(
 
     # ── 5: DynamicContext ────────────────────────────────────
     chain.append(_as_instance(DynamicContextMiddleware, features.dynamic_context))
+
+    # ── 5b: JqPrefetch (jq_kb doc injection before model call) ──
+    # Runs immediately AFTER DynamicContext: DynamicContext id-swaps the
+    # user HumanMessage into a ``__user``-suffixed one, then JqPrefetch
+    # scans that ``__user`` message for API / dict signals and fetches the
+    # docs via metadata-exact-match shortcuts (no LLM, no embedding). The
+    # injection sits on the ``__jqref`` suffix convention so DynamicContext
+    # does not re-process it on a later turn.
+    if _as_bool(features.jq_prefetch):
+        from app.core.chat.middlewares.jq_prefetch_middleware import JqPrefetchMiddleware
+
+        chain.append(_as_instance(JqPrefetchMiddleware, features.jq_prefetch))
 
     # ── 6: SkillActivation ───────────────────────────────────
     if _as_bool(features.skill_activation):
