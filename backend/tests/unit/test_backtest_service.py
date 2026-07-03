@@ -13,7 +13,10 @@ from jqcli.errors import (
 )
 
 from app.core.backtest.errors import BacktestError
-from app.core.backtest.service import BacktestService
+from app.core.backtest.service import (
+    BacktestService,
+    _check_auth_sync,
+)
 from app.core.backtest.types import AuthResult, BacktestParams, BacktestStatus
 
 
@@ -43,6 +46,27 @@ async def test_check_auth_not_authenticated() -> None:
     with patch("app.core.backtest.service._check_auth_sync", side_effect=NotAuthenticatedError()):
         result = await svc.check_auth()
         assert result.is_authenticated is False
+
+
+def test_check_auth_sync_falls_back_when_get_current_user_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """_check_auth_sync must return a placeholder username (not raise AttributeError)
+    when the deployed jqcli symbol ``get_current_user`` is absent — the vendored
+    jqcli stub omits this attribute, so the fallback path is exercised locally.
+    """
+    import jqcli.api.auth as auth_module
+
+    monkeypatch.delattr(auth_module, "get_current_user", raising=False)
+
+    with patch("app.core.backtest.service.ApiClient") as mock_client_cls:
+        result = _check_auth_sync(
+            token="t", cookie="c", api_base="https://example.com"
+        )
+
+    mock_client_cls.assert_called_once_with(
+        "https://example.com", token="t", cookie="c"
+    )
+    mock_client_cls.return_value.close.assert_called_once()
+    assert result == {"username": "authenticated"}
 
 
 @pytest.mark.asyncio
