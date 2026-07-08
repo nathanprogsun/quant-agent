@@ -327,11 +327,17 @@ cd backend && uv run pytest tests/unit/ -v
 cd backend && uv run pytest tests/integration/ -v
 
 # 前端类型检查
-cd frontend && npx tsc --noEmit
+cd frontend && pnpm exec tsc --noEmit
 
-# 前端 E2E（puppeteer-core + 系统 Chrome，需先启动 dev server）
+# 前端 E2E 冒烟（puppeteer-core + 系统 Chrome；不依赖 LLM，~5s）
+cd frontend && pnpm test:e2e:smoke
+
+# 前端 E2E 全量（含真实 LLM 流式 chat；慢，需 OPENAI_API_KEY）
 cd frontend && pnpm test:e2e
 ```
+
+> commit 前只需跑 `make test`(后端) + `pnpm lint` + `pnpm exec tsc --noEmit`。
+> `pnpm test:e2e` 仅在改了前端交互/鉴权/workspace 渲染、合入 main 前、或 CI 里按需跑。
 
 ### CI 密钥
 

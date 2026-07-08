@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test:e2e": "node e2e/run.mjs"
+    "typecheck": "tsc --noEmit",
+    "test:e2e": "node e2e/run.mjs",
+    "test:e2e:smoke": "E2E_SMOKE=1 node e2e/run.mjs"
   },
   "dependencies": {
     "@langchain/langgraph-sdk": "^1.9.22",

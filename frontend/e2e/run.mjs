@@ -5,15 +5,17 @@ import { fileURLToPath } from "node:url";
 import { ensureBackend, ensureFrontend, stopAll } from "./harness.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const isSmoke = process.env.E2E_SMOKE === "1";
 const testFiles = fs
   .readdirSync(__dirname)
   .filter((f) => f.endsWith(".test.mjs"))
+  .filter((f) => (isSmoke ? f === "auth.test.mjs" : true))
   .map((f) => path.join(__dirname, f));
 
 await ensureBackend();
 await ensureFrontend();
 
-console.log(`[e2e] running ${testFiles.length} test file(s) serially...`);
+console.log(`[e2e] running ${testFiles.length} test file(s)${isSmoke ? " (smoke)" : ""} serially...`);
 
 let code = 0;
 for (const file of testFiles) {

@@ -1,7 +1,8 @@
 ## 规则
 - 后端用uv, 不用pip
 - 前端使用pnpm, 不用npm
-- commit前跑make test(后端) + pnpm test:e2e(前端)
+- commit前跑 make test(后端) + pnpm lint(前端) + pnpm exec tsc --noEmit(前端类型检查)
+- pnpm test:e2e(真实 E2E，慢、依赖 LLM) 仅在改了前端交互/鉴权/workspace 渲染、合入 main 前、或 CI 里按需跑；不强制每次 commit
 - Conventional Commits(feat/fix/docs/refactor/chore)
 - commit 到main,不走PR
 - 不做reset --hard/clean, 除非我明确要求
