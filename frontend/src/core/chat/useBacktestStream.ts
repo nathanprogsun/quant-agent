@@ -55,6 +55,7 @@ export function useBacktestStream(url: string, options: BacktestStreamOptions = 
     source.onerror = () => {
       source.close()
       sourceRef.current = null
+      optionsRef.current.onFailed?.('连接中断')
     }
   }, [url])
 
