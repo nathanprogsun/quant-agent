@@ -329,11 +329,8 @@ cd backend && uv run pytest tests/integration/ -v
 # 前端类型检查
 cd frontend && npx tsc --noEmit
 
-# 前端单元测试
-cd frontend && pnpm test
-
-# 前端 E2E（自动启动后端 + 前端）
-cd frontend && pnpm exec playwright test
+# 前端 E2E（puppeteer-core + 系统 Chrome，需先启动 dev server）
+cd frontend && pnpm test:e2e
 ```
 
 ### CI 密钥

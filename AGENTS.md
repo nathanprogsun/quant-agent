@@ -1,7 +1,7 @@
 ## 规则
 - 后端用uv, 不用pip
 - 前端使用pnpm, 不用npm
-- commit前跑make test(后端) + pnpm test(前端)
+- commit前跑make test(后端) + pnpm test:e2e(前端)
 - Conventional Commits(feat/fix/docs/refactor/chore)
 - commit 到main,不走PR
 - 不做reset --hard/clean, 除非我明确要求
