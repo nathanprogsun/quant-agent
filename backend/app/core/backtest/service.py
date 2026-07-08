@@ -310,29 +310,75 @@ def _parse_performance_series(result_payload: dict[str, Any]) -> list[Performanc
 
 
 def _parse_trade_groups(result_payload: dict[str, Any]) -> list[TradeDayGroup]:
+    """Parse trades from jqcli's actual structure: `result.orders.buy/sell` are
+    parallel arrays {time: [ms,...], value: [dict,...]}; each value item is a
+    trade record (symbol/price/amount). Falls back to legacy `result.trades`
+    list for older payloads.
+    """
     result = _unwrap_result_block(result_payload)
-    trades = result.get("trades")
-    if not isinstance(trades, list):
-        return []
-
     by_date: dict[str, list[TradeRecord]] = {}
-    for item in trades:
-        if not isinstance(item, dict):
-            continue
-        date = str(item.get("date") or item.get("trade_date") or "")
+
+    def _add(date: str, rec: TradeRecord) -> None:
         if not date:
-            continue
-        by_date.setdefault(date, []).append(
-            TradeRecord(
-                symbol=str(item.get("symbol") or item.get("security") or ""),
-                name=str(item.get("name") or item.get("security_name") or ""),
-                side=str(item.get("side") or item.get("action") or ""),
-                quantity=float(item.get("quantity") or item.get("amount") or 0),
-                price=float(item.get("price") or 0),
-            )
-        )
+            return
+        by_date.setdefault(date, []).append(rec)
+
+    # Primary: result.orders.{buy,sell} parallel arrays
+    orders = result.get("orders") if isinstance(result.get("orders"), dict) else None
+    if orders:
+        for side_key, side_label in (("buy", "买入"), ("sell", "卖出")):
+            side = orders.get(side_key) if isinstance(orders.get(side_key), dict) else None
+            if not side:
+                continue
+            times = side.get("time") or []
+            values = side.get("value") or []
+            if not isinstance(times, list) or not isinstance(values, list):
+                continue
+            for i, raw_ms in enumerate(times):
+                if i >= len(values):
+                    break
+                item = values[i] if isinstance(values[i], dict) else {}
+                date = (
+                    _ms_to_date_str(int(raw_ms))
+                    if isinstance(raw_ms, (int, float))
+                    else (str(item.get("time") or item.get("date") or item.get("trade_date") or ""))
+                )
+                _add(date, _trade_from_item(item, side_label))
+
+    # Legacy fallback: result.trades list-of-dict
+    trades = result.get("trades")
+    if isinstance(trades, list) and not by_date:
+        for item in trades:
+            if not isinstance(item, dict):
+                continue
+            date = str(item.get("date") or item.get("trade_date") or "")
+            side = str(item.get("side") or item.get("action") or "")
+            _add(date, _trade_from_item(item, side))
 
     return [TradeDayGroup(date=date, trades=list(rows)) for date, rows in sorted(by_date.items())]
+
+
+def _trade_from_item(item: dict[str, Any], side_default: str = "") -> TradeRecord:
+    """Build a TradeRecord from a jqcli value-item dict with tolerant field names."""
+    return TradeRecord(
+        symbol=str(item.get("symbol") or item.get("security") or item.get("code") or ""),
+        name=str(item.get("name") or item.get("security_name") or ""),
+        side=str(item.get("side") or item.get("action") or side_default or ""),
+        quantity=float(
+            item.get("quantity")
+            or item.get("amount")
+            or item.get("volume")
+            or item.get("number")
+            or 0
+        ),
+        price=float(
+            item.get("price")
+            or item.get("avg_price")
+            or item.get("filled_price")
+            or item.get("cost")
+            or 0
+        ),
+    )
 
 
 def _parse_trades_from_logs(log_lines: list[str]) -> list[TradeDayGroup]:
