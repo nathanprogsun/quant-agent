@@ -12,10 +12,9 @@ ToolMessages adjacent to their dispatch AIMessage. Dangling calls are
 synthesised as ``ToolMessage(status='error', ...)``.
 
 Ports ``deerflow.agents.middlewares.dangling_tool_call_middleware``.
-Adapts to quant-agent's custom ``AgentMiddleware`` ABC: instead of
-``request.override(messages=...)`` (langchain-style), we mutate
-``request.messages`` in place — the agent_node reads
-``request.messages`` back out so the patched list persists in graph state.
+Uses ``request.override(messages=...)`` (langchain ``ModelRequest`` style)
+to return a new request carrying the patched messages; the agent reducer
+applies them via ``add_messages`` so replacements persist by id.
 """
 
 from __future__ import annotations
@@ -26,10 +25,9 @@ from collections import defaultdict, deque
 from collections.abc import Awaitable, Callable, Sequence
 from typing import Any, override
 
-from langchain.agents.middleware import AgentMiddleware
+from langchain.agents import AgentState
+from langchain.agents.middleware import AgentMiddleware, ModelRequest, ModelResponse
 from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
-
-from app.core.chat.agent.model_call import ModelCallRequest
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +65,7 @@ def _cap_error_detail(error: object) -> str:
     return ""
 
 
-class DanglingToolCallMiddleware(AgentMiddleware):
+class DanglingToolCallMiddleware(AgentMiddleware[AgentState]):
     """Insert placeholder ToolMessages for dangling tool calls before model invocation.
 
     Scans the message history for AIMessages whose ``tool_calls`` lack
@@ -226,25 +224,25 @@ class DanglingToolCallMiddleware(AgentMiddleware):
     # ── wrap hooks ───────────────────────────────────────────────
 
     @override
-    def wrap_model_call(  # type: ignore[override]
+    def wrap_model_call(
         self,
-        request: ModelCallRequest,
-        handler: Callable[[ModelCallRequest], Any],
-    ) -> Any:
+        request: ModelRequest,
+        handler: Callable[[ModelRequest], ModelResponse[Any]],
+    ) -> ModelResponse[Any]:
         patched = self._build_patched_messages(request.messages)
         if patched is not None:
-            request.messages = patched
+            request = request.override(messages=patched)  # type: ignore[arg-type]
         return handler(request)
 
     @override
-    async def awrap_model_call(  # type: ignore[override]
+    async def awrap_model_call(
         self,
-        request: ModelCallRequest,
-        handler: Callable[[ModelCallRequest], Awaitable[Any]],
-    ) -> Any:
+        request: ModelRequest,
+        handler: Callable[[ModelRequest], Awaitable[ModelResponse[Any]]],
+    ) -> ModelResponse[Any]:
         patched = self._build_patched_messages(request.messages)
         if patched is not None:
-            request.messages = patched
+            request = request.override(messages=patched)  # type: ignore[arg-type]
         return await handler(request)
 
 

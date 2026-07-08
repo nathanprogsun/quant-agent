@@ -1,7 +1,17 @@
 """Middleware to detect and break repetitive tool call loops.
 
-Ported from deer-flow loop_detection_middleware.py:477-593.
-Adapted: before_agent/after_agent → abefore_model/aafter_model (D1).
+Ported from deer-flow loop_detection_middleware.py, adapted for quant-agent's
+SimpleNamespace runtime context (attr access instead of dict API).
+
+Detection strategy:
+  1. After each model response, hash the tool calls (name + args).
+  2. Track recent hashes in a sliding window.
+  3. If the same hash appears >= warn_threshold times, queue a warning
+     for the current thread/run. Injected at the next ``wrap_model_call``.
+  4. If it appears >= hard_limit times, strip all tool_calls to force
+     a final text answer.
+  5. Per-tool-type frequency layer catches the same tool called many
+     times with varying arguments.
 """
 
 from __future__ import annotations
@@ -13,9 +23,10 @@ import threading
 from collections import OrderedDict, defaultdict
 from collections.abc import Awaitable, Callable
 from copy import deepcopy
-from typing import Any
+from typing import Any, override
 
-from langchain.agents.middleware import AgentMiddleware
+from langchain.agents import AgentState
+from langchain.agents.middleware import AgentMiddleware, ModelRequest, ModelResponse
 from langchain_core.messages import HumanMessage
 from langgraph.runtime import Runtime
 
@@ -33,17 +44,14 @@ _WARNING_MSG = (
     "[LOOP DETECTED] You are repeating the same tool calls. "
     "Stop calling tools and produce your final answer now."
 )
-
 _TOOL_FREQ_WARNING_MSG = (
     "[LOOP DETECTED] You have called {tool_name} {count} times "
     "without producing a final answer. Stop calling tools now."
 )
-
 _HARD_STOP_MSG = (
     "[FORCED STOP] Repeated tool calls exceeded the safety limit. "
     "Producing final answer with results collected so far."
 )
-
 _TOOL_FREQ_HARD_STOP_MSG = (
     "[FORCED STOP] Tool {tool_name} called {count} times — exceeded the per-tool safety limit."
 )
@@ -100,12 +108,10 @@ def _hash_tool_calls(tool_calls: list[dict[str, Any]]) -> str:
         key = _stable_tool_key(name, args, fallback_key)
         normalized.append(f"{name}:{key}")
     normalized.sort()
-    return hashlib.md5(json.dumps(normalized, sort_keys=True, default=str).encode()).hexdigest()[
-        :12
-    ]
+    return hashlib.md5(json.dumps(normalized, sort_keys=True, default=str).encode()).hexdigest()[:12]
 
 
-class LoopDetectionMiddleware(AgentMiddleware):
+class LoopDetectionMiddleware(AgentMiddleware[AgentState]):
     """Detects and breaks repetitive tool call loops."""
 
     def __init__(
@@ -116,7 +122,8 @@ class LoopDetectionMiddleware(AgentMiddleware):
         max_tracked_threads: int = _DEFAULT_MAX_TRACKED_THREADS,
         tool_freq_warn: int = _DEFAULT_TOOL_FREQ_WARN,
         tool_freq_hard_limit: int = _DEFAULT_TOOL_FREQ_HARD_LIMIT,
-    ):
+        tool_freq_overrides: dict[str, tuple[int, int]] | None = None,
+    ) -> None:
         super().__init__()
         self.warn_threshold = warn_threshold
         self.hard_limit = hard_limit
@@ -124,6 +131,7 @@ class LoopDetectionMiddleware(AgentMiddleware):
         self.max_tracked_threads = max_tracked_threads
         self.tool_freq_warn = tool_freq_warn
         self.tool_freq_hard_limit = tool_freq_hard_limit
+        self._tool_freq_overrides: dict[str, tuple[int, int]] = tool_freq_overrides or {}
         self._lock = threading.Lock()
         self._history: OrderedDict[str, list[str]] = OrderedDict()
         self._warned: dict[str, set[str]] = defaultdict(set)
@@ -131,27 +139,32 @@ class LoopDetectionMiddleware(AgentMiddleware):
         self._tool_freq_warned: dict[str, set[str]] = defaultdict(set)
         self._pending_warnings: dict[tuple[str, str], list[str]] = defaultdict(list)
         self._pending_warning_touch_order: OrderedDict[tuple[str, str], None] = OrderedDict()
-        self._max_pending_warning_keys = max(1, max_tracked_threads * 2)
+        self._max_pending_warning_keys = max(1, self.max_tracked_threads * 2)
 
-    def _get_thread_id(self, runtime: Runtime) -> str:
-        return "default"
+    @staticmethod
+    def _get_thread_id(runtime: Runtime) -> str:
+        context = getattr(runtime, "context", None)
+        thread_id = getattr(context, "thread_id", None) if context else None
+        return str(thread_id) if thread_id else "default"
 
-    def _get_run_id(self, runtime: Runtime) -> str:
-        return "default"
+    @staticmethod
+    def _get_run_id(runtime: Runtime) -> str:
+        context = getattr(runtime, "context", None)
+        run_id = getattr(context, "run_id", None) if context else None
+        return str(run_id) if run_id else "default"
 
     def _pending_key(self, runtime: Runtime) -> tuple[str, str]:
         return self._get_thread_id(runtime), self._get_run_id(runtime)
 
     def _evict_if_needed(self) -> None:
-        with self._lock:
-            while len(self._history) > self.max_tracked_threads:
-                evicted_id, _ = self._history.popitem(last=False)
-                self._warned.pop(evicted_id, None)
-                self._tool_freq.pop(evicted_id, None)
-                self._tool_freq_warned.pop(evicted_id, None)
-                for key in list(self._pending_warnings):
-                    if key[0] == evicted_id:
-                        self._drop_pending_warning_key_locked(key)
+        while len(self._history) > self.max_tracked_threads:
+            evicted_id, _ = self._history.popitem(last=False)
+            self._warned.pop(evicted_id, None)
+            self._tool_freq.pop(evicted_id, None)
+            self._tool_freq_warned.pop(evicted_id, None)
+            for key in list(self._pending_warnings):
+                if key[0] == evicted_id:
+                    self._drop_pending_warning_key_locked(key)
 
     def _drop_pending_warning_key_locked(self, key: tuple[str, str]) -> None:
         self._pending_warnings.pop(key, None)
@@ -248,13 +261,20 @@ class LoopDetectionMiddleware(AgentMiddleware):
                     continue
                 freq[name] += 1
                 tc_count = freq[name]
-                if tc_count >= self.tool_freq_hard_limit:
+
+                if name in self._tool_freq_overrides:
+                    eff_warn, eff_hard = self._tool_freq_overrides[name]
+                else:
+                    eff_warn, eff_hard = self.tool_freq_warn, self.tool_freq_hard_limit
+
+                if tc_count >= eff_hard:
                     return _TOOL_FREQ_HARD_STOP_MSG.format(tool_name=name, count=tc_count), True
-                if tc_count >= self.tool_freq_warn:
+                if tc_count >= eff_warn:
                     warned = self._tool_freq_warned[thread_id]
                     if name not in warned:
                         warned.add(name)
                         return _TOOL_FREQ_WARNING_MSG.format(tool_name=name, count=tc_count), False
+
         return None, False
 
     @staticmethod
@@ -284,43 +304,60 @@ class LoopDetectionMiddleware(AgentMiddleware):
             messages = state.get("messages", [])
             last_msg = messages[-1]
             content = self._append_text(last_msg.content, warning or _HARD_STOP_MSG)
-            stripped_msg = last_msg.model_copy(
-                update=self._build_hard_stop_update(last_msg, content)
-            )
+            stripped_msg = last_msg.model_copy(update=self._build_hard_stop_update(last_msg, content))
             return {"messages": [stripped_msg]}
         if warning:
             self._queue_pending_warning(runtime, warning)
             return None
         return None
 
-    async def abefore_model(self, state: dict[str, Any], runtime: Runtime) -> dict[str, Any] | None:  # type: ignore[override]
-        self._runtime = runtime
-        self._clear_other_run_pending_warnings(runtime)
-        return None
-
-    async def aafter_model(self, state: dict[str, Any], runtime: Runtime) -> dict[str, Any] | None:  # type: ignore[override]
-        self._runtime = runtime
-        return self._apply(state, runtime)
-
     @staticmethod
     def _format_warning_message(warnings: list[str]) -> str:
         return "\n\n".join(dict.fromkeys(warnings))
 
-    def _augment_request(self, request: Any) -> Any:
-        runtime = getattr(self, "_runtime", None)
-        if runtime is None:
-            return request
-        warnings = self._drain_pending_warnings(runtime)
+    def _augment_request(self, request: ModelRequest) -> ModelRequest:
+        warnings = self._drain_pending_warnings(request.runtime)
         if not warnings:
             return request
-        msg = self._format_warning_message(warnings)
-        new_messages = [*request.messages, HumanMessage(content=msg, name="loop_warning")]
+        new_messages = [*request.messages, HumanMessage(content=self._format_warning_message(warnings), name="loop_warning")]
         return request.override(messages=new_messages)
 
-    def wrap_model_call(self, request: Any, handler: Callable[[Any], Any]) -> Any:
+    @override
+    def before_agent(self, state: AgentState, runtime: Runtime) -> dict[str, Any] | None:
+        self._clear_other_run_pending_warnings(runtime)
+        return None
+
+    @override
+    async def abefore_agent(self, state: AgentState, runtime: Runtime) -> dict[str, Any] | None:
+        self._clear_other_run_pending_warnings(runtime)
+        return None
+
+    @override
+    def after_model(self, state: AgentState, runtime: Runtime) -> dict[str, Any] | None:
+        return self._apply(dict(state), runtime)
+
+    @override
+    async def aafter_model(self, state: AgentState, runtime: Runtime) -> dict[str, Any] | None:
+        return self._apply(dict(state), runtime)
+
+    @override
+    def after_agent(self, state: AgentState, runtime: Runtime) -> dict[str, Any] | None:
+        self._clear_current_run_pending_warnings(runtime)
+        return None
+
+    @override
+    async def aafter_agent(self, state: AgentState, runtime: Runtime) -> dict[str, Any] | None:
+        self._clear_current_run_pending_warnings(runtime)
+        return None
+
+    @override
+    def wrap_model_call(self, request: ModelRequest, handler: Callable[[ModelRequest], ModelResponse]) -> ModelResponse:
         return handler(self._augment_request(request))
 
-    async def awrap_model_call(self, request: Any, handler: Callable[[Any], Awaitable[Any]]) -> Any:
+    @override
+    async def awrap_model_call(
+        self, request: ModelRequest, handler: Callable[[ModelRequest], Awaitable[ModelResponse]]
+    ) -> ModelResponse:
         return await handler(self._augment_request(request))
 
     def reset(self, thread_id: str | None = None) -> None:
@@ -340,3 +377,6 @@ class LoopDetectionMiddleware(AgentMiddleware):
                 self._tool_freq_warned.clear()
                 self._pending_warnings.clear()
                 self._pending_warning_touch_order.clear()
+
+
+__all__ = ["LoopDetectionMiddleware"]

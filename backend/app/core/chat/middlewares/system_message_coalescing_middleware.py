@@ -12,15 +12,16 @@ quant-agent's ``ModelRequest`` carrier.
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import Any, override
 
-from langchain.agents.middleware import AgentMiddleware, ModelRequest
+from langchain.agents import AgentState
+from langchain.agents.middleware import AgentMiddleware, ModelRequest, ModelResponse
 from langchain_core.messages import BaseMessage, SystemMessage
 
 _DEFAULT_SEPARATOR = "\n\n"
 
 
-class SystemMessageCoalescingMiddleware(AgentMiddleware):
+class SystemMessageCoalescingMiddleware(AgentMiddleware[AgentState]):
     """Merge multiple SystemMessages into one at the front of the list.
 
     Args:
@@ -64,16 +65,18 @@ class SystemMessageCoalescingMiddleware(AgentMiddleware):
                 return request
         return request.override(messages=new_messages)  # type: ignore[arg-type]
 
+    @override
     async def awrap_model_call(
         self,
         request: ModelRequest,
-        handler: Callable[[ModelRequest], Awaitable[Any]],
-    ) -> Any:
+        handler: Callable[[ModelRequest], Awaitable[ModelResponse[Any]]],
+    ) -> ModelResponse[Any]:
         return await handler(self._transform(request))
 
+    @override
     def wrap_model_call(
         self,
         request: ModelRequest,
-        handler: Callable[[ModelRequest], Any],
-    ) -> Any:
+        handler: Callable[[ModelRequest], ModelResponse[Any]],
+    ) -> ModelResponse[Any]:
         return handler(self._transform(request))

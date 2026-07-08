@@ -32,8 +32,9 @@ import threading
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, override
 
+from langchain.agents import AgentState
 from langchain.agents.middleware import AgentMiddleware, ModelRequest
 from langchain.agents.middleware.types import ModelCallResult, ModelResponse
 from langchain_core.messages import AIMessage
@@ -177,7 +178,7 @@ class CircuitBreaker:
                 self._opened_at = now
 
 
-class LLMErrorHandlingMiddleware(AgentMiddleware):
+class LLMErrorHandlingMiddleware(AgentMiddleware[AgentState]):
     """Wrap model invocations with retry, circuit breaker, and fallback."""
 
     def __init__(self, config: LLMErrorConfig | None = None) -> None:
@@ -270,6 +271,7 @@ class LLMErrorHandlingMiddleware(AgentMiddleware):
                     await asyncio.sleep(delay)
         return None, last_category  # pragma: no cover — unreachable
 
+    @override
     async def awrap_model_call(
         self,
         request: ModelRequest,
@@ -291,6 +293,7 @@ class LLMErrorHandlingMiddleware(AgentMiddleware):
             error_category, circuit_open=self._circuit.state == CircuitState.OPEN
         )
 
+    @override
     def wrap_model_call(
         self,
         request: ModelRequest,

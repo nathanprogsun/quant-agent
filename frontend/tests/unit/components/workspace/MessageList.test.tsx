@@ -152,4 +152,84 @@ describe("MessageList", () => {
     const bubble = screen.getByText("user question").closest("div");
     expect(bubble).toHaveClass("bg-gray-100");
   });
+
+  test("renders a single StrategyCodeCard with hardcoded '策略代码' label", () => {
+    const messages = [
+      { id: "h1", type: "human", content: "请写一个成长性策略" },
+      {
+        id: "a1",
+        type: "ai",
+        content:
+          "下面是策略代码：\n\n```python\n# 成长性选股策略 v2\nimport jqdata\n```\n\n祝回测顺利。",
+      },
+    ] as Message[];
+
+    render(<MessageList messages={messages} threadTitle="请写一个成长性策略" />);
+
+    // exactly one card button
+    const buttons = screen.getAllByRole("button", { name: /打开策略代码/ });
+    expect(buttons).toHaveLength(1);
+    // card title is hardcoded so the # comment no longer leaks into the card
+    expect(buttons[0]).toHaveTextContent("策略代码");
+    expect(buttons[0]).not.toHaveTextContent("成长性选股策略 v2");
+    expect(buttons[0]).not.toHaveTextContent("请写一个成长性策略");
+    // the literal code block fence should not leak into the rendered DOM
+    expect(screen.queryByText(/^```python$/)).not.toBeInTheDocument();
+  });
+
+  test("combines multiple python blocks in one message into a single strategy card", () => {
+    const messages = [
+      { id: "h1", type: "human", content: "请写一个成长性策略" },
+      {
+        id: "a1",
+        type: "ai",
+        content: [
+          "下面是策略：",
+          "",
+          "```python",
+          "# 主策略",
+          "def main():",
+          "    return 1",
+          "```",
+          "",
+          "## 调仓执行",
+          "",
+          "```python",
+          "def adjust_positions(context, target_stocks):",
+          "    return target_stocks",
+          "```",
+          "",
+          "祝回测顺利。",
+        ].join("\n"),
+      },
+    ] as Message[];
+
+    render(<MessageList messages={messages} threadTitle="请写一个成长性策略" />);
+
+    const buttons = screen.getAllByRole("button", { name: /打开策略代码/ });
+    expect(buttons).toHaveLength(1);
+    expect(buttons[0]).toHaveTextContent("策略代码");
+    // the inner # comment should not bleed into the card label
+    expect(buttons[0]).not.toHaveTextContent("主策略");
+    // section heading in between should still be visible
+    expect(screen.getByText("调仓执行")).toBeInTheDocument();
+  });
+
+  test("accepts ```py fences (not just ```python)", () => {
+    const messages = [
+      { id: "h1", type: "human", content: "test" },
+      {
+        id: "a1",
+        type: "ai",
+        content: "```py\n# 短别名\nprint(1)\n```",
+      },
+    ] as Message[];
+
+    render(<MessageList messages={messages} />);
+
+    const buttons = screen.getAllByRole("button", { name: /打开策略代码/ });
+    expect(buttons).toHaveLength(1);
+    expect(buttons[0]).toHaveTextContent("策略代码");
+    expect(buttons[0]).not.toHaveTextContent("短别名");
+  });
 });

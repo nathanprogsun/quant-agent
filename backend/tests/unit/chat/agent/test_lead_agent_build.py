@@ -1,14 +1,15 @@
-"""Build-time assertions for make_lead_agent / _build_middlewares.
+"""Build-time assertions for make_lead_agent / build_middlewares.
 
 Covers the gap left by test_sync_io_offload.test_make_lead_agent_async_*
 which mocks make_lead_agent entirely: here we drive the real assembly
-function _build_middlewares and assert the hardened middleware set is
-wired into the production chain (not just constructed in isolation).
+function and assert the hardened middleware set is wired into the
+production chain (not just constructed in isolation).
 """
 
 from __future__ import annotations
 
-from app.core.chat.agent.lead_agent import _build_middlewares
+from app.core.chat.agent.features import RuntimeFeatures
+from app.core.chat.agent.middleware_chain import build_middlewares
 from app.core.chat.middlewares.clarification_middleware import ClarificationMiddleware
 from app.core.chat.middlewares.input_sanitization_middleware import (
     InputSanitizationMiddleware,
@@ -28,7 +29,7 @@ from app.core.chat.middlewares.token_budget_middleware import TokenBudgetMiddlew
 
 def test_build_middlewares_wires_hardened_set() -> None:
     """The hardened middleware set must be present in the assembled chain."""
-    chain = _build_middlewares({"configurable": {}}, None)
+    chain = build_middlewares({}, features=RuntimeFeatures())
     types_present = {type(mw) for mw in chain}
     expected = [
         LLMErrorHandlingMiddleware,
@@ -45,7 +46,7 @@ def test_build_middlewares_wires_hardened_set() -> None:
 def test_input_sanitization_runs_before_message_mutators() -> None:
     """InputSanitization must precede message-mutating middlewares so
     injection defense sees the original user content first."""
-    chain = _build_middlewares({"configurable": {}}, None)
+    chain = build_middlewares({}, features=RuntimeFeatures())
     idx_in = next(i for i, m in enumerate(chain) if isinstance(m, InputSanitizationMiddleware))
     idx_summ = next(i for i, m in enumerate(chain) if isinstance(m, SummarizationMiddleware))
     idx_coal = next(
@@ -56,6 +57,6 @@ def test_input_sanitization_runs_before_message_mutators() -> None:
 
 
 def test_clarification_is_last() -> None:
-    """ClarificationMiddleware is the terminal middleware (legacy convention)."""
-    chain = _build_middlewares({"configurable": {}}, None)
+    """ClarificationMiddleware is the terminal middleware."""
+    chain = build_middlewares({}, features=RuntimeFeatures())
     assert isinstance(chain[-1], ClarificationMiddleware)

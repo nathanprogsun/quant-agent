@@ -1,9 +1,10 @@
 """Tests for ``DanglingToolCallMiddleware``.
 
 Ports ``deerflow.tests.test_dangling_tool_call_middleware`` ≥ 30 cases.
-Adapts to quant-agent's custom ``AgentMiddleware`` ABC: instead of
-``ModelRequest.override(messages=...)`` we mutate ``request.messages``
-in place.
+Uses ``request.override(messages=...)`` (langchain ``ModelRequest`` style)
+so a new request carrying the patched messages is forwarded to the handler;
+quant-agent's local ``ModelCallRequest`` shim implements the same
+``override`` contract.
 """
 
 from __future__ import annotations
@@ -436,9 +437,10 @@ class TestWrapModelCall:
         assert len(seen["messages"]) == 2
         assert isinstance(seen["messages"][1], ToolMessage)
         assert seen["messages"][1].tool_call_id == "call_1"
-        # The original request object was mutated in place; caller's
-        # reference points to the patched list.
-        assert request.messages is seen["messages"]
+        # The handler receives a NEW request via override(messages=...);
+        # the caller's reference still points at the unpatched list.
+        assert request.messages is not seen["messages"]
+        assert len(request.messages) == 1
 
     def test_wrap_model_call_sync_passthrough(self) -> None:
         from app.core.chat.agent.model_call import ModelCallRequest  # noqa: PLC0415

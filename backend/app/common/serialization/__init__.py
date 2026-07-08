@@ -127,8 +127,7 @@ def strip_data_url_image_blocks(messages: list[Any]) -> list[Any]:
 
         additional_kwargs = msg.get("additional_kwargs")
         if not (
-            isinstance(additional_kwargs, dict)
-            and additional_kwargs.get("hide_from_ui") is True
+            isinstance(additional_kwargs, dict) and additional_kwargs.get("hide_from_ui") is True
         ):
             result.append(msg)
             continue
@@ -176,7 +175,9 @@ def serialize_messages_tuple(obj: Any) -> Any:
     """
     if isinstance(obj, (tuple, list)) and len(obj) == 2:
         chunk, metadata = obj
-        metadata_out = metadata if isinstance(metadata, dict) else _serialize_lc_object(metadata) or {}
+        metadata_out = (
+            metadata if isinstance(metadata, dict) else _serialize_lc_object(metadata) or {}
+        )
         return [_serialize_lc_object(chunk), metadata_out]
     return _serialize_lc_object(obj)
 

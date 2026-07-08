@@ -21,8 +21,9 @@ import json
 import logging
 from collections.abc import Awaitable, Callable
 from hashlib import sha256
-from typing import Any
+from typing import Any, override
 
+from langchain.agents import AgentState
 from langchain.agents.middleware import AgentMiddleware
 from langchain_core.messages import ToolMessage
 from langgraph.graph import END
@@ -32,7 +33,7 @@ from langgraph.types import Command
 logger = logging.getLogger(__name__)
 
 
-class ClarificationMiddleware(AgentMiddleware):
+class ClarificationMiddleware(AgentMiddleware[AgentState]):
     """Intercepts ``ask_clarification`` tool calls and interrupts execution.
 
     When the model calls ``ask_clarification(question=..., options=[...])``,
@@ -112,6 +113,7 @@ class ClarificationMiddleware(AgentMiddleware):
 
     # -- sync / async wrap_tool_call (the key hook) --
 
+    @override
     def wrap_tool_call(
         self,
         request: ToolCallRequest,
@@ -121,6 +123,7 @@ class ClarificationMiddleware(AgentMiddleware):
             return handler(request)
         return self._handle_clarification(request)
 
+    @override
     async def awrap_tool_call(
         self,
         request: ToolCallRequest,

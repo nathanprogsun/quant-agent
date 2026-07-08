@@ -8,6 +8,7 @@ import { ChatColumnHeader } from "@/components/workspace/ChatColumnHeader";
 import { HomePromptInput } from "@/components/workspace/HomePromptInput";
 import { MessageList } from "@/components/workspace/MessageList";
 import { MessageQueueBar } from "@/components/workspace/MessageQueueBar";
+import { ResizableSplitter } from "@/components/workspace/ResizableSplitter";
 import { StrategyWorkspace } from "@/components/workspace/StrategyWorkspace";
 import { useLoginModal } from "@/contexts/LoginModalContext";
 import { useAuth } from "@/core/auth/AuthProvider";
@@ -22,7 +23,10 @@ import {
   extractLatestPythonBlock,
   shouldSyncEditorCode,
 } from "@/core/messages/pythonBlocks";
-import { useStrategyWorkspace } from "@/hooks/useStrategyWorkspace";
+import {
+  SPLIT_RATIO_MIN,
+  useStrategyWorkspace,
+} from "@/hooks/useStrategyWorkspace";
 import { useThread } from "@/hooks/useThreads";
 import { getDefaultBacktestParams } from "@/core/backtest/defaultParams";
 import { NEW_THREAD_ID, useThreadStream } from "@/core/threads/hooks";
@@ -74,6 +78,7 @@ function ChatThreadPage({ thread_id }: { thread_id: string }) {
   const { openLoginModal } = useLoginModal();
   const { data: thread } = useThread(thread_id);
   const workspace = useStrategyWorkspace();
+  const splitContainerRef = useRef<HTMLDivElement>(null);
 
   const {
     state: sessionState,
@@ -419,12 +424,17 @@ function ChatThreadPage({ thread_id }: { thread_id: string }) {
         </p>
       ) : null}
 
-      <div className="flex min-h-0 flex-1">
+      <div ref={splitContainerRef} className="flex min-h-0 flex-1">
         <div
           className={
             showStrategyWorkspace
-              ? "flex min-h-0 min-w-0 w-[65%] shrink-0 flex-col border-r bg-white"
+              ? "flex min-h-0 min-w-0 shrink-0 flex-col border-r bg-white"
               : "flex min-h-0 min-w-0 flex-1 flex-col bg-white"
+          }
+          style={
+            showStrategyWorkspace
+              ? { width: `calc(${workspace.splitRatio * 100}% - 2px)` }
+              : undefined
           }
         >
           <div className="min-h-0 flex-1 overflow-auto px-8">
@@ -467,27 +477,39 @@ function ChatThreadPage({ thread_id }: { thread_id: string }) {
         </div>
 
         {showStrategyWorkspace ? (
-          <StrategyWorkspace
-            title={strategyPanelTitle}
-            onClose={workspace.closeWorkspace}
-            activeTab={workspace.activeTab}
-            onTabChange={workspace.setActiveTab}
-            runStatus={workspace.runStatus}
-            hasRunResults={hasRunResults}
-            editorCode={editorCode}
-            onEditorChange={setEditorCode}
-            isGenerating={isLoading}
-            editorReadOnly={isLoading || sessionState === "backtesting"}
-            sessionState={sessionState}
-            jqcliConfigured={jqcliConfigured}
-            lastMetrics={lastMetrics}
-            logLines={logLines}
-            performanceSeries={performanceSeries}
-            tradeGroups={tradeGroups}
-            holdingGroups={holdingGroups}
-            onRunBacktest={() => void handleRunBacktest()}
-            onAbortBacktest={handleAbortBacktest}
-          />
+          <>
+            <ResizableSplitter
+              containerRef={splitContainerRef}
+              ratio={workspace.splitRatio}
+              onRatioChange={workspace.setSplitRatio}
+              onReset={workspace.resetSplitRatio}
+              minRatio={SPLIT_RATIO_MIN}
+              ariaLabel="拖动以调整对话与策略面板宽度（双击重置）"
+            />
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+              <StrategyWorkspace
+                title={strategyPanelTitle}
+                onClose={workspace.closeWorkspace}
+                activeTab={workspace.activeTab}
+                onTabChange={workspace.setActiveTab}
+                runStatus={workspace.runStatus}
+                hasRunResults={hasRunResults}
+                editorCode={editorCode}
+                onEditorChange={setEditorCode}
+                isGenerating={isLoading}
+                editorReadOnly={isLoading || sessionState === "backtesting"}
+                sessionState={sessionState}
+                jqcliConfigured={jqcliConfigured}
+                lastMetrics={lastMetrics}
+                logLines={logLines}
+                performanceSeries={performanceSeries}
+                tradeGroups={tradeGroups}
+                holdingGroups={holdingGroups}
+                onRunBacktest={() => void handleRunBacktest()}
+                onAbortBacktest={handleAbortBacktest}
+              />
+            </div>
+          </>
         ) : null}
       </div>
     </div>

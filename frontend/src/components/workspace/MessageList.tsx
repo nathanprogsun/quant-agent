@@ -4,14 +4,16 @@ import type { Message } from "@langchain/langgraph-sdk";
 import { Component, Fragment, type ReactNode } from "react";
 import { Streamdown } from "streamdown";
 
-import { StrategyCodeCard } from "@/components/workspace/StrategyCodeCard";
-import { ThinkingChain } from "@/components/workspace/ThinkingChain";
+import { CoTStepsView } from "@/components/workspace/CoTStepsView";
 import {
   Reasoning,
   ReasoningContent,
   ReasoningTrigger,
 } from "@/components/workspace/Reasoning";
+import { StrategyCodeCard } from "@/components/workspace/StrategyCodeCard";
+import { ThinkingChain } from "@/components/workspace/ThinkingChain";
 import {
+  convertToCoTSteps,
   extractContentFromMessage,
   extractReasoningFromMessage,
   extractThinkingToolStepsFromMessages,
@@ -77,22 +79,20 @@ function getMessageKey(message: Message, fallback: string): string {
   return message.id ?? fallback;
 }
 
-function strategyNameFromCode(code: string, title?: string | null): string {
-  if (title?.trim()) return title.trim();
-  const comment = code.match(/^#\s*(.+)/m)?.[1]?.trim();
-  return comment || "未命名策略";
-}
+const STRATEGY_CARD_NAME = "策略代码";
 
 type ContentPart =
   | { type: "text"; text: string }
   | { type: "python"; code: string };
 
+const PYTHON_FENCE_PATTERN = /```(?:python|py)\s*\n([\s\S]*?)```/gi;
+
 function splitMarkdownWithPythonBlocks(content: string): ContentPart[] {
   const parts: ContentPart[] = [];
-  const regex = /```python\s*\n([\s\S]*?)```/gi;
+  PYTHON_FENCE_PATTERN.lastIndex = 0;
   let lastIndex = 0;
 
-  for (const match of content.matchAll(regex)) {
+  for (const match of content.matchAll(PYTHON_FENCE_PATTERN)) {
     const index = match.index ?? 0;
     if (index > lastIndex) {
       parts.push({ type: "text", text: content.slice(lastIndex, index) });
@@ -110,6 +110,53 @@ function splitMarkdownWithPythonBlocks(content: string): ContentPart[] {
   }
 
   return parts;
+}
+
+type CollapsedContentPart =
+  | { type: "text"; text: string }
+  | { type: "strategy"; blocks: string[] };
+
+/** Combine all python blocks in a message into a single strategy card.
+ *
+ * When an assistant message contains multiple ```` ```python ```` blocks
+ * (e.g. an example helper function separated from the main strategy by
+ * a markdown heading), we still want the user to see ONE strategy card
+ * for the whole response, with all code blocks concatenated. The text
+ * between blocks is kept as markdown so section headings remain visible.
+ */
+function collapseAllPythonBlocks(parts: ContentPart[]): CollapsedContentPart[] {
+  if (parts.length === 0) return [];
+
+  const pythonBlocks: string[] = [];
+  for (const part of parts) {
+    if (part.type === "python" && part.code) {
+      pythonBlocks.push(part.code);
+    }
+  }
+
+  if (pythonBlocks.length === 0) {
+    return parts.map((p) =>
+      p.type === "text"
+        ? { type: "text" as const, text: p.text }
+        : { type: "text" as const, text: p.code },
+    );
+  }
+
+  const collapsed: CollapsedContentPart[] = [];
+  let strategyInserted = false;
+
+  for (const part of parts) {
+    if (part.type === "python") {
+      if (!strategyInserted) {
+        collapsed.push({ type: "strategy", blocks: pythonBlocks });
+        strategyInserted = true;
+      }
+      continue;
+    }
+    collapsed.push({ type: "text", text: part.text });
+  }
+
+  return collapsed;
 }
 
 function MarkdownText({
@@ -210,8 +257,6 @@ export function MessageList({
               threadTitle={threadTitle}
               onOpenCode={onOpenCode}
               streamPlainText={isStreamingGroup}
-              streamingReasoning={isStreamingGroup ? streamingReasoning : ""}
-              toolSteps={isStreamingGroup ? toolSteps : []}
               showCollapsedThinking={isStreamingGroup && showCollapsedThinking}
             />
           );
@@ -248,11 +293,9 @@ function HumanMessage({ message }: { message: Message }) {
 function AssistantGroup({
   groupKey,
   messages,
-  threadTitle,
+  threadTitle: _threadTitle,
   onOpenCode,
   streamPlainText = false,
-  streamingReasoning = "",
-  toolSteps = [],
   showCollapsedThinking = false,
 }: {
   groupKey: string;
@@ -260,8 +303,6 @@ function AssistantGroup({
   threadTitle?: string | null;
   onOpenCode?: () => void;
   streamPlainText?: boolean;
-  streamingReasoning?: string;
-  toolSteps?: ReturnType<typeof extractThinkingToolStepsFromMessages>;
   showCollapsedThinking?: boolean;
 }) {
   const aiMessages = messages.filter((m) => m.type === "ai");
@@ -276,11 +317,10 @@ function AssistantGroup({
       </div>
       <div className="min-w-0 flex-1 space-y-3">
         {showCollapsedThinking ? (
-          <ThinkingChain
-            isStreaming
-            reasoning={streamingReasoning}
-            toolSteps={toolSteps}
-            defaultOpen={false}
+          <CoTStepsView
+            steps={convertToCoTSteps(messages, {
+              streamingAIMessageId: getLastAiMessage(messages)?.id,
+            })}
           />
         ) : null}
         {aiMessages
@@ -300,7 +340,9 @@ function AssistantGroup({
             const content = visibleText;
             if (!content && !reasoningText && !streamPlainText) return null;
 
-            const parts = splitMarkdownWithPythonBlocks(content);
+            const parts = collapseAllPythonBlocks(
+              splitMarkdownWithPythonBlocks(content),
+            );
             const messageKey = getMessageKey(
               msg,
               `${groupKey}-response-${messageIndex}`,
@@ -325,11 +367,11 @@ function AssistantGroup({
                     );
                   }
 
-                  if (part.type === "python" && part.code) {
+                  if (part.type === "strategy" && part.blocks.length > 0) {
                     return (
                       <StrategyCodeCard
-                        key={`${messageKey}-code-${partIndex}`}
-                        strategyName={strategyNameFromCode(part.code, threadTitle)}
+                        key={`${messageKey}-strategy-${partIndex}`}
+                        strategyName={STRATEGY_CARD_NAME}
                         onOpenCode={onOpenCode}
                       />
                     );
