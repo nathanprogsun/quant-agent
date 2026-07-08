@@ -4,8 +4,6 @@ Different model providers encode "the model refused to answer for safety
 reasons" in different fields. This module defines a Protocol plus a few
 built-in detectors so the rest of the system can treat safety termination
 uniformly.
-
-Mirrors legacy ``safety_termination_detectors.py``.
 """
 
 from __future__ import annotations
@@ -15,8 +13,17 @@ from typing import Any, Protocol, runtime_checkable
 
 from langchain_core.messages import AIMessage
 
+__all__ = [
+    "AnthropicRefusalDetector",
+    "GeminiSafetyDetector",
+    "OpenAICompatibleContentFilterDetector",
+    "SafetyTermination",
+    "SafetyTerminationDetector",
+    "default_detectors",
+]
 
-@dataclass(frozen=True)
+
+@dataclass(frozen=True, slots=True)
 class SafetyTermination:
     """Result of a safety-termination detection."""
 
@@ -106,13 +113,3 @@ def default_detectors() -> list[SafetyTerminationDetector]:
         AnthropicRefusalDetector(),
         GeminiSafetyDetector(),
     ]
-
-
-__all__ = [
-    "AnthropicRefusalDetector",
-    "GeminiSafetyDetector",
-    "OpenAICompatibleContentFilterDetector",
-    "SafetyTermination",
-    "SafetyTerminationDetector",
-    "default_detectors",
-]

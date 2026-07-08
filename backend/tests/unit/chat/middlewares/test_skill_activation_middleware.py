@@ -7,14 +7,13 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from app.core.chat.agent.model_call import ModelCallRequest
 from app.core.chat.middlewares.skill_activation_middleware import (
-    RESERVED_SKILL_NAMES,
+    RESERVED_SLASH_SKILL_NAMES,
     SkillActivationMiddleware,
 )
-from app.skills.exceptions import SkillPathTraversalError
 from app.skills.storage.local_skill_storage import LocalSkillStorage
 
 
@@ -86,22 +85,23 @@ async def test_empty_skill_name_is_noop(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_unknown_skill_is_noop(tmp_path: Path) -> None:
+async def test_unknown_skill_returns_error(tmp_path: Path) -> None:
     storage = _make_storage(tmp_path)
     mw = SkillActivationMiddleware(storage=storage)
-    seen: dict[str, Any] = {}
     request = ModelCallRequest(messages=[HumanMessage(content="/nonexistent thing", id="u1")])
-    await mw.awrap_model_call(request, await _capture_handler(seen))
-    assert len(seen["messages"]) == 1
+    result = await mw.awrap_model_call(request, await _capture_handler({}))
+    assert isinstance(result, AIMessage)
+    assert "not installed" in str(result.content)
 
 
 @pytest.mark.asyncio
 async def test_path_traversal_in_skill_name_blocked(tmp_path: Path) -> None:
     storage = _make_storage(tmp_path)
     mw = SkillActivationMiddleware(storage=storage)
+    seen: dict[str, Any] = {}
     request = ModelCallRequest(messages=[HumanMessage(content="/../etc/passwd", id="u1")])
-    with pytest.raises(SkillPathTraversalError):
-        await mw.awrap_model_call(request, await _capture_handler({}))
+    await mw.awrap_model_call(request, await _capture_handler(seen))
+    assert len(seen["messages"]) == 1
 
 
 @pytest.mark.asyncio
@@ -118,5 +118,5 @@ async def test_activation_message_is_hidden(tmp_path: Path) -> None:
 def test_reserved_names_contract() -> None:
     assert (
         frozenset({"bootstrap", "help", "memory", "models", "new", "status"})
-        == RESERVED_SKILL_NAMES
+        == RESERVED_SLASH_SKILL_NAMES
     )

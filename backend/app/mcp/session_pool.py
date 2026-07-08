@@ -68,8 +68,7 @@ class MCPSessionPool:
         # ``connection`` is a dict of transport-specific fields. The langchain
         # adapter's typed signature accepts a discriminated union; cast to
         # ``Any`` here because the upstream type narrows on ``transport`` in
-        # a way mypy can't follow. ``# noqa: E501`` keeps ruff quiet about
-        # the unused-ignore mismatch with the system mypy hook.
+        # a way mypy can't follow.
         cm = create_session(connection)
         try:
             session = await cm.__aenter__()

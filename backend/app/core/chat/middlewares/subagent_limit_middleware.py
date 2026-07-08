@@ -14,14 +14,23 @@ subagent_limit_middleware.py:11-39 contract.
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, NotRequired, override
 
+from langchain.agents import AgentState
 from langchain.agents.middleware import AgentMiddleware
 from langgraph.runtime import Runtime
 
 from app.core.chat.tools.builtin.task_tool import _subagent_usage_cache
 
 logger = logging.getLogger(__name__)
+
+
+class SubagentLimitMiddlewareState(AgentState):
+    """State written by :class:`SubagentLimitMiddleware`."""
+
+    subagent_limit_reached: NotRequired[bool]
+    max_concurrent: NotRequired[int]
+
 
 MIN_SUBAGENT_LIMIT = 2
 MAX_SUBAGENT_LIMIT = 4
@@ -38,7 +47,7 @@ def _active_subagent_count() -> int:
     return len(_subagent_usage_cache)
 
 
-class SubagentLimitMiddleware(AgentMiddleware):
+class SubagentLimitMiddleware(AgentMiddleware[SubagentLimitMiddlewareState]):
     """Limits concurrent subagent calls using the real usage-cache size.
 
     This middleware reads ``task_tool._subagent_usage_cache`` size in
@@ -60,7 +69,10 @@ class SubagentLimitMiddleware(AgentMiddleware):
         # mutated by the heuristic path.
         self._active_subagents = 0
 
-    async def abefore_model(self, state: dict[str, Any], runtime: Runtime) -> dict[str, Any] | None:  # type: ignore[override]
+    @override
+    async def abefore_model(
+        self, state: SubagentLimitMiddlewareState, runtime: Runtime
+    ) -> dict[str, Any] | None:
         """Before model — check the cache size against the concurrency limit."""
         active = _active_subagent_count()
         self._active_subagents = active

@@ -13,8 +13,9 @@ is delegated to the queue (per-thread 30s debounce). deer-flow's
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, override
 
+from langchain.agents import AgentState
 from langchain.agents.middleware import AgentMiddleware
 from langchain_core.messages import BaseMessage
 from langgraph.runtime import Runtime
@@ -25,7 +26,7 @@ from app.core.chat.memory.summarization_hook import SummarizationEvent, memory_f
 logger = logging.getLogger(__name__)
 
 
-class MemoryMiddleware(AgentMiddleware):
+class MemoryMiddleware(AgentMiddleware[AgentState]):
     """Memory evolution write-back trigger (no injection).
 
     Args:
@@ -35,24 +36,27 @@ class MemoryMiddleware(AgentMiddleware):
     def __init__(self, max_messages: int = 50) -> None:
         self._max_messages = max_messages
 
-    async def abefore_model(self, state: dict[str, Any], runtime: Runtime) -> dict[str, Any] | None:  # type: ignore[override]
+    @override
+    async def abefore_model(self, state: AgentState, runtime: Runtime) -> dict[str, Any] | None:
         """No-op. Memory injection lives in DynamicContextMiddleware (P4.2)."""
         return None
 
-    async def aafter_model(self, state: dict[str, Any], runtime: Runtime) -> dict[str, Any] | None:  # type: ignore[override]
+    @override
+    async def aafter_model(self, state: AgentState, runtime: Runtime) -> dict[str, Any] | None:
         """Dispatch a flush trigger to the MemoryUpdateQueue when over threshold."""
         messages: list[BaseMessage] = list(state.get("messages", []))
         if len(messages) < self._max_messages:
             return None
 
-        thread_id = str(runtime.context.thread_id if runtime.context else "") or "unknown"  # type: ignore[redundant-expr]
-        user_id = runtime.context.user_id if runtime.context else None  # type: ignore[redundant-expr]
+        ctx = runtime.context
+        thread_id = str(ctx.thread_id) if ctx else "unknown"  # type: ignore[redundant-expr]
+        user_id = ctx.user_id if ctx else None  # type: ignore[redundant-expr]
 
         event = SummarizationEvent(
             thread_id=thread_id,
             user_id=user_id,
             message_count=len(messages),
-            messages=messages,
+            messages=tuple(messages),
         )
         queue = get_memory_update_queue()
         if queue is None:

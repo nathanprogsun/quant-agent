@@ -22,9 +22,10 @@ import html
 import logging
 import re
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import Any, override
 
-from langchain.agents.middleware import AgentMiddleware, ModelRequest
+from langchain.agents import AgentState
+from langchain.agents.middleware import AgentMiddleware, ModelRequest, ModelResponse
 from langchain_core.messages import BaseMessage, HumanMessage
 
 logger = logging.getLogger(__name__)
@@ -93,7 +94,7 @@ def _detect_injection(text: str, pattern: re.Pattern[str]) -> bool:
     return bool(pattern.search(text))
 
 
-class InputSanitizationMiddleware(AgentMiddleware):
+class InputSanitizationMiddleware(AgentMiddleware[AgentState]):
     """Sanitize user input to defend against prompt injection.
 
     Args:
@@ -156,18 +157,20 @@ class InputSanitizationMiddleware(AgentMiddleware):
             return request
         return request.override(messages=new_messages)  # type: ignore[arg-type]
 
+    @override
     async def awrap_model_call(
         self,
         request: ModelRequest,
-        handler: Callable[[ModelRequest], Awaitable[Any]],
-    ) -> Any:
+        handler: Callable[[ModelRequest], Awaitable[ModelResponse[Any]]],
+    ) -> ModelResponse[Any]:
         sanitized = self._sanitize_request(request)
         return await handler(sanitized)
 
+    @override
     def wrap_model_call(
         self,
         request: ModelRequest,
-        handler: Callable[[ModelRequest], Any],
-    ) -> Any:
+        handler: Callable[[ModelRequest], ModelResponse[Any]],
+    ) -> ModelResponse[Any]:
         sanitized = self._sanitize_request(request)
         return handler(sanitized)

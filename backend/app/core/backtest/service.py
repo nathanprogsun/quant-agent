@@ -51,19 +51,19 @@ def _check_auth_sync(token: str, cookie: str, api_base: str) -> dict[str, Any]:
     """Sync jqcli auth check — runs in thread pool.
 
     `get_current_user` is only present in deployed jqcli (not the vendored copy
-    checked in here), so the import is wrapped in try/except to allow the
-    fallback path when running against the local stub.
+    checked in here), so the attribute lookup is guarded to allow the fallback
+    path when running against the local stub.
     """
     client = ApiClient(api_base, token=token, cookie=cookie)
     try:
-        try:
-            import jqcli.api.auth as _auth  # noqa: PLC0415
+        import jqcli.api.auth as _auth  # noqa: PLC0415
 
-            get_current_user = _auth.get_current_user  # type: ignore[attr-defined]
-
-            user_info = get_current_user(client)
-        except ImportError:
-            user_info = {"username": "authenticated"}
+        get_current_user = getattr(_auth, "get_current_user", None)
+        if get_current_user is None:
+            user_info: dict[str, Any] = {"username": "authenticated"}
+        else:
+            fetched = get_current_user(client)
+            user_info = fetched if isinstance(fetched, dict) else {"username": "authenticated"}
         return cast(dict[str, Any], {"username": user_info.get("username", "authenticated")})
     finally:
         client.close()

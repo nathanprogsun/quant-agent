@@ -15,12 +15,13 @@ def test_lead_agent_pr3_tool_whitelist() -> None:
 
 
 def test_make_lead_agent_builds_middlewares() -> None:
-    with patch("app.core.chat.agent.lead_agent.ChatOpenAI") as chat_openai:
-        chat_openai.return_value.bind_tools.return_value = chat_openai.return_value
-        with patch("app.core.chat.agent.lead_agent.StateGraph") as state_graph:
-            state_graph.return_value.compile.return_value = object()
-            with patch("app.core.chat.agent.lead_agent._build_middlewares") as build_middlewares:
-                build_middlewares.return_value = []
-                make_lead_agent({"configurable": {}})
+    with (
+        patch("app.core.chat.agent.lead_agent.PatchedChat"),
+        patch("app.core.chat.agent.lead_agent.create_agent") as ca,
+        patch("app.core.chat.agent.lead_agent.build_middlewares") as build_middlewares,
+    ):
+        ca.return_value = object()
+        build_middlewares.return_value = []
+        make_lead_agent({"configurable": {}})
 
     build_middlewares.assert_called_once()

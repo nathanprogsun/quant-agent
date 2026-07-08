@@ -28,15 +28,18 @@ id="{stable_id}__memory" (OWASP LLM01 role separation).
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
 from datetime import datetime
-from typing import Any
+from typing import Any, cast, override
 
+from langchain.agents import AgentState
 from langchain.agents.middleware import AgentMiddleware
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from langgraph.runtime import Runtime
 
 from app.config.memory_config import MemoryConfig
 from app.core.chat.memory.provider import MemoryProvider, get_memory_provider
+from app.core.chat.middlewares.jq_prefetch_middleware import _JQREF_SUFFIX
 from app.settings import get_settings
 
 _REMINDER_KWARG = "dynamic_context_reminder"
@@ -44,6 +47,9 @@ _REMINDER_DATE_KEY = "reminder_date"
 
 # Suffixes that mark a HumanMessage as already-id-swapped; the middleware must
 # not treat these as fresh injection targets (would cause suffix growth / ghosts).
+# ``__jqref`` is owned by JqPrefetchMiddleware (jq_kb doc injection); imported as
+# a module-level constant (no circular import — jq_prefetch does not import this
+# module) so both middlewares stay in sync on the suffix protocol.
 _USER_SUFFIX = "__user"
 _MEMORY_SUFFIX = "__memory"
 
@@ -65,7 +71,7 @@ def _is_reminder(msg: object) -> bool:
     )
 
 
-def _last_injected_date(messages: list[BaseMessage]) -> str | None:
+def _last_injected_date(messages: Sequence[BaseMessage]) -> str | None:
     """Most recently injected date, read from additional_kwargs (not content)."""
     for m in reversed(messages):
         if not _is_reminder(m):
@@ -85,7 +91,7 @@ def _is_user_injection_target(msg: object) -> bool:
     # id__user__user... suffix growth and ghost re-execution).
     if msg.id:
         mid = str(msg.id)
-        if mid.endswith((_USER_SUFFIX, _MEMORY_SUFFIX)):
+        if mid.endswith((_USER_SUFFIX, _MEMORY_SUFFIX, _JQREF_SUFFIX)):
             return False
     return True
 
@@ -135,7 +141,7 @@ def _make_reminder_and_user(
     return messages
 
 
-class DynamicContextMiddleware(AgentMiddleware):
+class DynamicContextMiddleware(AgentMiddleware[AgentState]):
     """Frozen-snapshot date + memory injection via ID-swap (deer-flow port).
 
     Args:
@@ -174,8 +180,9 @@ class DynamicContextMiddleware(AgentMiddleware):
         # The provider is responsible for user resolution.
         return await provider.get_block(None)
 
-    async def abefore_model(self, state: dict[str, Any], runtime: Runtime) -> dict[str, Any] | None:  # type: ignore[override]
-        messages = list(state.get("messages", []))
+    @override
+    async def abefore_model(self, state: AgentState, runtime: Runtime) -> dict[str, Any] | None:
+        messages: list[BaseMessage] = list(state.get("messages", []))
         if not messages:
             return None
 
@@ -191,7 +198,7 @@ class DynamicContextMiddleware(AgentMiddleware):
                 return None
             memory_block = await self._resolve_memory_block()
             triple = _make_reminder_and_user(
-                messages[first_idx],
+                cast(HumanMessage, messages[first_idx]),
                 _date_reminder(current_date),
                 reminder_date=current_date,
                 memory_block=memory_block,
@@ -212,7 +219,7 @@ class DynamicContextMiddleware(AgentMiddleware):
             return None
         memory_block = await self._resolve_memory_block()
         triple = _make_reminder_and_user(
-            messages[last_idx],
+            cast(HumanMessage, messages[last_idx]),
             _date_reminder(current_date),
             reminder_date=current_date,
             memory_block=memory_block,

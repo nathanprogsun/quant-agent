@@ -7,13 +7,21 @@ back to the parent dispatch ``AIMessage`` via a reverse walk (P3.4).
 
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Sequence
+from typing import Any, NotRequired, override
 
+from langchain.agents import AgentState
 from langchain.agents.middleware import AgentMiddleware
-from langchain_core.messages import AIMessage, ToolMessage
+from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
 from langgraph.runtime import Runtime
 
 from app.core.chat.tools.builtin.task_tool import pop_cached_subagent_usage
+
+
+class TokenUsageMiddlewareState(AgentState):
+    """State written by :class:`TokenUsageMiddleware`."""
+
+    token_usage: NotRequired[dict[str, int]]
 
 
 def _has_tool_call(message: AIMessage, tool_call_id: str) -> bool:
@@ -28,7 +36,7 @@ def _has_tool_call(message: AIMessage, tool_call_id: str) -> bool:
 
 
 def _walk_dispatch(
-    messages: list[Any],
+    messages: Sequence[BaseMessage],
     tool_msg_idx: int,
     tool_call_id: str,
 ) -> AIMessage | None:
@@ -42,7 +50,7 @@ def _walk_dispatch(
     return None
 
 
-def _reverse_walk_subagent_usage(messages: list[Any]) -> dict[int, AIMessage]:
+def _reverse_walk_subagent_usage(messages: Sequence[BaseMessage]) -> dict[int, AIMessage]:
     """Reverse-walk consecutive ``ToolMessage``s to attribute subagent usage.
 
     Mirrors deer-flow's token_usage_middleware._apply:282-314. For each
@@ -93,7 +101,7 @@ def _as_dict(metadata: Any) -> dict[str, int]:
     return dict(metadata) if metadata else {}
 
 
-class TokenUsageMiddleware(AgentMiddleware):
+class TokenUsageMiddleware(AgentMiddleware[TokenUsageMiddlewareState]):
     """Tracks token usage across the conversation.
 
     Accumulates token counts from model responses. When a task tool has
@@ -108,9 +116,12 @@ class TokenUsageMiddleware(AgentMiddleware):
         self._completion_tokens = 0
         self._turn_count = 0
 
-    async def aafter_model(self, state: dict[str, Any], runtime: Runtime) -> dict[str, Any] | None:  # type: ignore[override]
+    @override
+    async def aafter_model(
+        self, state: TokenUsageMiddlewareState, runtime: Runtime
+    ) -> dict[str, Any] | None:
         """Extract usage from the latest model response and bridge subagent usage."""
-        messages = state.get("messages", [])
+        messages = list(state.get("messages", []))
         if not messages:
             return {
                 "token_usage": self._as_state_dict(),
@@ -133,7 +144,7 @@ class TokenUsageMiddleware(AgentMiddleware):
         if subagent_updates:
             # Deduplicate: multiple ToolMessages may target the same dispatch AIMessage
             seen_ids: dict[str, bool] = {}
-            result: list[Any] = []
+            result: list[BaseMessage] = []
             for m in messages:
                 if id(m) in subagent_updates:
                     patched = subagent_updates[id(m)]

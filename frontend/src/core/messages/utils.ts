@@ -189,7 +189,7 @@ export function splitThinkingFromText(content: string): {
     if (inner.trim()) thinkingParts.push(inner.trim());
   };
 
-  const thinkingTag = `(?:${"redacted_"}thinking|thinking)`;
+  const thinkingTag = `(?:${"redacted_"}think|think|${"redacted_"}thinking|thinking)`;
 
   let withoutThinking = content.replace(
     new RegExp(`<${thinkingTag}>([\\s\\S]*?)<\\/${thinkingTag}>`, "gi"),
@@ -316,4 +316,120 @@ export function getLastAssistantGroupMessages(messages: Message[]): Message[] {
   const groups = getMessageGroups(messages);
   const lastAssistant = groups.filter((group) => group.type === "assistant").pop();
   return lastAssistant?.messages ?? [];
+}
+
+// ── Reasoning Segments (one per AIMessage) ─────────────────────────────────
+
+export interface ReasoningSegment {
+  /** Stable identifier for React keys (the AIMessage id, or a synthetic fallback). */
+  id: string;
+  /** Reasoning text extracted from this AIMessage (single, accumulated string). */
+  text: string;
+  /** True when this segment is the latest unfinished assistant turn — slice 3 binds the lifecycle. */
+  isStreaming: boolean;
+}
+
+/** Return one segment per AI message that carries reasoning, in source order.
+
+ * Slice 1 foundation: each ``AIMessage`` whose ``extractReasoningFromMessage``
+ * returns non-empty text becomes one ``ReasoningSegment``. ``isStreaming`` is
+ * reserved for slice 3 (per-segment streaming lifecycle) and is currently
+ * always ``false`` — no segment is distinguished from the rest.
+ *
+ * The function is a pure structural projection: it does not de-duplicate
+ * repeated identifiers or accumulate across AI messages.
+ */
+export function extractReasoningSegmentsFromMessages(
+  messages: Message[],
+): ReasoningSegment[] {
+  const segments: ReasoningSegment[] = [];
+  for (const message of messages) {
+    if (message.type !== "ai") continue;
+    const text = extractReasoningFromMessage(message);
+    if (!text) continue;
+    segments.push({
+      id: message.id ?? `reasoning-segment-${segments.length}`,
+      text,
+      isStreaming: false,
+    });
+  }
+  return segments;
+}
+
+// ── CoT steps (interleaved reasoning + tool calls per AIMessage) ────────────
+
+export type CoTStep =
+  | {
+      kind: "reasoning";
+      id: string;
+      text: string;
+      isStreaming: boolean;
+    }
+  | {
+      kind: "tool_call";
+      id: string;
+      name: string;
+      status: "running" | "done";
+    };
+
+/** Walk the message stream and produce an interleaved list of reasoning + tool steps.
+
+ * Slice 3 projection: each AIMessage contributes (in order) a reasoning step
+ * (when it carries reasoning text) followed by one tool_call step per
+ * ``tool_calls`` entry. Subsequent ``tool`` messages mark their matching step
+ * as ``done``. Reasoning ``isStreaming`` is set to ``true`` only on the
+ * reasoning step whose owning AIMessage id matches ``streamingAIMessageId``
+ * (typically the latest unfinished AI message); all other reasoning steps
+ * render as completed (collapsed by default).
+ */
+export function convertToCoTSteps(
+  messages: Message[],
+  options: { streamingAIMessageId?: string | undefined } = {},
+): CoTStep[] {
+  const streamingAIMessageId = options.streamingAIMessageId;
+  const steps: CoTStep[] = [];
+
+  for (const message of messages) {
+    if (message.type !== "ai") continue;
+    const reasoningText = extractReasoningFromMessage(message);
+    if (reasoningText) {
+      const isStreaming =
+        streamingAIMessageId !== undefined &&
+        message.id !== undefined &&
+        message.id === streamingAIMessageId;
+      steps.push({
+        kind: "reasoning",
+        id: message.id ?? `cot-r-${steps.length}`,
+        text: reasoningText,
+        isStreaming,
+      });
+    }
+    for (const toolCall of extractToolCallsFromMessage(message)) {
+      steps.push({
+        kind: "tool_call",
+        id: toolCall.id,
+        name: toolCall.name,
+        status: "running",
+      });
+    }
+  }
+
+  // Mark tool steps as done when their result message arrives. Tool messages
+  // can appear after the AI message in source order; we walk again to preserve
+  // the natural interleaving emitted by the runtime.
+  for (const message of messages) {
+    if (message.type !== "tool") continue;
+    const toolCallId =
+      "tool_call_id" in message && typeof message.tool_call_id === "string"
+        ? message.tool_call_id
+        : "";
+    if (!toolCallId) continue;
+    const step = steps.find(
+      (s): s is Extract<CoTStep, { kind: "tool_call" }> =>
+        s.kind === "tool_call" && s.id === toolCallId,
+    );
+    if (step) step.status = "done";
+  }
+
+  return steps;
 }

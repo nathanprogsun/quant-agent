@@ -131,6 +131,15 @@ class Settings(BaseSettings):
     # ==================== StreamBridge ====================
     stream_bridge_queue_maxsize: int = 4096
 
+    # ==================== Tool output budget ====================
+    # Directory used by ToolOutputBudgetMiddleware to persist oversized
+    # ToolMessage bodies. Created lazily on first externalisation; when it
+    # cannot be written the middleware falls back to in-memory truncation.
+    tool_output_dir: str = Field(
+        default="data/tool_outputs",
+        description="Directory for externalized oversized tool outputs.",
+    )
+
     # ==================== Memory evolution (P4) ====================
     memory: MemoryConfig = Field(default_factory=MemoryConfig)
 

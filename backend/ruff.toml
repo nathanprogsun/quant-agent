@@ -16,6 +16,8 @@ ignore = ["E501", "ISC001", "RUF012", "RUF001", "RUF006"]
 "app/web/lifespan.py" = ["PLC0415"]
 "app/config/**/*.py" = ["PLC0415"]
 "app/core/chat/agent/lead_agent.py" = ["PLC0415"]
+"app/core/chat/agent/middleware_chain.py" = ["PLC0415"]
+"app/core/chat/middlewares/jq_prefetch_middleware.py" = ["PLC0415"]
 "app/tools/**/*.py" = ["PLC0415"]
 "app/core/chat/middlewares/dangling_tool_call_middleware.py" = ["PLC0415"]
 

@@ -20,11 +20,13 @@ from __future__ import annotations
 import logging
 import threading
 from collections import OrderedDict
+from collections.abc import Awaitable, Callable
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, override
 
-from langchain.agents.middleware import AgentMiddleware, ModelRequest
+from langchain.agents import AgentState
+from langchain.agents.middleware import AgentMiddleware, ModelRequest, ModelResponse
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langgraph.runtime import Runtime
 
@@ -79,7 +81,7 @@ def _build_hard_stop(last_msg: AIMessage, content: str) -> AIMessage:
     return last_msg.model_copy(update=update)
 
 
-class TokenBudgetMiddleware(AgentMiddleware):
+class TokenBudgetMiddleware(AgentMiddleware[AgentState]):
     """Enforce per-run token budget via deferred warning + hard stop."""
 
     def __init__(self, config: TokenBudgetConfig | None = None) -> None:
@@ -121,6 +123,7 @@ class TokenBudgetMiddleware(AgentMiddleware):
         with self._lock:
             self._pending_warnings.clear()
 
+    @override
     async def aafter_model(  # type: ignore[override]
         self, state: dict[str, Any], runtime: Runtime | None
     ) -> dict[str, Any] | None:
@@ -160,14 +163,16 @@ class TokenBudgetMiddleware(AgentMiddleware):
         ]
         return request.override(messages=new_messages)
 
+    @override
     async def awrap_model_call(
         self,
         request: ModelRequest,
-        handler: Any,
-    ) -> Any:
+        handler: Callable[[ModelRequest], Awaitable[ModelResponse[Any]]],
+    ) -> ModelResponse[Any]:
         augmented = self._augment_request(request)
         return await handler(augmented)
 
+    @override
     def wrap_model_call(self, request: ModelRequest, handler: Any) -> Any:
         augmented = self._augment_request(request)
         return handler(augmented)

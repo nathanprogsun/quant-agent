@@ -2,7 +2,7 @@ import type { Message } from '@langchain/langgraph-sdk'
 
 import { extractContentFromMessage } from './utils'
 
-const PYTHON_FENCE = /```python\s*\n([\s\S]*?)```/gi
+const PYTHON_FENCE = /```(?:python|py)\s*\n([\s\S]*?)```/gi
 
 /** Extract the latest ```python fenced block from plain text. */
 export function extractLatestPythonBlockFromText(text: string): string | null {

@@ -14,8 +14,9 @@ from __future__ import annotations
 
 import logging
 from copy import deepcopy
-from typing import Any
+from typing import Any, override
 
+from langchain.agents import AgentState
 from langchain.agents.middleware import AgentMiddleware
 from langchain_core.messages import AIMessage, BaseMessage
 from langgraph.runtime import Runtime
@@ -53,7 +54,7 @@ def _strip_tool_calls(message: AIMessage, termination: SafetyTermination) -> AIM
     )
 
 
-class SafetyFinishReasonMiddleware(AgentMiddleware):
+class SafetyFinishReasonMiddleware(AgentMiddleware[AgentState]):
     """Suppress tool calls and tag messages when safety termination fires."""
 
     def __init__(
@@ -72,9 +73,16 @@ class SafetyFinishReasonMiddleware(AgentMiddleware):
     def detectors(self) -> list[SafetyTerminationDetector]:
         return list(self._detectors)
 
-    async def aafter_model(  # type: ignore[override]
-        self, state: dict[str, Any], runtime: Runtime
-    ) -> dict[str, Any] | None:
+    @override
+    def after_model(self, state: AgentState, runtime: Runtime) -> dict[str, Any] | None:
+        return self._apply(state)
+
+    @override
+    async def aafter_model(self, state: AgentState, runtime: Runtime) -> dict[str, Any] | None:
+        return self._apply(state)
+
+    def _apply(self, state: AgentState) -> dict[str, Any] | None:
+        """Shared sync/async implementation of the safety-termination check."""
         if not self._enabled:
             return None
         messages: list[BaseMessage] = list(state.get("messages", []))
