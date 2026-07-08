@@ -50,10 +50,6 @@ node_modules/
 playwright-report/
 test-results/
 
-# Superpowers skill artifacts (local docs — not published to GitHub)
-docs/
-.gstack/
-
 # Playwright MCP logs
 .playwright-mcp/
 
