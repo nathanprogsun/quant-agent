@@ -35,6 +35,21 @@ class BacktestRegistry:
         """Return active backtest id for a thread, if any."""
         return self._thread_active.get(thread_id)
 
+    def get_thread_for_active(self, backtest_id: str) -> str | None:
+        """Return the thread_id whose active backtest is backtest_id, if any."""
+        for thread_id, active_id in self._thread_active.items():
+            if active_id == backtest_id:
+                return thread_id
+        return None
+
+    def release_thread(self, thread_id: str) -> str | None:
+        """Clear the active backtest lock for a thread.
+
+        Returns the backtest_id that was active (if any) so the caller can
+        also cancel its worker task.
+        """
+        return self._thread_active.pop(thread_id, None)
+
     def clear_thread(self, thread_id: str) -> None:
         """Clear active backtest for a thread."""
         self._thread_active.pop(thread_id, None)

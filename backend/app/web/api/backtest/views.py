@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
@@ -23,6 +24,7 @@ from app.web.api.backtest.schemas import (
     BacktestSimulationResponse,
     BacktestSubmitRequest,
     BacktestSubmitResponse,
+    BacktestThreadCancelResponse,
     HoldingDayGroupResponse,
     HoldingDaySummaryResponse,
     HoldingRecordResponse,
@@ -38,6 +40,20 @@ from app.web.lifespan_service import get_app_context as _get_app_context
 router = APIRouter(prefix="/api/v1/backtest", tags=["backtest"])
 
 _worker_tasks: dict[str, asyncio.Task[None]] = {}
+
+
+def _reap_stale_thread_lock(service: BacktestService, thread_id: UUID) -> None:
+    """If a thread is marked active but its worker task is gone, clear the lock.
+
+    Prevents a permanently stuck "already running" state when a worker task
+    died (crashed/cancelled) without the registry being cleaned up.
+    """
+    active_id = service.get_active_for_thread(thread_id)
+    if active_id is None:
+        return
+    task = _worker_tasks.get(active_id)
+    if task is None or task.done():
+        service.cancel_for_thread(thread_id)
 
 
 def _start_backtest_worker(
@@ -129,6 +145,7 @@ async def submit_backtest(
     service: Annotated[BacktestService, Depends(backtest_service_from_request)],
 ) -> BacktestSubmitResponse:
     """Submit a backtest for execution."""
+    _reap_stale_thread_lock(service, body.thread_id)
     params = BacktestParams(
         start_date=body.params.start_date,
         end_date=body.params.end_date,
@@ -245,3 +262,32 @@ async def abort_backtest(
     """Abort a running backtest."""
     result = await service.abort_for_user(backtest_id, current_user.id)
     return BacktestAbortResponse(success=result.success, message=result.message)
+
+
+@router.post("/threads/{thread_id}/cancel", response_model=BacktestThreadCancelResponse)
+async def cancel_thread_backtest(
+    thread_id: UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    service: Annotated[BacktestService, Depends(backtest_service_from_request)],
+) -> BacktestThreadCancelResponse:
+    """Cancel the active backtest lock for a thread.
+
+    jqcli does not support aborting the remote backtest, but this releases the
+    local "already running" lock so the user can submit a new one. If a worker
+    task is still polling, it is cancelled locally (the remote backtest will
+    finish on its own; we simply stop watching it).
+    """
+    backtest_id = service.cancel_for_thread(thread_id)
+    if backtest_id is None:
+        return BacktestThreadCancelResponse(
+            cancelled=False,
+            message="该会话没有进行中的回测",
+        )
+    task = _worker_tasks.pop(backtest_id, None)
+    if task is not None and not task.done():
+        task.cancel()
+    return BacktestThreadCancelResponse(
+        cancelled=True,
+        backtest_id=backtest_id,
+        message="已取消该会话的回测占用，可重新提交",
+    )

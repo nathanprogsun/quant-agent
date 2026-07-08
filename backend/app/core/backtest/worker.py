@@ -136,17 +136,28 @@ async def run_backtest_worker(
                 "error": exc.message,
             },
         )
-    except Exception:
-        logger.exception("Backtest worker failed for %s", backtest_id)
-        await _publish_event(
-            bridge,
-            run_id,
-            {
-                "type": "backtest_failed",
-                "backtest_id": backtest_id,
-                "error": "回测服务异常",
-            },
-        )
+    except BaseException as exc:
+        if isinstance(exc, asyncio.CancelledError):
+            logger.info("Backtest worker cancelled for %s", backtest_id)
+            await _publish_event(
+                bridge,
+                run_id,
+                {
+                    "type": "backtest_aborted",
+                    "backtest_id": backtest_id,
+                },
+            )
+        else:
+            logger.exception("Backtest worker failed for %s", backtest_id)
+            await _publish_event(
+                bridge,
+                run_id,
+                {
+                    "type": "backtest_failed",
+                    "backtest_id": backtest_id,
+                    "error": "回测服务异常",
+                },
+            )
     finally:
         service.registry.release_active(backtest_id)
         await bridge.publish_end(run_id)

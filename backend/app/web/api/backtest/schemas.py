@@ -32,6 +32,7 @@ class BacktestSubmitResponse(BaseModel):
 
 class BacktestAuthStatusResponse(BaseModel):
     """Auth-check status combining configured flag with credentials."""
+
     model_config = ConfigDict(populate_by_name=True)
 
     is_authenticated: bool = Field(alias="authenticated")
@@ -42,6 +43,7 @@ class BacktestAuthStatusResponse(BaseModel):
 
 class BacktestSimulationResponse(BaseModel):
     """Response for simulation submission."""
+
     success: bool
     message: str = ""
     simulation_id: str | None = None
@@ -113,4 +115,12 @@ class BacktestResultResponse(BaseModel):
 
 class BacktestAbortResponse(BaseModel):
     success: bool
+    message: str = ""
+
+
+class BacktestThreadCancelResponse(BaseModel):
+    """Response for canceling the active backtest lock on a thread."""
+
+    cancelled: bool
+    backtest_id: str | None = None
     message: str = ""

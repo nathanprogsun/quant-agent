@@ -509,6 +509,20 @@ class BacktestService:
                 status_code=409,
             )
 
+    def get_active_for_thread(self, thread_id: UUID | str) -> str | None:
+        """Return the active backtest_id for a thread, if any."""
+        return self._registry.get_active_for_thread(str(thread_id))
+
+    def cancel_for_thread(self, thread_id: UUID | str) -> str | None:
+        """Release the thread's active backtest lock (local cancel).
+
+        jqcli does not support aborting a remote backtest, but we CAN stop
+        treating it as active locally so the user is not blocked. Returns the
+        backtest_id that was active (if any) so the caller can cancel its
+        worker task.
+        """
+        return self._registry.release_thread(str(thread_id))
+
     def _has_credentials(self) -> bool:
         return bool(self._token or self._cookie)
 

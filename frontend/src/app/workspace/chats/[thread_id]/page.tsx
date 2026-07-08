@@ -374,9 +374,16 @@ function ChatThreadPage({ thread_id }: { thread_id: string }) {
         }),
       });
 
-      const data = (await res.json()) as { backtest_id?: string; message?: string };
+      const data = (await res.json()) as {
+        backtest_id?: string;
+        message?: string;
+        error?: { code?: string; message?: string };
+      };
       if (!res.ok || !data.backtest_id) {
-        throw new Error(data.message ?? "回测提交失败");
+        const errMsg = data.error?.message ?? data.message ?? "回测提交失败";
+        const err = new Error(errMsg) as Error & { code?: string };
+        err.code = data.error?.code;
+        throw err;
       }
 
       setBacktestId(data.backtest_id);
@@ -408,14 +415,37 @@ function ChatThreadPage({ thread_id }: { thread_id: string }) {
     backtestFailed();
   }, [backtestFailed, disconnect, workspace]);
 
+  const handleCancelThreadBacktest = useCallback(async () => {
+    try {
+      await fetch(`/api/v1/backtest/threads/${thread_id}/cancel`, {
+        method: "POST",
+        credentials: "include",
+      });
+    } catch {
+      // ignore — best-effort recovery
+    }
+    setSubmitError(null);
+    backtestFailed();
+    workspace.resetRunStatus();
+  }, [backtestFailed, thread_id, workspace]);
+
   return (
     <div className="flex h-full min-h-0 flex-col bg-white">
       <ChatColumnHeader title={threadTitle} />
 
       {submitError ? (
-        <p className="border-b bg-red-50 px-4 py-2 text-sm text-red-700">
-          {submitError}
-        </p>
+        <div className="flex items-center justify-between border-b bg-red-50 px-4 py-2 text-sm text-red-700">
+          <span>{submitError}</span>
+          {submitError.includes("进行中的回测") ? (
+            <button
+              type="button"
+              onClick={() => void handleCancelThreadBacktest()}
+              className="ml-3 shrink-0 rounded bg-red-600 px-3 py-1 text-xs font-medium text-white hover:bg-red-700"
+            >
+              取消占用
+            </button>
+          ) : null}
+        </div>
       ) : null}
 
       {streamError ? (

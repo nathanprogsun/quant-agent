@@ -109,3 +109,31 @@ async def test_abort_backtest(
     data = await client.post("/api/v1/backtest/bt_12345/abort")
 
     assert data["success"] is True
+
+
+@pytest.mark.asyncio
+async def test_cancel_thread_backtest(
+    backtest_api_client: tuple[APITestClient, AsyncMock],
+) -> None:
+    """POST /api/v1/backtest/threads/{id}/cancel releases the thread lock."""
+    client, svc = backtest_api_client
+    thread_id = uuid4()
+    svc.cancel_for_thread.return_value = "bt_stuck"
+
+    data = await client.post(f"/api/v1/backtest/threads/{thread_id}/cancel")
+
+    assert data["cancelled"] is True
+    assert data["backtest_id"] == "bt_stuck"
+
+
+@pytest.mark.asyncio
+async def test_cancel_thread_backtest_no_active(
+    backtest_api_client: tuple[APITestClient, AsyncMock],
+) -> None:
+    """Cancel returns cancelled=False when nothing is active."""
+    client, svc = backtest_api_client
+    svc.cancel_for_thread.return_value = None
+
+    data = await client.post(f"/api/v1/backtest/threads/{uuid4()}/cancel")
+
+    assert data["cancelled"] is False
