@@ -397,6 +397,83 @@ def _parse_trades_from_logs(log_lines: list[str]) -> list[TradeDayGroup]:
     return [TradeDayGroup(date=date, trades=list(rows)) for date, rows in sorted(by_date.items())]
 
 
+def _build_holdings_from_trades(trade_groups: list[TradeDayGroup]) -> list[HoldingDayGroup]:
+    """Reconstruct daily holdings by walking cumulative buy/sell events.
+
+    jqcli often returns `userRecord=None` (no end-of-day positions), so we
+    fall back to deriving positions from the trade history. For each
+    trading day, we aggregate all buy/sell events up to that day per symbol.
+    Average cost is the simple mean of buy prices; close/market_value are
+    left at 0 because jqcli's result payload doesn't include per-stock daily
+    closes in this code path.
+    """
+    # Flatten and sort trades chronologically.
+    flat: list[tuple[str, str, float, float]] = []  # (date, symbol, qty, price)
+    for g in trade_groups:
+        for t in g.trades:
+            flat.append((g.date, t.symbol, t.quantity, t.price))
+
+    # Cumulative position per symbol: buys add, sells (qty<0) subtract.
+    pos: dict[str, dict[str, float]] = {}  # symbol -> {qty, cost_sum, cost_n}
+    by_date: dict[str, dict[str, tuple[float, float]]] = {}  # date -> symbol -> (qty, avg_cost)
+
+    last_date = ""
+    for d, sym, qty, price in flat:
+        if d != last_date and last_date:
+            # Snapshot current positions for the new day
+            by_date[last_date] = {
+                s: (p["qty"], p["cost_sum"] / p["cost_n"] if p["cost_n"] else 0.0)
+                for s, p in pos.items()
+                if abs(p["qty"]) > 1e-9
+            }
+        last_date = d
+        if not sym:
+            continue
+        entry = pos.setdefault(sym, {"qty": 0.0, "cost_sum": 0.0, "cost_n": 0})
+        new_qty = entry["qty"] + qty
+        if qty > 0 and price > 0:
+            entry["cost_sum"] += price * qty
+            entry["cost_n"] += qty
+        entry["qty"] = new_qty
+
+    # Final snapshot for the last date seen.
+    if last_date:
+        by_date[last_date] = {
+            s: (p["qty"], p["cost_sum"] / p["cost_n"] if p["cost_n"] else 0.0)
+            for s, p in pos.items()
+            if abs(p["qty"]) > 1e-9
+        }
+
+    groups: list[HoldingDayGroup] = []
+    for date in sorted(by_date.keys()):
+        rows: list[HoldingRecord] = []
+        for symbol, (qty, avg_cost) in sorted(by_date[date].items()):
+            rows.append(
+                HoldingRecord(
+                    symbol=symbol,
+                    name="",
+                    quantity=qty,
+                    avg_cost=avg_cost,
+                    close=0.0,
+                    market_value=0.0,
+                )
+            )
+        if not rows:
+            continue
+        groups.append(
+            HoldingDayGroup(
+                date=date,
+                holdings=rows,
+                summary=HoldingDaySummary(
+                    total_market_value=0.0,
+                    cash=0.0,
+                    total_assets=0.0,
+                ),
+            )
+        )
+    return groups
+
+
 def _parse_holding_groups(result_payload: dict[str, Any]) -> list[HoldingDayGroup]:
     data = result_payload.get("data", result_payload)
     if isinstance(data, dict) and isinstance(data.get("data"), dict):
@@ -808,6 +885,10 @@ class BacktestService:
                     trades = _parse_trades_from_logs(logs)
                 if not holdings:
                     holdings = _parse_holdings_from_logs(logs)
+            # Last-resort fallback: derive positions from cumulative trades
+            # when jqcli didn't return userRecord and logs had no daily snapshot.
+            if not holdings and trades:
+                holdings = _build_holdings_from_trades(trades)
 
             return {
                 "performance": performance,

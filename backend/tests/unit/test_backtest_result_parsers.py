@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from app.core.backtest.service import (
+    _build_holdings_from_trades,
     _parse_holding_groups,
     _parse_holdings_from_logs,
     _parse_performance_series,
     _parse_trade_groups,
     _parse_trades_from_logs,
 )
+from app.core.backtest.types import TradeDayGroup, TradeRecord
 
 _JAN_1_MS = 1704067200000
 _JAN_31_MS = 1706659200000
@@ -119,3 +121,55 @@ def test_parse_holdings_from_logs() -> None:
     assert groups[0].date == "2024-01-02"
     assert len(groups[0].holdings) == 2
     assert groups[0].summary.total_market_value == 179754.0
+
+
+def test_build_holdings_from_trades_derives_daily_positions() -> None:
+    """When jqcli returns userRecord=None, derive positions from buy/sell orders."""
+    trade_groups = [
+        TradeDayGroup(
+            date="2024-01-02",
+            trades=[
+                TradeRecord(
+                    symbol="000100.XSHE", name="", side="买入", quantity=7500.0, price=4.28
+                ),
+                TradeRecord(
+                    symbol="600023.XSHG", name="", side="买入", quantity=6900.0, price=4.62
+                ),
+            ],
+        ),
+        TradeDayGroup(
+            date="2024-01-03",
+            trades=[
+                TradeRecord(
+                    symbol="000301.XSHE", name="", side="买入", quantity=3300.0, price=9.55
+                ),
+            ],
+        ),
+        TradeDayGroup(
+            date="2024-04-29",
+            trades=[
+                TradeRecord(
+                    symbol="600023.XSHG", name="", side="卖出", quantity=-6900.0, price=6.28
+                ),
+            ],
+        ),
+    ]
+    groups = _build_holdings_from_trades(trade_groups)
+    # 3 days with positions: 2024-01-02, 2024-01-03, 2024-04-29
+    assert len(groups) == 3
+    assert groups[0].date == "2024-01-02"
+    assert len(groups[0].holdings) == 2
+    sym_qty = {h.symbol: h.quantity for h in groups[0].holdings}
+    assert sym_qty["000100.XSHE"] == 7500.0
+    assert sym_qty["600023.XSHG"] == 6900.0
+    # 2024-01-03 adds 000301
+    assert groups[1].date == "2024-01-03"
+    assert len(groups[1].holdings) == 3
+    # 2024-04-29 sold 600023 → removed from positions
+    assert groups[2].date == "2024-04-29"
+    sym_qty2 = {h.symbol: h.quantity for h in groups[2].holdings}
+    assert "600023.XSHG" not in sym_qty2
+    assert sym_qty2["000100.XSHE"] == 7500.0
+    assert sym_qty2["000301.XSHE"] == 3300.0
+    # avg_cost populated from buy prices
+    assert groups[0].holdings[0].avg_cost == 4.28
