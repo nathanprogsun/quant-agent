@@ -614,7 +614,12 @@ class BacktestService:
         return user_id if isinstance(user_id, UUID) else UUID(str(user_id))
 
     def assert_owner(self, backtest_id: str, user_id: UUID | str) -> None:
-        """Raise BacktestError(404) if user does not own the backtest."""
+        """Raise BacktestError(404) if user does not own the backtest.
+
+        If the in-memory registry has no record (e.g. after a backend restart),
+        the caller should use ``assert_owner_or_verify`` instead, which falls
+        back to checking jqcli for the backtest's existence.
+        """
         uid = self._resolve_user_id(user_id)
         if not self._registry.is_owner(backtest_id, uid):
             raise BacktestError(
@@ -622,6 +627,38 @@ class BacktestService:
                 code="backtest_not_found",
                 status_code=404,
             )
+
+    async def assert_owner_or_verify(self, backtest_id: str, user_id: UUID | str) -> None:
+        """Ownership check with jqcli fallback for post-restart scenarios.
+
+        The registry is in-memory; after a ``--reload`` restart it is empty.
+        Instead of returning 404 for every backtest created before the restart,
+        we ask jqcli whether the backtest exists. If jqcli confirms it exists,
+        we re-register the ownership mapping so subsequent calls hit the fast
+        in-memory path.
+        """
+        uid = self._resolve_user_id(user_id)
+        if self._registry.is_owner(backtest_id, uid):
+            return
+        # Registry miss — could be a restart. Ask jqcli if the backtest exists.
+        try:
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(
+                _executor,
+                functools.partial(
+                    _poll_sync, backtest_id, self._token, self._cookie, self._api_base
+                ),
+            )
+        except Exception:
+            raise BacktestError(
+                message="回测不存在或无权访问",
+                code="backtest_not_found",
+                status_code=404,
+            )
+        # jqcli returned a valid response → backtest exists. Re-register
+        # ownership so future calls skip the network round-trip.
+        self._registry.register(backtest_id, uid)
+        return
 
     def _assert_thread_free(self, thread_id: UUID | str) -> None:
         key = str(thread_id)
@@ -909,7 +946,7 @@ class BacktestService:
         Raises BacktestError(404) if user doesn't own the backtest.
         When status is not DONE, performance/trades/holdings are empty lists.
         """
-        self.assert_owner(backtest_id, user_id)
+        self.assert_owner_or_verify(backtest_id, user_id)
         result = await self.poll(backtest_id)
 
         performance: list[PerformancePoint] = []

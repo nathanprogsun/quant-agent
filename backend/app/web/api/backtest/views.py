@@ -218,7 +218,7 @@ async def stream_backtest(
     service: Annotated[BacktestService, Depends(backtest_service_from_request)],
 ) -> StreamingResponse:
     """Stream backtest progress events via SSE."""
-    service.assert_owner(backtest_id, current_user.id)
+    await service.assert_owner_or_verify(backtest_id, current_user.id)
     app_context = _get_app_context(request)
     run_id = backtest_stream_run_id(backtest_id)
     assert app_context.stream_bridge is not None  # always set at startup
