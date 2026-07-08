@@ -74,15 +74,11 @@ class SafetyFinishReasonMiddleware(AgentMiddleware[AgentState]):
         return list(self._detectors)
 
     @override
-    def after_model(
-        self, state: AgentState, runtime: Runtime
-    ) -> dict[str, Any] | None:
+    def after_model(self, state: AgentState, runtime: Runtime) -> dict[str, Any] | None:
         return self._apply(state)
 
     @override
-    async def aafter_model(
-        self, state: AgentState, runtime: Runtime
-    ) -> dict[str, Any] | None:
+    async def aafter_model(self, state: AgentState, runtime: Runtime) -> dict[str, Any] | None:
         return self._apply(state)
 
     def _apply(self, state: AgentState) -> dict[str, Any] | None:

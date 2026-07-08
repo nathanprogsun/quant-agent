@@ -72,7 +72,10 @@ class DeferredToolFilterMiddleware(AgentMiddleware[AgentState]):
             return request
         active = [t for t in request.tools if tool_name(t) not in hide]
         if len(active) < len(request.tools):
-            logger.debug("Filtered %d deferred tool schema(s) from model binding", len(request.tools) - len(active))
+            logger.debug(
+                "Filtered %d deferred tool schema(s) from model binding",
+                len(request.tools) - len(active),
+            )
         return request.override(tools=active)
 
     def _blocked_tool_message(self, request: ToolCallRequest) -> ToolMessage | None:
@@ -83,7 +86,9 @@ class DeferredToolFilterMiddleware(AgentMiddleware[AgentState]):
             return None
         tool_call_id = str(request.tool_call.get("id") or "missing_tool_call_id")
         return ToolMessage(
-            content=(f"Error: Tool '{name}' is deferred and has not been promoted yet. Call tool_search first to expose and promote this tool's schema, then retry."),
+            content=(
+                f"Error: Tool '{name}' is deferred and has not been promoted yet. Call tool_search first to expose and promote this tool's schema, then retry."
+            ),
             tool_call_id=tool_call_id,
             name=name,
             status="error",

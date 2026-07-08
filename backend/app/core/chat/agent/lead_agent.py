@@ -85,6 +85,7 @@ def make_lead_agent(
     if mcp_tools is None:
         try:
             from app.mcp import get_cached_mcp_tools
+
             mcp_tools = get_cached_mcp_tools()
         except Exception:
             mcp_tools = []
@@ -107,8 +108,7 @@ def make_lead_agent(
         config_file = None
 
     visible_skills = [
-        s for s in enabled_skills
-        if config_file is None or config_file.is_skill_enabled(s.name)
+        s for s in enabled_skills if config_file is None or config_file.is_skill_enabled(s.name)
     ]
 
     # ── System prompt ─────────────────────────────────────────

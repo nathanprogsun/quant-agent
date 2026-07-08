@@ -31,6 +31,7 @@ class SubagentLimitMiddlewareState(AgentState):
     subagent_limit_reached: NotRequired[bool]
     max_concurrent: NotRequired[int]
 
+
 MIN_SUBAGENT_LIMIT = 2
 MAX_SUBAGENT_LIMIT = 4
 MAX_CONCURRENT_SUBAGENTS = 3
@@ -69,7 +70,9 @@ class SubagentLimitMiddleware(AgentMiddleware[SubagentLimitMiddlewareState]):
         self._active_subagents = 0
 
     @override
-    async def abefore_model(self, state: SubagentLimitMiddlewareState, runtime: Runtime) -> dict[str, Any] | None:
+    async def abefore_model(
+        self, state: SubagentLimitMiddlewareState, runtime: Runtime
+    ) -> dict[str, Any] | None:
         """Before model — check the cache size against the concurrency limit."""
         active = _active_subagent_count()
         self._active_subagents = active

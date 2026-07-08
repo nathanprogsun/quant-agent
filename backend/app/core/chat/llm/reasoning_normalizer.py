@@ -146,7 +146,7 @@ def _resolve_delta(chunk: object) -> object:
 # ── enrich_chunk ────────────────────────────────────────────────────────────
 
 
-def _resolve_additional_kwargs(chunk: object) -> dict | None:
+def _resolve_additional_kwargs(chunk: object) -> dict[str, object] | None:
     """Return the mutable ``additional_kwargs`` dict on the chunk, if any.
 
     Returns ``None`` if the chunk has no mutable slot for it; the caller then

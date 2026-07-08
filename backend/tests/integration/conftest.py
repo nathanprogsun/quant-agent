@@ -6,6 +6,7 @@ import asyncio
 import os
 from collections.abc import AsyncGenerator, Generator
 from contextlib import AsyncExitStack
+from pathlib import Path
 from uuid import uuid4
 
 import pytest
@@ -60,12 +61,19 @@ def setup_test_db(test_db_url: str) -> Generator[str]:
         reload_settings()
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 async def test_app_context(
     setup_test_db: str,
-    tmp_path_factory: pytest.TempPathFactory,
+    tmp_path: Path,
 ) -> AsyncGenerator[AppContext]:
     """Create test app context with test database and sqlite checkpointer.
+
+    Function-scoped on purpose: the checkpointer's ``asyncio.Lock`` is bound
+    to the event loop in which it was constructed, and pytest-asyncio's
+    auto-mode spins up a fresh loop per test. A session-scoped fixture would
+    leak the lock across loops and trigger
+    ``RuntimeError: <Lock> is bound to a different event loop`` from
+    LangGraph's SQLite checkpointer.
 
     Uses the new per-request pattern: services are NOT pre-constructed;
     they are built per-request via the lifespan_service dependencies
@@ -75,7 +83,7 @@ async def test_app_context(
     session_factory = make_session_factory(engine)
 
     lifespan_exit_stack = AsyncExitStack()
-    checkpoint_db = tmp_path_factory.mktemp("checkpoints") / "checkpoints.db"
+    checkpoint_db = Path(tmp_path) / "checkpoints.db"
     checkpointer = await create_checkpointer(
         lifespan_exit_stack,
         backend="sqlite",

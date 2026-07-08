@@ -108,7 +108,9 @@ def _hash_tool_calls(tool_calls: list[dict[str, Any]]) -> str:
         key = _stable_tool_key(name, args, fallback_key)
         normalized.append(f"{name}:{key}")
     normalized.sort()
-    return hashlib.md5(json.dumps(normalized, sort_keys=True, default=str).encode()).hexdigest()[:12]
+    return hashlib.md5(json.dumps(normalized, sort_keys=True, default=str).encode()).hexdigest()[
+        :12
+    ]
 
 
 class LoopDetectionMiddleware(AgentMiddleware[AgentState]):
@@ -304,7 +306,9 @@ class LoopDetectionMiddleware(AgentMiddleware[AgentState]):
             messages = state.get("messages", [])
             last_msg = messages[-1]
             content = self._append_text(last_msg.content, warning or _HARD_STOP_MSG)
-            stripped_msg = last_msg.model_copy(update=self._build_hard_stop_update(last_msg, content))
+            stripped_msg = last_msg.model_copy(
+                update=self._build_hard_stop_update(last_msg, content)
+            )
             return {"messages": [stripped_msg]}
         if warning:
             self._queue_pending_warning(runtime, warning)
@@ -319,7 +323,10 @@ class LoopDetectionMiddleware(AgentMiddleware[AgentState]):
         warnings = self._drain_pending_warnings(request.runtime)
         if not warnings:
             return request
-        new_messages = [*request.messages, HumanMessage(content=self._format_warning_message(warnings), name="loop_warning")]
+        new_messages = [
+            *request.messages,
+            HumanMessage(content=self._format_warning_message(warnings), name="loop_warning"),
+        ]
         return request.override(messages=new_messages)
 
     @override
@@ -351,7 +358,9 @@ class LoopDetectionMiddleware(AgentMiddleware[AgentState]):
         return None
 
     @override
-    def wrap_model_call(self, request: ModelRequest, handler: Callable[[ModelRequest], ModelResponse]) -> ModelResponse:
+    def wrap_model_call(
+        self, request: ModelRequest, handler: Callable[[ModelRequest], ModelResponse]
+    ) -> ModelResponse:
         return handler(self._augment_request(request))
 
     @override

@@ -123,4 +123,3 @@ def dispatch_summarization_hooks(event: SummarizationEvent) -> None:
         except Exception:
             hook_name = getattr(hook, "__name__", None) or type(hook).__name__
             logger.exception("BeforeSummarizationHook %s failed", hook_name)
-

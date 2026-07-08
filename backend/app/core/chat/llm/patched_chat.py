@@ -26,8 +26,13 @@ from __future__ import annotations
 from collections.abc import AsyncIterator, Iterator, Sequence
 from typing import Any
 
-from langchain_core.language_models.chat_models import LanguageModelInput
+from langchain_core.callbacks.manager import (
+    AsyncCallbackManagerForLLMRun,
+    CallbackManagerForLLMRun,
+)
+from langchain_core.language_models import LanguageModelInput
 from langchain_core.messages import AIMessage, BaseMessage
+from langchain_core.outputs import ChatGenerationChunk
 from langchain_openai import ChatOpenAI
 
 from app.core.chat.llm.reasoning_normalizer import enrich_chunk
@@ -115,9 +120,10 @@ class PatchedChat(ChatOpenAI):
         self,
         messages: list[BaseMessage],
         stop: list[str] | None = None,
-        **kwargs: object,
-    ) -> Iterator[object]:
-        for chunk in super()._stream(messages, stop=stop, **kwargs):
+        run_manager: CallbackManagerForLLMRun | None = None,
+        **kwargs: Any,
+    ) -> Iterator[ChatGenerationChunk]:
+        for chunk in super()._stream(messages, stop=stop, run_manager=run_manager, **kwargs):
             enrich_chunk(chunk)
             yield chunk
 
@@ -125,9 +131,10 @@ class PatchedChat(ChatOpenAI):
         self,
         messages: list[BaseMessage],
         stop: list[str] | None = None,
-        **kwargs: object,
-    ) -> AsyncIterator[object]:
-        async for chunk in super()._astream(messages, stop=stop, **kwargs):
+        run_manager: AsyncCallbackManagerForLLMRun | None = None,
+        **kwargs: Any,
+    ) -> AsyncIterator[ChatGenerationChunk]:
+        async for chunk in super()._astream(messages, stop=stop, run_manager=run_manager, **kwargs):
             enrich_chunk(chunk)
             yield chunk
 

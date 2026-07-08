@@ -94,7 +94,9 @@ async def test_skill_activation_middleware_offloads_disk_io() -> None:
     ) as mock_thread:
         mock_thread.return_value = None
         result = await mw.awrap_model_call(request, handler)
-        mock_thread.assert_awaited_once_with(mw._prepare_model_request, request, hook="awrap_model_call")
+        mock_thread.assert_awaited_once_with(
+            mw._prepare_model_request, request, hook="awrap_model_call"
+        )
         assert result == "ok"
 
 

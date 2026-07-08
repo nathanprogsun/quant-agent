@@ -24,6 +24,7 @@ class TitleMiddlewareState(AgentState):
 
     title: NotRequired[str | None]
 
+
 _TITLE_PROMPT = """你是会话标题生成器。根据下面用户与助手的首轮对话，生成一个简洁的中文标题。
 
 要求：

@@ -128,16 +128,22 @@ class SkillActivationMiddleware(AgentMiddleware[AgentState]):
         if skill is None:
             return _ActivationResolution(failure_message=f"Skill `/{name}` is not installed.")
         if not skill.enabled:
-            return _ActivationResolution(failure_message=f"Skill `/{name}` is installed but disabled. Enable it before using slash activation.")
+            return _ActivationResolution(
+                failure_message=f"Skill `/{name}` is installed but disabled. Enable it before using slash activation."
+            )
         if self._available_skills is not None and name not in self._available_skills:
-            return _ActivationResolution(failure_message=f"Skill `/{name}` is not available for this agent.")
+            return _ActivationResolution(
+                failure_message=f"Skill `/{name}` is not available for this agent."
+            )
 
-        remaining_text = text[match.end():].lstrip()
+        remaining_text = text[match.end() :].lstrip()
         try:
             skill_content = self._storage.read_body(skill)
         except OSError:
             logger.exception("Failed to read slash-activated skill %s", name)
-            return _ActivationResolution(failure_message=f"Skill `/{name}` could not be loaded safely. Please check the skill installation.")
+            return _ActivationResolution(
+                failure_message=f"Skill `/{name}` could not be loaded safely. Please check the skill installation."
+            )
 
         content_hash = hashlib.sha256(skill_content.encode("utf-8")).hexdigest()
         return _ActivationResolution(
@@ -301,4 +307,8 @@ class SkillActivationMiddleware(AgentMiddleware[AgentState]):
         return await handler(prepared)
 
 
-__all__ = ["RESERVED_SLASH_SKILL_NAMES", "SkillActivationMiddleware", "is_slash_skill_activation_reminder"]
+__all__ = [
+    "RESERVED_SLASH_SKILL_NAMES",
+    "SkillActivationMiddleware",
+    "is_slash_skill_activation_reminder",
+]
