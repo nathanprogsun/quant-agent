@@ -27,7 +27,7 @@
 
 - Python 3.11+
 - Node.js 20+
-- pnpm 10+
+- pnpm 10+（需配合前端 `frontend/.npmrc` 的 `node-linker=hoisted`，Turbopack 不兼容 pnpm 默认 symlink 布局）
 - uv（Python 包管理器）
 
 ### 后端
@@ -51,7 +51,8 @@ uv run uvicorn app.web.application:app --reload --port 8000
 ```bash
 cd frontend
 
-# 安装依赖
+# 安装依赖（pnpm 会读取 .npmrc 的 node-linker=hoisted，
+# 产出扁平 node_modules，兼容 Turbopack）
 pnpm install
 
 # 配置环境
