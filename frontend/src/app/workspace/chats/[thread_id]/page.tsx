@@ -382,7 +382,9 @@ function ChatThreadPage({ thread_id }: { thread_id: string }) {
       if (!res.ok || !data.backtest_id) {
         const errMsg = data.error?.message ?? data.message ?? "回测提交失败";
         const err = new Error(errMsg) as Error & { code?: string };
-        err.code = data.error?.code;
+        if (data.error?.code) {
+          err.code = data.error.code;
+        }
         throw err;
       }
 
@@ -407,14 +409,6 @@ function ChatThreadPage({ thread_id }: { thread_id: string }) {
     backtestFailed,
   ]);
 
-  const handleAbortBacktest = useCallback(() => {
-    disconnect();
-    setStreamUrl(null);
-    setBacktestId(null);
-    workspace.resetRunStatus();
-    backtestFailed();
-  }, [backtestFailed, disconnect, workspace]);
-
   const handleCancelThreadBacktest = useCallback(async () => {
     try {
       await fetch(`/api/v1/backtest/threads/${thread_id}/cancel`, {
@@ -428,6 +422,16 @@ function ChatThreadPage({ thread_id }: { thread_id: string }) {
     backtestFailed();
     workspace.resetRunStatus();
   }, [backtestFailed, thread_id, workspace]);
+
+  const handleAbortBacktest = useCallback(() => {
+    disconnect();
+    setStreamUrl(null);
+    setBacktestId(null);
+    workspace.resetRunStatus();
+    backtestFailed();
+    // Release the backend thread lock so the user can re-submit immediately.
+    void handleCancelThreadBacktest();
+  }, [backtestFailed, disconnect, workspace, handleCancelThreadBacktest]);
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-white">
