@@ -24,7 +24,7 @@
 - 验证：重启或热加载后工具出现在白名单；`extensions_config.json` 持久化启用状态；调用返回非空结果
 
 ## F5 Guest 账号每日回测限额
-- 输入：未注册用户以 Guest 身份访问平台（无需邮箱/密码），后端自动创建 Guest 账号并签发 session token
+- 输入：管理员通过 `scripts/create_admin_user.py` 创建 Guest 账号（`role=2`），Guest 用户用该账号登录后使用平台
 - 用户角色：`User.role` 字段（int，默认 `0`）
   - `0` = 超级管理员
   - `1` = 正常用户
