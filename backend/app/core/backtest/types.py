@@ -70,7 +70,6 @@ class PerformancePoint:
     strategy: float = 0.0
     relative: float = 0.0
     benchmark: float = 0.0
-    position_pct: float | None = None
 
 
 @dataclass(frozen=True)

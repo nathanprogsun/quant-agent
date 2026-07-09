@@ -289,7 +289,6 @@ def _parse_performance_series(result_payload: dict[str, Any]) -> list[Performanc
                 strategy=float(item.get("strategy") or item.get("strategy_return") or 0),
                 relative=float(item.get("relative") or item.get("relative_return") or 0),
                 benchmark=float(item.get("benchmark") or item.get("benchmark_return") or 0),
-                position_pct=item.get("position_pct"),
             )
         )
     return legacy_points

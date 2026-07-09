@@ -66,7 +66,6 @@ class PerformancePointResponse(BaseModel):
     strategy: float = 0
     relative: float = 0
     benchmark: float = 0
-    position_pct: float | None = None
 
 
 class BacktestResultResponse(BaseModel):

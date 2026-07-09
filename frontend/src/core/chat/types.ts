@@ -30,7 +30,6 @@ export interface BacktestResultDetail {
     strategy: number
     relative: number
     benchmark: number
-    position_pct?: number | null
   }>
 }
 

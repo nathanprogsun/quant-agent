@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  Area,
   CartesianGrid,
   ComposedChart,
   Legend,
@@ -17,7 +16,6 @@ export interface PerformancePoint {
   strategy: number;
   relative: number;
   benchmark: number;
-  position_pct?: number | null;
 }
 
 interface PerformanceChartProps {
@@ -33,30 +31,15 @@ export function PerformanceChart({ series }: PerformanceChartProps) {
     );
   }
 
-  const data = series.map((point) => ({
-    ...point,
-    position: point.position_pct ?? 0,
-  }));
-
   return (
     <div className="h-72 w-full">
       <ResponsiveContainer width="100%" height="100%">
-        <ComposedChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+        <ComposedChart data={series} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
           <XAxis dataKey="date" tick={{ fontSize: 11 }} />
           <YAxis yAxisId="left" tick={{ fontSize: 11 }} />
-          <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11 }} />
           <Tooltip />
           <Legend />
-          <Area
-            yAxisId="right"
-            type="monotone"
-            dataKey="position"
-            name="仓位"
-            fill="#fde68a"
-            stroke="#f59e0b"
-            fillOpacity={0.25}
-          />
           <Line
             yAxisId="left"
             type="monotone"
