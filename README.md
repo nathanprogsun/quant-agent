@@ -2,6 +2,27 @@
 
 基于 LangGraph 与 FastAPI 的量化投研对话平台。通过自然语言对话完成市场分析、策略编写、回测执行与改进建议。
 
+## Demo（真实链路、零 mock）
+
+下面 5 张截图由 `pnpm demo:capture`（脚本位于 `frontend/e2e/demo-capture.mjs`）驱动 — headless Chrome + 真实后端 + 真实 LLM + 真实聚宽 `jqcli` 回测，无任何 mock / 假数据。脚本用 `puppeteer` 的 `page.screenshot()` 在浏览器的内部视口里抓帧，桌面其它窗口不会被扫到。
+
+| # | 截图 | 阶段 | 对应 spec |
+| - | ---- | ---- | ---------- |
+| 01 | ![home](frontend/public/screenshots/01-home.png) | 工作区首页，QuantAgent 输入框 + 4 个示例 chip | F1 入口 |
+| 02 | ![prompt](frontend/public/screenshots/02-prompt-typed.png) | 自然语言策略描述已填入（"写一个沪深300 ETF 均线金叉死叉策略，回测最近1年，初始资金10万"） | F1 输入 |
+| 03 | ![chat](frontend/public/screenshots/03-chat-with-code.png) | LLM 流式回复完成，聊天流里弹出"策略代码"卡片（点开后是 Monaco 编辑器的 Python 策略）| F1 产出 |
+| 04 | ![workspace](frontend/public/screenshots/04-strategy-workspace.png) | 打开代码卡片后的 split-pane 策略工作区，右栏可继续编辑/触发回测 | F1 二次编辑 |
+| 05 | ![backtest](frontend/public/screenshots/05-backtest-submitted.png) | "运行策略" 已点击，后端 `POST /api/v1/backtest` 200 + jqcli 回测 stream 拉起 | F2 回测 |
+
+刷新截图：
+
+```bash
+cd frontend
+pnpm demo:capture         # 5 张图写到 frontend/public/screenshots/
+```
+
+> ⚠️ 需要后端可达（`BACKEND_URL` 默认 `http://localhost:8000`）+ 可访问的 LLM + 已配置的 `JQCLI_USERNAME/JQCLI_PASSWORD`，跑一次 ≈ 60–120s。
+
 ## 功能特性
 
 - **多轮对话** — 基于 LangGraph 的 Agent 编排引擎，支持上下文记忆与多步推理

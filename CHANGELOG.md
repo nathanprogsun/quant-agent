@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **docs(demo)**: 新增 README 顶部的 Demo 章节 — 5 张截图(`01-home`→`05-backtest-submitted`)走完"输入策略描述 → LLM 生成代码 → 打开策略工作区 → 提交真实 jqcli 回测"全链路。配套脚本 `frontend/e2e/demo-capture.mjs`(`pnpm demo:capture`)，headless Chrome + 真实后端 + 真实 LLM + 真实 jqcli 零 mock，复用既有的 e2e harness（独立 sqlite 测试库、自动 kill orphan 后端/前端）保证不污染用户 :8000/:3000。截图经 `page.screenshot()` 在浏览器内截帧，不接触 macOS 桌面，避免截到无关窗口泄漏隐私。覆盖 `docs/spec.md` 中 F1（生成策略代码）与 F2（提交回测）。
+
 ### Fixed
 
 - **dev**: 修复前端 `next dev`(Turbopack) 启动后卡在 `Compiling /`、postcss worker fork 爆炸(500+→1200+ 僵尸进程)导致页面无法打开的问题。根因为从 npm 迁移到 pnpm 后，pnpm 默认 symlink 非扁平 `node_modules` 与 Turbopack 不兼容，postcss worker 子进程无法解析 `.pnpm/` 间接路径而静默崩溃，Turbopack 反复重启 worker。修复：新增 `frontend/.npmrc` 配置 `node-linker=hoisted`，`pnpm install` 产出扁平 `node_modules` 以兼容 Turbopack；同步移除残留的 `package-lock.json`。同时 `.vscode/launch.json` 的 `Next.js: Frontend Dev` 配置加 `autoAttachChildProcesses: false`，避免调试器 attach 到 worker。
