@@ -24,15 +24,23 @@
 - 验证：重启或热加载后工具出现在白名单；`extensions_config.json` 持久化启用状态；调用返回非空结果
 
 ## F5 Guest 账号每日回测限额
-- 输入：未注册用户以 Guest 身份访问平台（无需邮箱/密码），Guest 身份由后端在首次访问时自动创建并签发短期 session token
-- 输出：Guest 用户可使用全部对话/生成策略/回测功能，但**每天（UTC 自然日）最多点击运行策略 5 次**；超额时返回 HTTP 429 + 错误码 `backtest_quota_exceeded`，提示"Guest 用户每日回测上限 5 次，请注册账号继续使用"
+- 输入：未注册用户以 Guest 身份访问平台（无需邮箱/密码），后端自动创建 Guest 账号并签发 session token
+- 用户角色：`User.role` 字段（int，默认 `0`）
+  - `0` = 超级管理员
+  - `1` = 正常用户
+  - `2` = Guest
+- 回测记录：每次提交回测（不论角色）都在 DB 记录一条回测记录，含 `status`（`success` / `fail`）
+- 限额规则：**Guest（`role=2`）每天（UTC 自然日）回测不超过 3 次**，按当日 `status=success` + `status=fail` 的回测记录总数计算
+- 输出：
+  - Guest 当日第 1–3 次提交 `POST /api/v1/backtest` → 200，正常返回 `backtest_id`，DB 写入回测记录
+  - Guest 当日第 4 次提交 → HTTP 429 + 错误码 `backtest_quota_exceeded`，提示"Guest 用户每日回测上限 3 次，请注册账号继续使用"
+  - 超级管理员（`role=0`）和正常用户（`role=1`）无限制
 - 验证：
-  - Guest 用户当日第 1–5 次提交 `POST /api/v1/backtest` → 200，正常返回 `backtest_id`
-  - Guest 用户当日第 6 次提交 → 429 `backtest_quota_exceeded`
-  - UTC 次日 00:00 后计数器重置 → 首次提交恢复 200
-  - 注册用户（非 Guest）无此限制
-  - 计数维度：per-user per-day，按 UTC 自然日切分，持久化到 DB（重启不丢）
-- 约束：
-  - Guest 账号 `is_active=True`、`is_superuser=False`，`User.role` 字段新增 `guest` 值（或新增 `is_guest: bool` 列）
-  - Guest session token 过期时间 ≤ 24h；注册/登录后升级为正式用户，保留原有 thread/backtest 数据
-  - 限额仅作用于 `POST /api/v1/backtest`（提交回测），不影响对话、生成策略代码、查看已有回测结果
+  - Guest 当日 3 次成功提交后第 4 次 → 429
+  - Guest 当日 3 次中含失败记录（`status=fail`）也计入 3 次限额
+  - UTC 次日 00:00 后计数器按回测记录的 `created_at` 自然日重置
+  - 注册/登录后 `role` 从 `2` 升级为 `1`，保留原有 thread/backtest 数据，限制解除
+  - 限额仅作用于 `POST /api/v1/backtest`，不影响对话、生成策略代码、查看已有回测结果
+- 数据模型变更：
+  - `users` 表新增 `role: int NOT NULL DEFAULT 0`
+  - 新增 `backtest_records` 表：`id` / `user_id` / `backtest_id` / `status`（`success` / `fail`）/ `created_at`
