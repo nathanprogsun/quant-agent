@@ -29,8 +29,6 @@ def _build_done_detail() -> BacktestResultDetail:
         status=BacktestStatus.DONE,
         metrics=BacktestMetrics(annual_return=0.15, sharpe=1.2),
         performance=[],
-        trades=[],
-        holdings=[],
     )
 
 

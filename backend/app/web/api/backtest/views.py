@@ -25,12 +25,7 @@ from app.web.api.backtest.schemas import (
     BacktestSubmitRequest,
     BacktestSubmitResponse,
     BacktestThreadCancelResponse,
-    HoldingDayGroupResponse,
-    HoldingDaySummaryResponse,
-    HoldingRecordResponse,
     PerformancePointResponse,
-    TradeDayGroupResponse,
-    TradeRecordResponse,
 )
 from app.web.api.backtest.stream import backtest_sse_consumer, backtest_stream_run_id
 from app.web.api.deps import get_current_user
@@ -191,21 +186,6 @@ async def get_backtest_result(
         status=detail.status.value,
         metrics=metrics_resp,
         performance=[PerformancePointResponse(**p.__dict__) for p in detail.performance],
-        trades=[
-            TradeDayGroupResponse(
-                date=g.date,
-                trades=[TradeRecordResponse(**t.__dict__) for t in g.trades],
-            )
-            for g in detail.trades
-        ],
-        holdings=[
-            HoldingDayGroupResponse(
-                date=g.date,
-                holdings=[HoldingRecordResponse(**h.__dict__) for h in g.holdings],
-                summary=HoldingDaySummaryResponse(**g.summary.__dict__),
-            )
-            for g in detail.holdings
-        ],
         error=detail.error,
     )
 

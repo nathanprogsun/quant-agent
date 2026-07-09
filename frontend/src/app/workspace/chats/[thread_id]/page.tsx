@@ -16,8 +16,6 @@ import { useAnalyzeStream } from "@/core/chat/useAnalyzeStream";
 import { useBacktestStream } from "@/core/chat/useBacktestStream";
 import { useSessionState } from "@/core/chat/useSessionState";
 import type { PerformancePoint } from "@/components/workspace/PerformanceChart";
-import type { TradeDayGroup } from "@/components/workspace/TradeDetailsPanel";
-import type { HoldingDayGroup } from "@/components/workspace/HoldingDetailsPanel";
 import type { BacktestMetrics, BacktestResultDetail } from "@/core/chat/types";
 import {
   extractLatestPythonBlock,
@@ -100,8 +98,6 @@ function ChatThreadPage({ thread_id }: { thread_id: string }) {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [logLines, setLogLines] = useState<string[]>([]);
   const [performanceSeries, setPerformanceSeries] = useState<PerformancePoint[]>([]);
-  const [tradeGroups, setTradeGroups] = useState<TradeDayGroup[]>([]);
-  const [holdingGroups, setHoldingGroups] = useState<HoldingDayGroup[]>([]);
   const [inputPrefill, setInputPrefill] = useState<string | null>(null);
   const lastSyncedBlockRef = useRef<string | null>(null);
   const wasLoadingRef = useRef(false);
@@ -200,12 +196,8 @@ function ChatThreadPage({ thread_id }: { thread_id: string }) {
     if (!res.ok) return;
     const data = (await res.json()) as BacktestResultDetail & {
       performance?: PerformancePoint[];
-      trades?: TradeDayGroup[];
-      holdings?: HoldingDayGroup[];
     };
     setPerformanceSeries(data.performance ?? []);
-    setTradeGroups(data.trades ?? []);
-    setHoldingGroups(data.holdings ?? []);
   }, []);
 
   useEffect(() => {
@@ -537,8 +529,6 @@ function ChatThreadPage({ thread_id }: { thread_id: string }) {
                 lastMetrics={lastMetrics}
                 logLines={logLines}
                 performanceSeries={performanceSeries}
-                tradeGroups={tradeGroups}
-                holdingGroups={holdingGroups}
                 onRunBacktest={() => void handleRunBacktest()}
                 onAbortBacktest={handleAbortBacktest}
               />

@@ -74,55 +74,6 @@ class PerformancePoint:
 
 
 @dataclass(frozen=True)
-class TradeRecord:
-    """A single trade record."""
-
-    symbol: str = ""
-    name: str = ""
-    side: str = ""
-    quantity: float = 0.0
-    price: float = 0.0
-
-
-@dataclass(frozen=True)
-class TradeDayGroup:
-    """Trades grouped by date."""
-
-    date: str
-    trades: list[TradeRecord] = field(default_factory=list)
-
-
-@dataclass(frozen=True)
-class HoldingRecord:
-    """A single holding record."""
-
-    symbol: str = ""
-    name: str = ""
-    quantity: float = 0.0
-    avg_cost: float = 0.0
-    close: float = 0.0
-    market_value: float = 0.0
-
-
-@dataclass(frozen=True)
-class HoldingDaySummary:
-    """Per-day holding summary."""
-
-    total_assets: float = 0.0
-    cash: float = 0.0
-    total_market_value: float = 0.0
-
-
-@dataclass(frozen=True)
-class HoldingDayGroup:
-    """Holdings grouped by date."""
-
-    date: str
-    holdings: list[HoldingRecord] = field(default_factory=list)
-    summary: HoldingDaySummary = field(default_factory=HoldingDaySummary)
-
-
-@dataclass(frozen=True)
 class BacktestResultDetail:
     """Full backtest detail ready for API response."""
 
@@ -130,8 +81,6 @@ class BacktestResultDetail:
     status: BacktestStatus
     metrics: BacktestMetrics | None = None
     performance: list[PerformancePoint] = field(default_factory=list)
-    trades: list[TradeDayGroup] = field(default_factory=list)
-    holdings: list[HoldingDayGroup] = field(default_factory=list)
     error: str | None = None
 
 

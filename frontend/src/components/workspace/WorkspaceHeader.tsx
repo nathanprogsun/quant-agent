@@ -10,8 +10,6 @@ import type { StrategyTab, RunStatus } from "@/hooks/useStrategyWorkspace";
 const ALL_TABS: { id: StrategyTab; label: string }[] = [
   { id: "code", label: "策略代码" },
   { id: "performance", label: "收益概况" },
-  { id: "trades", label: "交易详情" },
-  { id: "holdings", label: "持仓详情" },
   { id: "logs", label: "运行日志" },
 ];
 

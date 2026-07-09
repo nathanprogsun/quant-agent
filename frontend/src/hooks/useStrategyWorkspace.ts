@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-export type StrategyTab = "code" | "performance" | "trades" | "holdings" | "logs";
+export type StrategyTab = "code" | "performance" | "logs";
 
 export type RunStatus = "idle" | "running" | "done" | "failed";
 

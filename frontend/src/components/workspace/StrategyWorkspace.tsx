@@ -2,11 +2,6 @@
 
 import { RunLogPanel } from "@/components/workspace/RunLogPanel";
 import { PerformancePanel } from "@/components/workspace/PerformancePanel";
-import { TradeDetailsPanel, type TradeDayGroup } from "@/components/workspace/TradeDetailsPanel";
-import {
-  HoldingDetailsPanel,
-  type HoldingDayGroup,
-} from "@/components/workspace/HoldingDetailsPanel";
 import { WorkspaceHeader } from "@/components/workspace/WorkspaceHeader";
 import { StrategyEditor } from "@/components/workspace/StrategyEditor";
 import type { BacktestMetrics, SessionState } from "@/core/chat/types";
@@ -29,8 +24,6 @@ interface StrategyWorkspaceProps {
   lastMetrics: BacktestMetrics | null;
   logLines: string[];
   performanceSeries: PerformancePoint[];
-  tradeGroups: TradeDayGroup[];
-  holdingGroups: HoldingDayGroup[];
   onRunBacktest: () => void;
   onAbortBacktest: () => void;
 }
@@ -51,8 +44,6 @@ export function StrategyWorkspace({
   lastMetrics,
   logLines,
   performanceSeries,
-  tradeGroups,
-  holdingGroups,
   onRunBacktest,
   onAbortBacktest,
 }: StrategyWorkspaceProps) {
@@ -84,12 +75,6 @@ export function StrategyWorkspace({
         ) : null}
         {activeTab === "performance" ? (
           <PerformancePanel metrics={lastMetrics} series={performanceSeries} />
-        ) : null}
-        {activeTab === "trades" ? (
-          <TradeDetailsPanel groups={tradeGroups} />
-        ) : null}
-        {activeTab === "holdings" ? (
-          <HoldingDetailsPanel groups={holdingGroups} />
         ) : null}
         {activeTab === "logs" ? (
           <RunLogPanel

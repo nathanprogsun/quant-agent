@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import functools
-import re
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from typing import Any, cast
@@ -33,12 +32,7 @@ from app.core.backtest.types import (
     BacktestResultDetail,
     BacktestSimulationResult,
     BacktestStatus,
-    HoldingDayGroup,
-    HoldingDaySummary,
-    HoldingRecord,
     PerformancePoint,
-    TradeDayGroup,
-    TradeRecord,
 )
 
 _executor = ThreadPoolExecutor(max_workers=4)
@@ -151,14 +145,6 @@ _NESTED_MS_SERIES_KEYS = (
     ("orders", "sell"),
     ("gains", "earn"),
     ("gains", "lose"),
-)
-_ORDER_LOG_RE = re.compile(
-    r"^(?P<date>\d{4}-\d{2}-\d{2}).*订单已委托：StockOrder\("
-    r"[^)]*security=(?P<symbol>[^\s,)]+)[^)]*action=(?P<action>open|close)"
-)
-_HOLDING_LOG_RE = re.compile(
-    r"^(?P<date>\d{4}-\d{2}-\d{2})\s+\d{2}:\d{2}:\d{2}\s+-\s+\S+\s+-\s+"
-    r"(?P<symbol>\S+):\s+(?P<qty>\d+)\s+股,\s+价值\s+(?P<value>[\d.]+)"
 )
 
 
@@ -307,259 +293,6 @@ def _parse_performance_series(result_payload: dict[str, Any]) -> list[Performanc
             )
         )
     return legacy_points
-
-
-def _parse_trade_groups(result_payload: dict[str, Any]) -> list[TradeDayGroup]:
-    """Parse trades from jqcli's actual structure: `result.orders.buy/sell` are
-    parallel arrays {time: [ms,...], value: [dict,...]}; each value item is a
-    trade record (symbol/price/amount). Falls back to legacy `result.trades`
-    list for older payloads.
-    """
-    result = _unwrap_result_block(result_payload)
-    by_date: dict[str, list[TradeRecord]] = {}
-
-    def _add(date: str, rec: TradeRecord) -> None:
-        if not date:
-            return
-        by_date.setdefault(date, []).append(rec)
-
-    # Primary: result.orders.{buy,sell} parallel arrays
-    orders = result.get("orders") if isinstance(result.get("orders"), dict) else None
-    if orders:
-        for side_key, side_label in (("buy", "买入"), ("sell", "卖出")):
-            side = orders.get(side_key) if isinstance(orders.get(side_key), dict) else None
-            if not side:
-                continue
-            times = side.get("time") or []
-            values = side.get("value") or []
-            if not isinstance(times, list) or not isinstance(values, list):
-                continue
-            for i, raw_ms in enumerate(times):
-                if i >= len(values):
-                    break
-                item = values[i] if isinstance(values[i], dict) else {}
-                date = (
-                    _ms_to_date_str(int(raw_ms))
-                    if isinstance(raw_ms, (int, float))
-                    else (str(item.get("time") or item.get("date") or item.get("trade_date") or ""))
-                )
-                _add(date, _trade_from_item(item, side_label))
-
-    # Legacy fallback: result.trades list-of-dict
-    trades = result.get("trades")
-    if isinstance(trades, list) and not by_date:
-        for item in trades:
-            if not isinstance(item, dict):
-                continue
-            date = str(item.get("date") or item.get("trade_date") or "")
-            side = str(item.get("side") or item.get("action") or "")
-            _add(date, _trade_from_item(item, side))
-
-    return [TradeDayGroup(date=date, trades=list(rows)) for date, rows in sorted(by_date.items())]
-
-
-def _trade_from_item(item: dict[str, Any], side_default: str = "") -> TradeRecord:
-    """Build a TradeRecord from a jqcli value-item dict with tolerant field names."""
-    return TradeRecord(
-        symbol=str(item.get("symbol") or item.get("security") or item.get("code") or ""),
-        name=str(item.get("name") or item.get("security_name") or ""),
-        side=str(item.get("side") or item.get("action") or side_default or ""),
-        quantity=float(
-            item.get("quantity")
-            or item.get("amount")
-            or item.get("volume")
-            or item.get("number")
-            or 0
-        ),
-        price=float(
-            item.get("price")
-            or item.get("avg_price")
-            or item.get("filled_price")
-            or item.get("cost")
-            or 0
-        ),
-    )
-
-
-def _parse_trades_from_logs(log_lines: list[str]) -> list[TradeDayGroup]:
-    by_date: dict[str, list[TradeRecord]] = {}
-    for line in log_lines:
-        match = _ORDER_LOG_RE.search(line)
-        if not match:
-            continue
-        action = match.group("action")
-        side = "买入" if action == "open" else "卖出"
-        symbol = match.group("symbol")
-        date = match.group("date")
-        by_date.setdefault(date, []).append(
-            TradeRecord(symbol=symbol, name="", side=side, quantity=0.0, price=0.0)
-        )
-    return [TradeDayGroup(date=date, trades=list(rows)) for date, rows in sorted(by_date.items())]
-
-
-def _build_holdings_from_trades(trade_groups: list[TradeDayGroup]) -> list[HoldingDayGroup]:
-    """Reconstruct daily holdings by walking cumulative buy/sell events.
-
-    jqcli often returns `userRecord=None` (no end-of-day positions), so we
-    fall back to deriving positions from the trade history. For each
-    trading day, we aggregate all buy/sell events up to that day per symbol.
-    Average cost is the simple mean of buy prices; close/market_value are
-    left at 0 because jqcli's result payload doesn't include per-stock daily
-    closes in this code path.
-    """
-    # Flatten and sort trades chronologically.
-    flat: list[tuple[str, str, float, float]] = []  # (date, symbol, qty, price)
-    for g in trade_groups:
-        for t in g.trades:
-            flat.append((g.date, t.symbol, t.quantity, t.price))
-
-    # Cumulative position per symbol: buys add, sells (qty<0) subtract.
-    pos: dict[str, dict[str, float]] = {}  # symbol -> {qty, cost_sum, cost_n}
-    by_date: dict[str, dict[str, tuple[float, float]]] = {}  # date -> symbol -> (qty, avg_cost)
-
-    last_date = ""
-    for d, sym, qty, price in flat:
-        if d != last_date and last_date:
-            # Snapshot current positions for the new day
-            by_date[last_date] = {
-                s: (p["qty"], p["cost_sum"] / p["cost_n"] if p["cost_n"] else 0.0)
-                for s, p in pos.items()
-                if abs(p["qty"]) > 1e-9
-            }
-        last_date = d
-        if not sym:
-            continue
-        entry = pos.setdefault(sym, {"qty": 0.0, "cost_sum": 0.0, "cost_n": 0})
-        new_qty = entry["qty"] + qty
-        if qty > 0 and price > 0:
-            entry["cost_sum"] += price * qty
-            entry["cost_n"] += qty
-        entry["qty"] = new_qty
-
-    # Final snapshot for the last date seen.
-    if last_date:
-        by_date[last_date] = {
-            s: (p["qty"], p["cost_sum"] / p["cost_n"] if p["cost_n"] else 0.0)
-            for s, p in pos.items()
-            if abs(p["qty"]) > 1e-9
-        }
-
-    groups: list[HoldingDayGroup] = []
-    for date in sorted(by_date.keys()):
-        rows: list[HoldingRecord] = []
-        for symbol, (qty, avg_cost) in sorted(by_date[date].items()):
-            rows.append(
-                HoldingRecord(
-                    symbol=symbol,
-                    name="",
-                    quantity=qty,
-                    avg_cost=avg_cost,
-                    close=0.0,
-                    market_value=0.0,
-                )
-            )
-        if not rows:
-            continue
-        groups.append(
-            HoldingDayGroup(
-                date=date,
-                holdings=rows,
-                summary=HoldingDaySummary(
-                    total_market_value=0.0,
-                    cash=0.0,
-                    total_assets=0.0,
-                ),
-            )
-        )
-    return groups
-
-
-def _parse_holding_groups(result_payload: dict[str, Any]) -> list[HoldingDayGroup]:
-    data = result_payload.get("data", result_payload)
-    if isinstance(data, dict) and isinstance(data.get("data"), dict):
-        data = data["data"]
-    user_record = data.get("userRecord") if isinstance(data, dict) else None
-    if isinstance(user_record, list):
-        holdings: list[Any] = user_record
-    else:
-        result = cast(
-            dict[str, Any],
-            data.get("result") if isinstance(data, dict) and data.get("result") is not None else {},
-        )
-        holdings = list(result.get("holdings") or result.get("positions") or [])
-    if not isinstance(holdings, list):
-        return []  # type: ignore[unreachable]
-
-    by_date: dict[str, list[HoldingRecord]] = {}
-    for item in holdings:
-        if not isinstance(item, dict):
-            continue
-        date = str(item.get("date") or item.get("trade_date") or "")
-        if not date:
-            continue
-        by_date.setdefault(date, []).append(
-            HoldingRecord(
-                symbol=str(item.get("symbol") or item.get("security") or ""),
-                name=str(item.get("name") or item.get("security_name") or ""),
-                quantity=float(item.get("quantity") or item.get("amount") or 0),
-                avg_cost=float(item.get("avg_cost") or item.get("cost") or 0),
-                close=float(item.get("close") or item.get("price") or 0),
-                market_value=float(item.get("market_value") or item.get("value") or 0),
-            )
-        )
-
-    groups: list[HoldingDayGroup] = []
-    for date, rows in sorted(by_date.items()):
-        total_market_value = sum(r.market_value for r in rows)
-        groups.append(
-            HoldingDayGroup(
-                date=date,
-                holdings=list(rows),
-                summary=HoldingDaySummary(
-                    total_market_value=total_market_value,
-                    cash=0.0,
-                    total_assets=total_market_value,
-                ),
-            )
-        )
-    return groups
-
-
-def _parse_holdings_from_logs(log_lines: list[str]) -> list[HoldingDayGroup]:
-    by_date: dict[str, list[HoldingRecord]] = {}
-    for line in log_lines:
-        match = _HOLDING_LOG_RE.search(line)
-        if not match:
-            continue
-        date = match.group("date")
-        quantity = float(match.group("qty"))
-        market_value = float(match.group("value"))
-        by_date.setdefault(date, []).append(
-            HoldingRecord(
-                symbol=match.group("symbol"),
-                name="",
-                quantity=quantity,
-                avg_cost=0.0,
-                close=0.0,
-                market_value=market_value,
-            )
-        )
-
-    groups: list[HoldingDayGroup] = []
-    for date, rows in sorted(by_date.items()):
-        total_market_value = sum(r.market_value for r in rows)
-        groups.append(
-            HoldingDayGroup(
-                date=date,
-                holdings=list(rows),
-                summary=HoldingDaySummary(
-                    total_market_value=total_market_value,
-                    cash=0.0,
-                    total_assets=total_market_value,
-                ),
-            )
-        )
-    return groups
 
 
 def _get_result_sync(backtest_id: str, token: str, cookie: str, api_base: str) -> dict[str, Any]:
@@ -887,13 +620,10 @@ class BacktestService:
             raise map_jqcli_error(e)
 
     async def get_result_detail(self, backtest_id: str) -> dict[str, Any]:
-        """Fetch full jqcli result and parse performance/trades/holdings.
+        """Fetch full jqcli result and parse performance series.
 
         Internal callers (e.g., background workers) may need raw + parsed
         shapes; the API layer should call `get_result_detail_for_user`.
-
-        jqcli often omits per-trade rows and daily holdings in the result API;
-        when those parsers return empty we supplement from backtest logs.
         """
         try:
             loop = asyncio.get_running_loop()
@@ -904,33 +634,9 @@ class BacktestService:
                 ),
             )
             performance = _parse_performance_series(payload)
-            trades = _parse_trade_groups(payload)
-            holdings = _parse_holding_groups(payload)
-
-            if not trades or not holdings:
-                logs = await loop.run_in_executor(
-                    _executor,
-                    functools.partial(
-                        _get_all_logs_sync,
-                        backtest_id,
-                        self._token,
-                        self._cookie,
-                        self._api_base,
-                    ),
-                )
-                if not trades:
-                    trades = _parse_trades_from_logs(logs)
-                if not holdings:
-                    holdings = _parse_holdings_from_logs(logs)
-            # Last-resort fallback: derive positions from cumulative trades
-            # when jqcli didn't return userRecord and logs had no daily snapshot.
-            if not holdings and trades:
-                holdings = _build_holdings_from_trades(trades)
 
             return {
                 "performance": performance,
-                "trades": trades,
-                "holdings": holdings,
                 "raw": payload,
             }
         except Exception as e:
@@ -944,27 +650,21 @@ class BacktestService:
         """Ownership-checked, typed detail result for the API layer.
 
         Raises BacktestError(404) if user doesn't own the backtest.
-        When status is not DONE, performance/trades/holdings are empty lists.
+        When status is not DONE, performance is an empty list.
         """
         self.assert_owner_or_verify(backtest_id, user_id)
         result = await self.poll(backtest_id)
 
         performance: list[PerformancePoint] = []
-        trades: list[TradeDayGroup] = []
-        holdings: list[HoldingDayGroup] = []
 
         if result.status == BacktestStatus.DONE:
             detail = await self.get_result_detail(backtest_id)
             performance = detail["performance"]
-            trades = detail["trades"]
-            holdings = detail["holdings"]
 
         return BacktestResultDetail(
             backtest_id=result.backtest_id,
             status=result.status,
             metrics=result.metrics,
             performance=performance,
-            trades=trades,
-            holdings=holdings,
             error=result.error,
         )

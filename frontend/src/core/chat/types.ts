@@ -32,32 +32,6 @@ export interface BacktestResultDetail {
     benchmark: number
     position_pct?: number | null
   }>
-  trades: Array<{
-    date: string
-    trades: Array<{
-      symbol: string
-      name: string
-      side: string
-      quantity: number
-      price: number
-    }>
-  }>
-  holdings: Array<{
-    date: string
-    holdings: Array<{
-      symbol: string
-      name: string
-      quantity: number
-      avg_cost: number
-      close: number
-      market_value: number
-    }>
-    summary?: {
-      total_assets: number
-      cash: number
-      total_market_value: number
-    }
-  }>
 }
 
 export interface AnalyzeEvent {
