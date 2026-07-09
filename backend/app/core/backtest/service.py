@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import functools
+import hashlib
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from typing import Any, cast
@@ -78,8 +79,16 @@ def _submit_sync(
     """
     client = ApiClient(api_base, token=token, cookie=cookie)
     try:
-        # Create or update strategy with the code
-        strategy = create_strategy(client, name="auto_generated", code=code, strategy_type="Code")
+        # Create or update strategy with the code. Derive a deterministic
+        # name from the code so repeated submits of the same code reuse the
+        # same jqcli strategy entry instead of creating duplicates.
+        code_hash = hashlib.sha1(code.encode("utf-8")).hexdigest()[:8]
+        strategy = create_strategy(
+            client,
+            name=f"quant-agent-{code_hash}",
+            code=code,
+            strategy_type="Code",
+        )
         strategy_id = str(strategy.get("id", ""))
 
         if not strategy_id:
